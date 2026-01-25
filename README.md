@@ -77,9 +77,9 @@ Beyond just viewing issues, this app is part of a broader development workflow p
 
 Download the latest release for your platform from the [Releases](https://github.com/w3dev33/beads-task-issue-tracker/releases) page:
 
-- **macOS**: `.dmg` file
-- **Windows**: `.msi` installer (coming soon)
-- **Linux**: `.AppImage` (coming soon)
+- **macOS**: `.dmg` file (Apple Silicon & Intel)
+- **Windows**: `.msi` or `.exe` installer
+- **Linux**: `.deb` (Debian/Ubuntu) or `.AppImage`
 
 ### Build from Source
 
