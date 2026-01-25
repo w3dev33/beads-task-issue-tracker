@@ -47,6 +47,34 @@ This is a bd Beads issue tracking management repository. It uses **bd** (beads) 
 
 Always use the `/review-to-commit` skill when the user asks to commit changes. This skill reviews changes and creates proper commits.
 
+## GitHub Workflow
+
+### Authentication
+- Use `gh auth login` if GitHub CLI is not authenticated
+- Current account: **w3dev33**
+
+### Pull Requests
+- Create with `gh pr create --title "..." --body "..." --base master`
+- PR body format:
+  ```markdown
+  ## Summary
+  - Key changes (bullet points)
+
+  ## Test plan
+  - [ ] Test steps as checklist
+  ```
+- Merge with `gh pr merge <number> --merge`
+
+### Releases
+1. Set version: `npm version X.Y.Z --no-git-tag-version && node scripts/sync-version.js`
+2. Commit: `git commit -m "Release vX.Y.Z"`
+3. Tag: `git tag -a vX.Y.Z -m "Release vX.Y.Z"`
+4. Push: `git push origin master --tags`
+5. Create release: `gh release create vX.Y.Z --title "..." --notes "..."`
+
+### Co-Authorship
+Keep `Co-Authored-By: Claude Code <noreply@anthropic.com>` in commits for transparency. This will show Claude Code as a contributor on GitHub - this is intentional and honest.
+
 ## Essential Commands
 
 ```bash
