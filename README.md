@@ -81,6 +81,18 @@ Download the latest release for your platform from the [Releases](https://github
 - **Windows**: `.msi` or `.exe` installer
 - **Linux**: `.deb` (Debian/Ubuntu) or `.AppImage`
 
+### macOS: First Launch
+
+macOS may block the app because it's not signed with an Apple Developer certificate. You'll see a message saying the app "is damaged and can't be opened."
+
+**To fix this**, run the following command after installing:
+
+```bash
+xattr -cr /Applications/Beads\ Task-Issue\ Tracker.app
+```
+
+Then open the app normally. This only needs to be done once.
+
 ### Build from Source
 
 ```bash
