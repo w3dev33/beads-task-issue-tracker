@@ -1,0 +1,37 @@
+# Nuxt
+.nuxt
+.output
+dist
+
+# Electron
+dist-electron
+release
+
+# Node
+node_modules
+*.log
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# NPM
+.npmrc
+
+# IDE
+.idea
+.vscode
+.claude
+.beads
+*.swp
+*.swo
+.DS_Store
+
+# Testing
+coverage
+.nyc_output
+
+# Build cache
+.temp
+*.cache

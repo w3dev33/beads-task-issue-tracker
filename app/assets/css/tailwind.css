@@ -1,0 +1,180 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  /* Status colors */
+  --color-status-open: #15803d;
+  --color-status-in-progress: #3b82f6;
+  --color-status-blocked: #ef4444;
+  --color-status-closed: #6b7280;
+
+  /* Type colors */
+  --color-type-bug: #ef4444;
+  --color-type-task: #3b82f6;
+  --color-type-feature: #8b5cf6;
+  --color-type-epic: #f97316;
+  --color-type-chore: #6b7280;
+
+  /* Priority colors */
+  --color-priority-p0: #ef4444;
+  --color-priority-p1: #ef4444;
+  --color-priority-p2: #f59e0b;
+  --color-priority-p3: #22c55e;
+  --color-priority-p4: #6b7280;
+}
+
+/* Base radius */
+:root {
+  --radius: 0.375rem;
+}
+
+/* Light mode - VSCode light theme */
+:root {
+  --background: #ffffff;
+  --foreground: #1e1e1e;
+  --card: #f3f3f3;
+  --card-foreground: #1e1e1e;
+  --popover: #ffffff;
+  --popover-foreground: #1e1e1e;
+  --primary: #0066b8;
+  --primary-foreground: #ffffff;
+  --secondary: #e5e5e5;
+  --secondary-foreground: #1e1e1e;
+  --muted: #f0f0f0;
+  --muted-foreground: #6e6e6e;
+  --accent: #cce5ff;
+  --accent-foreground: #1e1e1e;
+  --destructive: #d32f2f;
+  --border: #d4d4d4;
+  --input: #d4d4d4;
+  --ring: #0066b8;
+  --chart-1: #3b82f6;
+  --chart-2: #22c55e;
+  --chart-3: #f59e0b;
+  --chart-4: #8b5cf6;
+  --chart-5: #ef4444;
+  --sidebar: #f3f3f3;
+  --sidebar-foreground: #1e1e1e;
+  --sidebar-primary: #0066b8;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #e4e6f1;
+  --sidebar-accent-foreground: #1e1e1e;
+  --sidebar-border: #d4d4d4;
+  --sidebar-ring: #0066b8;
+  color-scheme: light;
+}
+
+/* Dark mode - VSCode dark theme */
+.dark {
+  --background: #1e1e1e;
+  --foreground: #d4d4d4;
+  --card: #252526;
+  --card-foreground: #d4d4d4;
+  --popover: #252526;
+  --popover-foreground: #d4d4d4;
+  --primary: #0e639c;
+  --primary-foreground: #ffffff;
+  --secondary: #3c3c3c;
+  --secondary-foreground: #d4d4d4;
+  --muted: #2d2d2d;
+  --muted-foreground: #808080;
+  --accent: #094771;
+  --accent-foreground: #d4d4d4;
+  --destructive: #f14c4c;
+  --border: #3c3c3c;
+  --input: #3c3c3c;
+  --ring: #0e639c;
+  --chart-1: #3b82f6;
+  --chart-2: #22c55e;
+  --chart-3: #f59e0b;
+  --chart-4: #8b5cf6;
+  --chart-5: #ef4444;
+  --sidebar: #252526;
+  --sidebar-foreground: #d4d4d4;
+  --sidebar-primary: #0e639c;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #37373d;
+  --sidebar-accent-foreground: #d4d4d4;
+  --sidebar-border: #3c3c3c;
+  --sidebar-ring: #0e639c;
+  color-scheme: dark;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--background);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--secondary);
+  border-radius: 5px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--muted-foreground);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+/* Electron window drag regions (macOS titleBarStyle: hiddenInset) */
+.app-drag-region {
+  -webkit-app-region: drag;
+}
+
+.app-no-drag {
+  -webkit-app-region: no-drag;
+}
