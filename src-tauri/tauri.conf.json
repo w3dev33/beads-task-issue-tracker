@@ -1,18 +1,18 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Beads Task-Issue Tracker",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "identifier": "com.beads.manager",
   "build": {
     "frontendDist": "../.output/public",
     "devUrl": "http://localhost:3133",
-    "beforeDevCommand": "",
+    "beforeDevCommand": "pnpm nuxt dev --port 3133",
     "beforeBuildCommand": "pnpm generate"
   },
   "app": {
     "windows": [
       {
-        "title": "Beads Task-Issue Tracker",
+        "title": "",
         "width": 1400,
         "height": 900,
         "minWidth": 800,
