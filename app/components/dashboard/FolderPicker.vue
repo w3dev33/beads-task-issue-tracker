@@ -169,25 +169,6 @@ const isCurrentFavorite = computed(() => isFavorite(currentPath.value))
             <span v-else class="text-xs text-muted-foreground shrink-0">
               No .beads folder
             </span>
-            <!-- Add to favorites button -->
-            <Button
-              v-if="hasBeads && !isCurrentFavorite"
-              variant="ghost"
-              size="sm"
-              class="h-7 text-xs gap-1"
-              @click="handleAddToFavorites"
-            >
-              <svg
-                class="w-3 h-3 text-yellow-500"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-              >
-                <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
-              </svg>
-              Add to favorites
-            </Button>
             <Badge v-if="isCurrentFavorite" variant="outline" class="text-yellow-500 border-yellow-500/50">
               <svg class="w-3 h-3 mr-1 fill-yellow-500" viewBox="0 0 24 24">
                 <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
@@ -247,11 +228,28 @@ const isCurrentFavorite = computed(() => isFavorite(currentPath.value))
         <Button variant="outline" @click="handleCancel">
           Cancel
         </Button>
-        <Button :disabled="!hasBeads" @click="handleSelect">
+
+        <!-- If already a favorite, show "Open" button -->
+        <Button v-if="isCurrentFavorite" @click="handleSelect">
           <svg class="w-4 h-4 mr-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <polyline points="20 6 9 17 4 12" />
+            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
           </svg>
-          Select This Folder
+          Open
+        </Button>
+
+        <!-- If not a favorite, show "Add to Favorites" button (disabled if no .beads) -->
+        <Button v-else :disabled="!hasBeads" @click="handleAddToFavorites">
+          <svg
+            class="w-4 h-4 mr-2"
+            :class="hasBeads ? 'text-yellow-500' : ''"
+            viewBox="0 0 24 24"
+            :fill="hasBeads ? 'currentColor' : 'none'"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+          </svg>
+          Add to Favorites
         </Button>
       </DialogFooter>
     </DialogContent>
