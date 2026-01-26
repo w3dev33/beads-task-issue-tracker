@@ -1191,7 +1191,7 @@ watch(
           <TooltipTrigger as-child>
             <span class="cursor-help hover:text-foreground transition-colors text-primary">•••</span>
           </TooltipTrigger>
-          <TooltipContent side="top" class="max-w-xs text-xs">
+          <TooltipContent side="top" :side-offset="8" align="end" class="max-w-xs text-xs">
             <div class="space-y-1">
               <p>Vibe coded with <a href="https://claude.ai/code" target="_blank" class="text-sky-400 hover:underline">Claude Code</a> by Laurent Chapin</p>
               <p>Inspired by <a href="https://marketplace.visualstudio.com/items?itemName=planet57.vscode-beads" target="_blank" class="text-sky-400 hover:underline">vscode-beads</a> plugin by Planet57</p>
