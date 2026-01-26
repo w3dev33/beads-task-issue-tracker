@@ -5,6 +5,7 @@ import { Textarea } from '~/components/ui/textarea'
 import { Avatar, AvatarFallback } from '~/components/ui/avatar'
 import { ScrollArea } from '~/components/ui/scroll-area'
 import { Separator } from '~/components/ui/separator'
+import { LinkifiedText } from '~/components/ui/linkified-text'
 
 defineProps<{
   comments: Comment[]
@@ -71,7 +72,7 @@ const handleSubmit = () => {
                 {{ formatDate(comment.createdAt) }}
               </span>
             </div>
-            <p class="text-xs whitespace-pre-wrap">{{ comment.content }}</p>
+            <p class="text-xs whitespace-pre-wrap"><LinkifiedText :text="comment.content" /></p>
           </div>
         </div>
       </div>

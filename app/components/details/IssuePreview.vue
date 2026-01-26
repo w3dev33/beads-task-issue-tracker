@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { Issue } from '~/types/issue'
 import { Badge } from '~/components/ui/badge'
+import { LinkifiedText } from '~/components/ui/linkified-text'
 import LabelBadge from '~/components/issues/LabelBadge.vue'
 
 defineProps<{
@@ -31,9 +32,7 @@ const formatEstimate = (minutes: number) => {
   <div class="space-y-3">
     <div>
       <h4 class="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1">Description</h4>
-      <p class="text-xs whitespace-pre-wrap">
-        {{ issue.description || 'No description provided.' }}
-      </p>
+      <p class="text-xs whitespace-pre-wrap"><LinkifiedText :text="issue.description" fallback="No description provided." /></p>
     </div>
 
     <div class="grid grid-cols-2 gap-3 pb-3">
@@ -82,7 +81,7 @@ const formatEstimate = (minutes: number) => {
     <div v-if="issue.externalRef || issue.estimateMinutes" class="grid grid-cols-2 gap-3">
       <div v-if="issue.externalRef">
         <h4 class="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1">External Reference</h4>
-        <p class="text-xs break-all">{{ issue.externalRef }}</p>
+        <p class="text-xs break-all"><LinkifiedText :text="issue.externalRef" /></p>
       </div>
 
       <div v-if="issue.estimateMinutes">
@@ -93,17 +92,17 @@ const formatEstimate = (minutes: number) => {
 
     <div v-if="issue.designNotes">
       <h4 class="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1">Design Notes</h4>
-      <p class="text-xs whitespace-pre-wrap">{{ issue.designNotes }}</p>
+      <p class="text-xs whitespace-pre-wrap"><LinkifiedText :text="issue.designNotes" /></p>
     </div>
 
     <div v-if="issue.acceptanceCriteria">
       <h4 class="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1">Acceptance Criteria</h4>
-      <p class="text-xs whitespace-pre-wrap">{{ issue.acceptanceCriteria }}</p>
+      <p class="text-xs whitespace-pre-wrap"><LinkifiedText :text="issue.acceptanceCriteria" /></p>
     </div>
 
     <div v-if="issue.workingNotes">
       <h4 class="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1">Working Notes</h4>
-      <p class="text-xs whitespace-pre-wrap">{{ issue.workingNotes }}</p>
+      <p class="text-xs whitespace-pre-wrap"><LinkifiedText :text="issue.workingNotes" /></p>
     </div>
   </div>
 </template>

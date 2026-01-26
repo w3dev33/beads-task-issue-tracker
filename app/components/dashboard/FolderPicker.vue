@@ -36,8 +36,10 @@ const error = ref<string | null>(null)
 // Watch for dialog open to load initial path
 watch(() => props.open, (isOpen) => {
   if (isOpen) {
-    currentPath.value = props.currentPath || '~'
-    loadDirectory(currentPath.value)
+    // Use home if currentPath is empty or "."
+    const initialPath = props.currentPath && props.currentPath !== '.' ? props.currentPath : '~'
+    currentPath.value = initialPath
+    loadDirectory(initialPath)
   }
 })
 

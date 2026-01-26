@@ -305,12 +305,31 @@ fn execute_bd(command: &str, args: &[String], cwd: Option<&str>) -> Result<Strin
     Ok(String::from_utf8_lossy(&output.stdout).to_string())
 }
 
+/// Sync the beads database before read operations to ensure data is up-to-date
+fn sync_bd_database(cwd: Option<&str>) {
+    let working_dir = cwd
+        .map(String::from)
+        .or_else(|| env::var("BEADS_PATH").ok())
+        .unwrap_or_else(|| env::current_dir().unwrap().to_string_lossy().to_string());
+
+    // Run bd sync --import-only silently (ignore errors, best effort)
+    let _ = Command::new("bd")
+        .args(["sync", "--import-only", "--no-daemon"])
+        .current_dir(&working_dir)
+        .env("PATH", get_extended_path())
+        .env("BEADS_PATH", &working_dir)
+        .output();
+}
+
 // ============================================================================
 // Tauri Commands
 // ============================================================================
 
 #[tauri::command]
 async fn bd_list(options: ListOptions) -> Result<Vec<Issue>, String> {
+    // Sync database before reading to ensure data is up-to-date
+    sync_bd_database(options.cwd.as_deref());
+
     let mut args: Vec<String> = Vec::new();
 
     if options.include_all.unwrap_or(false) {
@@ -346,6 +365,9 @@ async fn bd_list(options: ListOptions) -> Result<Vec<Issue>, String> {
 
 #[tauri::command]
 async fn bd_count(options: CwdOptions) -> Result<CountResult, String> {
+    // Sync database before reading to ensure data is up-to-date
+    sync_bd_database(options.cwd.as_deref());
+
     // Fetch both open and closed issues to match fetchIssues behavior
     let open_output = execute_bd("list", &[], options.cwd.as_deref())?;
     let closed_output = execute_bd("list", &["--status=closed".to_string()], options.cwd.as_deref())?;
@@ -401,6 +423,9 @@ async fn bd_count(options: CwdOptions) -> Result<CountResult, String> {
 
 #[tauri::command]
 async fn bd_ready(options: CwdOptions) -> Result<Vec<Issue>, String> {
+    // Sync database before reading to ensure data is up-to-date
+    sync_bd_database(options.cwd.as_deref());
+
     let output = execute_bd("ready", &[], options.cwd.as_deref())?;
 
     let raw_issues: Vec<BdRawIssue> = serde_json::from_str(&output)
@@ -419,6 +444,9 @@ async fn bd_status(options: CwdOptions) -> Result<serde_json::Value, String> {
 
 #[tauri::command]
 async fn bd_show(id: String, options: CwdOptions) -> Result<Option<Issue>, String> {
+    // Sync database before reading to ensure data is up-to-date
+    sync_bd_database(options.cwd.as_deref());
+
     let output = execute_bd("show", &[id], options.cwd.as_deref())?;
 
     // bd show can return either a single object or an array

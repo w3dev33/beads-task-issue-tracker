@@ -141,58 +141,51 @@ const currentIsFavorite = computed(() => isFavorite(beadsPath.value))
     <div v-if="favorites.length > 0" class="space-y-1">
       <span class="text-[10px] text-muted-foreground uppercase tracking-wide">Favorites</span>
       <div class="flex flex-col gap-1">
-        <TooltipProvider v-for="fav in favorites" :key="fav.path">
-          <Tooltip>
-            <TooltipTrigger as-child>
-              <Button
-                :variant="beadsPath === fav.path ? 'default' : 'ghost'"
-                size="sm"
-                class="h-7 justify-start text-xs gap-2 group w-full"
-                :class="{ 'opacity-50 cursor-wait': isLoading && beadsPath !== fav.path }"
-                :disabled="isLoading"
-                @click="handleSelectFavorite(fav.path)"
-              >
-                <!-- Loading spinner for active favorite -->
-                <svg
-                  v-if="isLoading && beadsPath === fav.path"
-                  class="w-3 h-3 shrink-0 animate-spin"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="2"
-                >
-                  <circle cx="12" cy="12" r="10" stroke-opacity="0.25" />
-                  <path d="M12 2a10 10 0 0 1 10 10" stroke-linecap="round" />
-                </svg>
-                <!-- Star icon when not loading -->
-                <svg
-                  v-else
-                  class="w-3 h-3 shrink-0"
-                  :class="beadsPath === fav.path ? 'text-yellow-300 fill-yellow-300' : 'text-yellow-500 fill-yellow-500'"
-                  viewBox="0 0 24 24"
-                >
-                  <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
-                </svg>
-                <span class="truncate flex-1 text-left">{{ fav.name }}</span>
-                <svg
-                  v-if="!isLoading"
-                  class="w-3 h-3 shrink-0 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="2"
-                  @click="handleRemoveFavorite(fav.path, $event)"
-                >
-                  <line x1="18" y1="6" x2="6" y2="18" />
-                  <line x1="6" y1="6" x2="18" y2="18" />
-                </svg>
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="right">
-              {{ fav.path }}
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
+        <Button
+          v-for="fav in favorites"
+          :key="fav.path"
+          :variant="beadsPath === fav.path ? 'default' : 'ghost'"
+          size="sm"
+          class="h-7 justify-start text-xs gap-2 group w-full"
+          :class="{ 'opacity-50 cursor-wait': isLoading && beadsPath !== fav.path }"
+          :disabled="isLoading"
+          @click="handleSelectFavorite(fav.path)"
+        >
+          <!-- Loading spinner for active favorite -->
+          <svg
+            v-if="isLoading && beadsPath === fav.path"
+            class="w-3 h-3 shrink-0 animate-spin"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <circle cx="12" cy="12" r="10" stroke-opacity="0.25" />
+            <path d="M12 2a10 10 0 0 1 10 10" stroke-linecap="round" />
+          </svg>
+          <!-- Star icon when not loading -->
+          <svg
+            v-else
+            class="w-3 h-3 shrink-0"
+            :class="beadsPath === fav.path ? 'text-yellow-300 fill-yellow-300' : 'text-yellow-500 fill-yellow-500'"
+            viewBox="0 0 24 24"
+          >
+            <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+          </svg>
+          <span class="truncate flex-1 text-left">{{ fav.name }}</span>
+          <svg
+            v-if="!isLoading"
+            class="w-3 h-3 shrink-0 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            @click="handleRemoveFavorite(fav.path, $event)"
+          >
+            <line x1="18" y1="6" x2="6" y2="18" />
+            <line x1="6" y1="6" x2="18" y2="18" />
+          </svg>
+        </Button>
       </div>
     </div>
 
