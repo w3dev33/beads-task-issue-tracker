@@ -28,3 +28,17 @@ if (tauriConfig.version !== version) {
 } else {
   console.log(`✓ Version already in sync: ${version}`)
 }
+
+// Update Cargo.toml
+const cargoTomlPath = resolve(rootDir, 'src-tauri/Cargo.toml')
+let cargoToml = readFileSync(cargoTomlPath, 'utf-8')
+const cargoVersionRegex = /^version = "[\d.]+"/m
+const newCargoVersion = `version = "${version}"`
+
+if (!cargoToml.match(new RegExp(`^version = "${version}"`, 'm'))) {
+  cargoToml = cargoToml.replace(cargoVersionRegex, newCargoVersion)
+  writeFileSync(cargoTomlPath, cargoToml)
+  console.log(`✓ Synced version to ${version} in Cargo.toml`)
+} else {
+  console.log(`✓ Cargo.toml version already in sync: ${version}`)
+}
