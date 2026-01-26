@@ -90,7 +90,7 @@ jobs:
           # Rename .deb
           cd src-tauri/target/release/bundle/deb/
           for f in *.deb; do
-            newname="${f//_amd64/_Linux}"
+            newname="${f//_amd64/_Linux-amd64}"
             if [ "$f" != "$newname" ]; then
               mv "$f" "$newname"
               echo "Renamed: $f -> $newname"
@@ -100,7 +100,7 @@ jobs:
           # Rename .AppImage
           cd ../appimage/
           for f in *.AppImage; do
-            newname="${f//_amd64/_Linux}"
+            newname="${f//_amd64/_Linux-amd64}"
             if [ "$f" != "$newname" ]; then
               mv "$f" "$newname"
               echo "Renamed: $f -> $newname"
@@ -146,8 +146,8 @@ jobs:
             | **macOS (Apple Silicon M1/M2/M3)** | `*_macOS-ARM64.dmg` | For Mac 2020+ |
             | **macOS (Intel)** | `*_macOS-Intel.dmg` | For Mac pre-2020 |
             | **Windows** | `*_Windows.msi` | Recommended installer |
-            | **Linux (Debian/Ubuntu)** | `*_Linux.deb` | Recommended for Debian 12+, Ubuntu 22+ |
-            | **Linux (other)** | `*_Linux.AppImage` | Requires `libfuse2` |
+            | **Linux (Debian/Ubuntu)** | `*_Linux-amd64.deb` | Recommended for Debian 12+, Ubuntu 22+ |
+            | **Linux (other)** | `*_Linux-amd64.AppImage` | Requires `libfuse2` |
           files: |
             src-tauri/target/*/release/bundle/dmg/*.dmg
             src-tauri/target/release/bundle/deb/*.deb
