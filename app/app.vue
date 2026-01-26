@@ -20,6 +20,6 @@
 <template>
   <TooltipProvider>
     <NuxtPage />
-    <Toaster position="bottom-right" :duration="2500" />
+    <Toaster position="top-right" :duration="3000" rich-colors />
   </TooltipProvider>
 </template>
