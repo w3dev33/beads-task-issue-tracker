@@ -23,6 +23,11 @@ const { startDragging } = useTauriWindow()
 const handleMouseDown = (event: MouseEvent) => {
   // Only handle left click
   if (event.button !== 0) return
+
+  // Don't start dragging if click is inside a no-drag zone (buttons, inputs, etc.)
+  const target = event.target as HTMLElement
+  if (target.closest('.app-no-drag')) return
+
   startDragging()
 }
 
