@@ -1,6 +1,5 @@
 <script setup lang="ts">
   import { TooltipProvider } from '~/components/ui/tooltip'
-  import { Toaster } from '~/components/ui/sonner'
 
   const { isDark } = useTheme()
 
@@ -20,6 +19,5 @@
 <template>
   <TooltipProvider>
     <NuxtPage />
-    <Toaster position="top-right" :duration="3000" rich-colors />
   </TooltipProvider>
 </template>

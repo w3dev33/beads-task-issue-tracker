@@ -1184,9 +1184,7 @@ watch(
       </div>
 
       <!-- Version à droite -->
-      <div class="w-20 text-right">
-        <UpdateIndicator />
-      </div>
+      <UpdateIndicator />
     </footer>
 
     <!-- Delete Confirmation Dialog -->
