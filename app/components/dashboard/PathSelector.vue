@@ -9,6 +9,7 @@ import {
 } from '~/components/ui/tooltip'
 import ConfirmDialog from '~/components/ui/confirm-dialog/ConfirmDialog.vue'
 import FolderPicker from './FolderPicker.vue'
+import { getFolderName } from '~/utils/path'
 
 const props = defineProps<{
   isLoading?: boolean
@@ -91,7 +92,7 @@ const confirmRemoveFavorite = () => {
 
 const favoriteToRemoveName = computed(() => {
   if (!favoriteToRemove.value) return ''
-  return favoriteToRemove.value.split('/').pop() || favoriteToRemove.value
+  return getFolderName(favoriteToRemove.value)
 })
 
 const currentIsFavorite = computed(() => isFavorite(beadsPath.value))

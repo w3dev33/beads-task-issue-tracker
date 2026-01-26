@@ -1,4 +1,5 @@
 import { fsExists } from '~/utils/bd-api'
+import { getFolderName } from '~/utils/path'
 
 export interface Favorite {
   path: string
@@ -72,7 +73,7 @@ export function useFavorites() {
     }
 
     // Extract folder name from path if no name provided
-    const folderName = name || path.split('/').pop() || path
+    const folderName = name || getFolderName(path)
 
     // Use array reassignment instead of push() for guaranteed reactivity
     favorites.value = [...favorites.value, {

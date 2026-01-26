@@ -13,6 +13,7 @@ import { ScrollArea } from '~/components/ui/scroll-area'
 import { Badge } from '~/components/ui/badge'
 import { Separator } from '~/components/ui/separator'
 import { fsList, type DirectoryEntry } from '~/utils/bd-api'
+import { getParentPath, getFolderName } from '~/utils/path'
 
 const props = defineProps<{
   open: boolean
@@ -71,8 +72,7 @@ const navigateTo = (path: string) => {
 }
 
 const navigateUp = () => {
-  const parentPath = currentPath.value.split('/').slice(0, -1).join('/') || '/'
-  loadDirectory(parentPath)
+  loadDirectory(getParentPath(currentPath.value))
 }
 
 const navigateHome = () => {
@@ -103,8 +103,7 @@ const handleAddToFavorites = () => {
 
 // Get folder name from path
 const currentFolderName = computed(() => {
-  const parts = currentPath.value.split('/')
-  return parts[parts.length - 1] || '/'
+  return getFolderName(currentPath.value) || '/'
 })
 
 const isCurrentFavorite = computed(() => isFavorite(currentPath.value))
