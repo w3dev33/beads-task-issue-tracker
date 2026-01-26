@@ -2,7 +2,7 @@
   import { TooltipProvider } from '~/components/ui/tooltip'
 
   const { isDark } = useTheme()
-  const { showUpdateDialog, initializeMenu } = useAppMenu()
+  const { showUpdateDialog, showAboutDialog, initializeMenu } = useAppMenu()
 
   useHead({
     title: 'Beads Task-Issue Tracker',
@@ -25,5 +25,6 @@
   <TooltipProvider>
     <NuxtPage />
     <LayoutUpdateDialog v-model:open="showUpdateDialog" />
+    <LayoutAboutDialog v-model:open="showAboutDialog" />
   </TooltipProvider>
 </template>

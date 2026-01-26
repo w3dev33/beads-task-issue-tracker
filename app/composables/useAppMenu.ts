@@ -1,5 +1,6 @@
 // Global state for dialog visibility
 const showUpdateDialog = ref(false)
+const showAboutDialog = ref(false)
 let menuInitialized = false
 
 export function useAppMenu() {
@@ -16,7 +17,9 @@ export function useAppMenu() {
       // App menu items
       const aboutItem = await MenuItem.new({
         text: 'About Beads Task-Issue Tracker',
-        enabled: true,
+        action: () => {
+          showAboutDialog.value = true
+        },
       })
       const separator1 = await PredefinedMenuItem.new({ item: 'Separator' })
 
@@ -104,6 +107,7 @@ export function useAppMenu() {
 
   return {
     showUpdateDialog,
+    showAboutDialog,
     initializeMenu,
   }
 }
