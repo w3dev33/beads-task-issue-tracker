@@ -38,7 +38,9 @@
       "icons/icon.ico"
     ],
     "macOS": {
-      "minimumSystemVersion": "10.13"
-    }
+      "minimumSystemVersion": "10.13",
+      "bundleVersion": "1"
+    },
+    "copyright": "© 2026 Laurent Chapin\nPowered by beads (Steve Yegge)\nVibe coded with Claude Code"
   }
 }
