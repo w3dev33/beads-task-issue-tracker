@@ -33,6 +33,16 @@ struct GitHubRelease {
 // ============================================================================
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct BdRawDependent {
+    pub id: String,
+    pub title: String,
+    pub status: String,
+    pub priority: i32,
+    pub issue_type: String,
+    pub dependency_type: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct BdRawIssue {
     pub id: String,
     pub title: String,
@@ -55,6 +65,9 @@ pub struct BdRawIssue {
     pub design: Option<String>,
     pub acceptance_criteria: Option<String>,
     pub notes: Option<String>,
+    pub parent: Option<String>,
+    pub dependents: Option<Vec<BdRawDependent>>,
+    pub dependencies: Option<Vec<BdRawDependent>>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -97,6 +110,8 @@ pub struct Issue {
     pub acceptance_criteria: Option<String>,
     #[serde(rename = "workingNotes")]
     pub working_notes: Option<String>,
+    pub parent: Option<ParentIssue>,
+    pub children: Option<Vec<ChildIssue>>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -106,6 +121,22 @@ pub struct Comment {
     pub content: String,
     #[serde(rename = "createdAt")]
     pub created_at: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ChildIssue {
+    pub id: String,
+    pub title: String,
+    pub status: String,
+    pub priority: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ParentIssue {
+    pub id: String,
+    pub title: String,
+    pub status: String,
+    pub priority: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -241,6 +272,36 @@ fn normalize_issue_status(status: &str) -> String {
 }
 
 fn transform_issue(raw: BdRawIssue) -> Issue {
+    // Extract parent info from dependencies array (with dependency_type: "parent-child")
+    let parent = if raw.parent.is_some() {
+        // If we have a parent ID, look for full parent info in dependencies
+        raw.dependencies.as_ref().and_then(|deps| {
+            deps.iter()
+                .find(|d| d.dependency_type.as_deref() == Some("parent-child"))
+                .map(|p| ParentIssue {
+                    id: p.id.clone(),
+                    title: p.title.clone(),
+                    status: normalize_issue_status(&p.status),
+                    priority: priority_to_string(p.priority),
+                })
+        })
+    } else {
+        None
+    };
+
+    // Extract children from dependents array (with dependency_type: "parent-child")
+    let children: Option<Vec<ChildIssue>> = raw.dependents.as_ref().map(|deps| {
+        deps.iter()
+            .filter(|d| d.dependency_type.as_deref() == Some("parent-child"))
+            .map(|c| ChildIssue {
+                id: c.id.clone(),
+                title: c.title.clone(),
+                status: normalize_issue_status(&c.status),
+                priority: priority_to_string(c.priority),
+            })
+            .collect()
+    }).filter(|v: &Vec<ChildIssue>| !v.is_empty());
+
     Issue {
         id: raw.id,
         title: raw.title,
@@ -272,6 +333,8 @@ fn transform_issue(raw: BdRawIssue) -> Issue {
         design_notes: raw.design,
         acceptance_criteria: raw.acceptance_criteria,
         working_notes: raw.notes,
+        parent,
+        children,
     }
 }
 

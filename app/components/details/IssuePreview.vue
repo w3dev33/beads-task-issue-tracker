@@ -3,13 +3,21 @@ import type { Issue } from '~/types/issue'
 import { Badge } from '~/components/ui/badge'
 import { LinkifiedText } from '~/components/ui/linkified-text'
 import LabelBadge from '~/components/issues/LabelBadge.vue'
+import StatusBadge from '~/components/issues/StatusBadge.vue'
+import PriorityBadge from '~/components/issues/PriorityBadge.vue'
 
 defineProps<{
   issue: Issue
 }>()
 
+const emit = defineEmits<{
+  'navigate-to-issue': [id: string]
+}>()
+
 // Collapsible section states (all open by default)
 const isDescriptionOpen = ref(true)
+const isParentOpen = ref(true)
+const isChildrenOpen = ref(true)
 const isDetailsOpen = ref(true)
 const isDependenciesOpen = ref(true)
 const isExtendedOpen = ref(true)
@@ -59,6 +67,79 @@ const formatEstimate = (minutes: number) => {
       </button>
       <div v-show="isDescriptionOpen" class="mt-1 pl-4.5">
         <p class="text-xs whitespace-pre-wrap"><LinkifiedText :text="issue.description" fallback="No description provided." /></p>
+      </div>
+    </div>
+
+    <!-- Parent Section (only if exists) -->
+    <div v-if="issue.parent">
+      <button
+        class="flex items-center gap-1.5 w-full text-left group"
+        @click="isParentOpen = !isParentOpen"
+      >
+        <svg
+          class="w-3 h-3 text-muted-foreground transition-transform"
+          :class="{ '-rotate-90': !isParentOpen }"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+        >
+          <polyline points="6 9 12 15 18 9" />
+        </svg>
+        <h4 class="text-[10px] font-medium text-muted-foreground uppercase tracking-wide group-hover:text-foreground transition-colors">Parent</h4>
+      </button>
+      <div v-show="isParentOpen" class="mt-1 pl-4.5">
+        <div
+          class="flex items-center justify-between gap-2 py-1 cursor-pointer hover:bg-muted/50 rounded px-1 -mx-1"
+          @click="emit('navigate-to-issue', issue.parent.id)"
+        >
+          <div class="flex items-center gap-2 min-w-0">
+            <span class="text-xs text-sky-400 hover:underline font-mono shrink-0">{{ issue.parent.id }}</span>
+            <span class="text-xs truncate">{{ issue.parent.title }}</span>
+          </div>
+          <div class="flex items-center gap-1 shrink-0">
+            <StatusBadge :status="issue.parent.status" size="sm" />
+            <PriorityBadge :priority="issue.parent.priority" size="sm" />
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Children Section (only if exists) -->
+    <div v-if="issue.children?.length">
+      <button
+        class="flex items-center gap-1.5 w-full text-left group"
+        @click="isChildrenOpen = !isChildrenOpen"
+      >
+        <svg
+          class="w-3 h-3 text-muted-foreground transition-transform"
+          :class="{ '-rotate-90': !isChildrenOpen }"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+        >
+          <polyline points="6 9 12 15 18 9" />
+        </svg>
+        <h4 class="text-[10px] font-medium text-muted-foreground uppercase tracking-wide group-hover:text-foreground transition-colors">Children</h4>
+        <span class="text-[10px] text-muted-foreground">({{ issue.children.length }})</span>
+      </button>
+      <div v-show="isChildrenOpen" class="mt-1 pl-4.5 space-y-0.5">
+        <div
+          v-for="child in issue.children"
+          :key="child.id"
+          class="flex items-center justify-between gap-2 py-1 cursor-pointer hover:bg-muted/50 rounded px-1 -mx-1"
+          @click="emit('navigate-to-issue', child.id)"
+        >
+          <div class="flex items-center gap-2 min-w-0">
+            <span class="text-xs text-sky-400 hover:underline font-mono shrink-0">{{ child.id }}</span>
+            <span class="text-xs truncate">{{ child.title }}</span>
+          </div>
+          <div class="flex items-center gap-1 shrink-0">
+            <StatusBadge :status="child.status" size="sm" />
+            <PriorityBadge :priority="child.priority" size="sm" />
+          </div>
+        </div>
       </div>
     </div>
 

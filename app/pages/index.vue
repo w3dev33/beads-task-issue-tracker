@@ -458,6 +458,16 @@ const handleAddComment = async (content: string) => {
   }
 }
 
+const handleNavigateToIssue = async (id: string) => {
+  // Find the issue in the current list or fetch it
+  const existingIssue = issues.value.find(i => i.id === id)
+  if (existingIssue) {
+    selectIssue(existingIssue)
+  }
+  // Fetch full details (including extended fields, parent, children)
+  await fetchIssue(id)
+}
+
 const handleDeleteIssue = () => {
   if (multiSelectMode.value && selectedIds.value.length > 0) {
     // Get titles of selected issues
@@ -870,8 +880,10 @@ watch(
               <div v-if="selectedIssue">
                 <IssuePreview
                   :issue="selectedIssue"
+                  @navigate-to-issue="handleNavigateToIssue"
                 />
                 <CommentSection
+                  class="mt-3"
                   :comments="selectedIssue.comments || []"
                   @add-comment="handleAddComment"
                 />
@@ -1119,8 +1131,10 @@ watch(
             <div v-if="selectedIssue">
               <IssuePreview
                 :issue="selectedIssue"
+                @navigate-to-issue="handleNavigateToIssue"
               />
               <CommentSection
+                class="mt-3"
                 :comments="selectedIssue.comments || []"
                 @add-comment="handleAddComment"
               />

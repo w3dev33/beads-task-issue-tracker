@@ -9,6 +9,20 @@ export interface Comment {
   createdAt: string
 }
 
+export interface ChildIssue {
+  id: string
+  title: string
+  status: IssueStatus
+  priority: IssuePriority
+}
+
+export interface ParentIssue {
+  id: string
+  title: string
+  status: IssueStatus
+  priority: IssuePriority
+}
+
 export interface Issue {
   id: string
   title: string
@@ -29,6 +43,8 @@ export interface Issue {
   designNotes?: string
   acceptanceCriteria?: string
   workingNotes?: string
+  parent?: ParentIssue
+  children?: ChildIssue[]
 }
 
 export interface FilterState {
