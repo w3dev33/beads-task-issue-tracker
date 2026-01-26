@@ -4,6 +4,28 @@ use std::env;
 use std::path::PathBuf;
 use std::process::Command;
 
+// ============================================================================
+// Update Checker Types
+// ============================================================================
+
+#[derive(Debug, Serialize)]
+pub struct UpdateInfo {
+    #[serde(rename = "currentVersion")]
+    pub current_version: String,
+    #[serde(rename = "latestVersion")]
+    pub latest_version: String,
+    #[serde(rename = "hasUpdate")]
+    pub has_update: bool,
+    #[serde(rename = "releaseUrl")]
+    pub release_url: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct GitHubRelease {
+    tag_name: String,
+    html_url: String,
+}
+
 // File watcher removed - replaced by frontend polling for lower CPU usage
 
 // ============================================================================
@@ -694,6 +716,83 @@ async fn fs_list(path: Option<String>) -> Result<FsListResult, String> {
 // File watcher commands removed - replaced by frontend polling for lower CPU usage
 
 // ============================================================================
+// Update Checker
+// ============================================================================
+
+const CURRENT_VERSION: &str = env!("CARGO_PKG_VERSION");
+const GITHUB_RELEASES_URL: &str = "https://api.github.com/repos/w3dev33/beads-task-issue-tracker/releases/latest";
+
+fn compare_versions(current: &str, latest: &str) -> bool {
+    // Remove 'v' prefix if present
+    let current = current.trim_start_matches('v');
+    let latest = latest.trim_start_matches('v');
+
+    let parse_version = |v: &str| -> Vec<u32> {
+        v.split('.')
+            .filter_map(|s| s.parse::<u32>().ok())
+            .collect()
+    };
+
+    let current_parts = parse_version(current);
+    let latest_parts = parse_version(latest);
+
+    for i in 0..3 {
+        let c = current_parts.get(i).copied().unwrap_or(0);
+        let l = latest_parts.get(i).copied().unwrap_or(0);
+        if l > c {
+            return true;
+        }
+        if c > l {
+            return false;
+        }
+    }
+    false
+}
+
+#[tauri::command]
+async fn check_for_updates() -> Result<UpdateInfo, String> {
+    let client = reqwest::Client::builder()
+        .user_agent("beads-task-issue-tracker")
+        .build()
+        .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
+
+    let response = client
+        .get(GITHUB_RELEASES_URL)
+        .send()
+        .await
+        .map_err(|e| format!("Failed to fetch releases: {}", e))?;
+
+    // Handle 404 (no published releases yet)
+    if response.status() == reqwest::StatusCode::NOT_FOUND {
+        return Ok(UpdateInfo {
+            current_version: CURRENT_VERSION.to_string(),
+            latest_version: CURRENT_VERSION.to_string(),
+            has_update: false,
+            release_url: "https://github.com/w3dev33/beads-task-issue-tracker/releases".to_string(),
+        });
+    }
+
+    if !response.status().is_success() {
+        return Err(format!("GitHub API returned status: {}", response.status()));
+    }
+
+    let release: GitHubRelease = response
+        .json()
+        .await
+        .map_err(|e| format!("Failed to parse release info: {}", e))?;
+
+    let latest_version = release.tag_name.trim_start_matches('v').to_string();
+    let has_update = compare_versions(CURRENT_VERSION, &latest_version);
+
+    Ok(UpdateInfo {
+        current_version: CURRENT_VERSION.to_string(),
+        latest_version,
+        has_update,
+        release_url: release.html_url,
+    })
+}
+
+// ============================================================================
 // App Entry Point
 // ============================================================================
 
@@ -724,6 +823,7 @@ pub fn run() {
             bd_comments_add,
             fs_exists,
             fs_list,
+            check_for_updates,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

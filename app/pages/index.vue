@@ -3,6 +3,7 @@ import type { Issue, UpdateIssuePayload, IssueStatus, IssueType, IssuePriority }
 
 // Layout components
 import AppHeader from '~/components/layout/AppHeader.vue'
+import UpdateIndicator from '~/components/layout/UpdateIndicator.vue'
 
 // Dashboard components
 import PathSelector from '~/components/dashboard/PathSelector.vue'
@@ -62,6 +63,7 @@ const {
   clearIssues,
 } = useIssues()
 const { stats, readyIssues, fetchStats, clearStats } = useDashboard()
+const { check: checkForUpdates } = useUpdateChecker()
 
 // Sidebar states (persisted)
 const isLeftSidebarOpen = useLocalStorage('beads:leftSidebar', true)
@@ -266,6 +268,9 @@ onMounted(async () => {
 
     // Start polling for changes
     startPolling()
+
+    // Check for updates after initial load
+    checkForUpdates()
   }
   // Only fetch data if not in onboarding mode
   if (!showOnboarding.value) {
@@ -1179,7 +1184,9 @@ watch(
       </div>
 
       <!-- Version à droite -->
-      <span class="w-16 text-right text-muted-foreground/70">v{{ useRuntimeConfig().public.appVersion }}</span>
+      <div class="w-20 text-right">
+        <UpdateIndicator />
+      </div>
     </footer>
 
     <!-- Delete Confirmation Dialog -->

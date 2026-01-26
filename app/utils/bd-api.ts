@@ -194,3 +194,48 @@ export async function fsExists(path: string): Promise<boolean> {
 }
 
 // File watcher removed - replaced by polling for lower CPU usage
+
+// ============================================================================
+// Update Checker API
+// ============================================================================
+
+export interface UpdateInfo {
+  currentVersion: string
+  latestVersion: string
+  hasUpdate: boolean
+  releaseUrl: string
+}
+
+export async function checkForUpdates(): Promise<UpdateInfo> {
+  if (isTauri()) {
+    return invoke<UpdateInfo>('check_for_updates')
+  }
+
+  // Web: call GitHub API directly
+  const response = await fetch('https://api.github.com/repos/w3dev33/beads-task-issue-tracker/releases/latest')
+  if (!response.ok) {
+    throw new Error(`GitHub API returned status: ${response.status}`)
+  }
+
+  const release = await response.json()
+  const currentVersion = useRuntimeConfig().public.appVersion as string
+  const latestVersion = release.tag_name.replace(/^v/, '')
+
+  const compareVersions = (current: string, latest: string): boolean => {
+    const parse = (v: string) => v.split('.').map(n => parseInt(n, 10) || 0)
+    const c = parse(current)
+    const l = parse(latest)
+    for (let i = 0; i < 3; i++) {
+      if ((l[i] || 0) > (c[i] || 0)) return true
+      if ((c[i] || 0) > (l[i] || 0)) return false
+    }
+    return false
+  }
+
+  return {
+    currentVersion,
+    latestVersion,
+    hasUpdate: compareVersions(currentVersion, latestVersion),
+    releaseUrl: release.html_url,
+  }
+}
