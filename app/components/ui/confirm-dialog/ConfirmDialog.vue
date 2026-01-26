@@ -18,9 +18,9 @@ const props = withDefaults(defineProps<{
   isLoading?: boolean
 }>(), {
   title: 'Confirmation',
-  description: 'Êtes-vous sûr de vouloir continuer ?',
-  confirmText: 'Confirmer',
-  cancelText: 'Annuler',
+  description: 'Are you sure you want to continue?',
+  confirmText: 'Confirm',
+  cancelText: 'Cancel',
   variant: 'default',
   isLoading: false,
 })

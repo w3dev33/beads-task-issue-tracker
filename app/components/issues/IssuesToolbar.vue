@@ -233,7 +233,7 @@ const priorityOptions: { value: IssuePriority; label: string }[] = [
 
     <!-- Selected count -->
     <div v-if="multiSelectMode && selectedCount" class="text-xs text-primary font-medium">
-      {{ selectedCount }} issue{{ selectedCount > 1 ? 's' : '' }} sélectionnée{{ selectedCount > 1 ? 's' : '' }}
+      {{ selectedCount }} issue{{ selectedCount > 1 ? 's' : '' }} selected
     </div>
   </div>
 </template>

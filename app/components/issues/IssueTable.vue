@@ -154,7 +154,7 @@ const visibleColumns = computed(() =>
 const formatDate = (dateStr: string) => {
   if (!dateStr) return '-'
   const date = new Date(dateStr)
-  return date.toLocaleDateString('fr-FR', {
+  return date.toLocaleDateString(undefined, {
     day: '2-digit',
     month: '2-digit',
     year: 'numeric',
@@ -164,7 +164,7 @@ const formatDate = (dateStr: string) => {
 const formatTime = (dateStr: string) => {
   if (!dateStr) return ''
   const date = new Date(dateStr)
-  return date.toLocaleTimeString('fr-FR', {
+  return date.toLocaleTimeString(undefined, {
     hour: '2-digit',
     minute: '2-digit',
   })
