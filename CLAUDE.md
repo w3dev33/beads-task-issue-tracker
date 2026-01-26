@@ -14,8 +14,9 @@ Unlike web-based issue trackers (Jira, GitHub Issues), Beads stores issues as fi
   ```bash
   # Installation varies - check beads.dev for instructions
   ```
-- **Node.js 18+**: Required for development
+- **Node.js 18+**: Required for frontend development
 - **pnpm**: Package manager
+- **Rust**: Required for Tauri backend (install via [rustup.rs](https://rustup.rs))
 - **A Beads-enabled project**: A repository with a `.beads` folder initialized via `bd init`
 
 ## Features
@@ -34,10 +35,10 @@ Unlike web-based issue trackers (Jira, GitHub Issues), Beads stores issues as fi
 ## Tech Stack
 
 - **Nuxt 4** with Vue 3 (SPA mode)
-- **Electron** for desktop packaging
+- **Tauri 2** for desktop packaging (Rust backend)
 - **Shadcn-vue** for UI components
 - **TailwindCSS 4** for styling
-- **bd CLI** executed via IPC from the Electron main process
+- **bd CLI** executed via Tauri commands from the Rust backend
 
 ## Repository Overview
 
@@ -107,22 +108,39 @@ When ending a work session, ALL steps must be completed. Work is NOT complete un
 
 **Critical**: Never stop before pushing - that leaves work stranded locally.
 
-## Electron Integration
+## Tauri Integration
 
-This application is packaged as an Electron desktop app. See **[electron/CLAUDE.md](electron/CLAUDE.md)** for the complete guide including:
+This application is packaged as a Tauri 2 desktop app with a Rust backend.
 
-- Architecture and configuration
-- IPC communication between main process and renderer
-- Critical pitfalls to avoid (CommonJS preload, asar unpacking, etc.)
-- Deployment checklist
+### Architecture
 
-**Key commands:**
+- **Frontend**: Nuxt 4 SPA served by Tauri's webview
+- **Backend**: Rust code in `src-tauri/src/lib.rs` handles all `bd` CLI calls
+- **Communication**: Frontend calls Tauri commands via `@tauri-apps/api/core`
+
+### Key Files
+
+- `src-tauri/tauri.conf.json` - Tauri configuration (window size, bundle settings)
+- `src-tauri/src/lib.rs` - Rust backend with all Tauri commands
+- `src-tauri/Cargo.toml` - Rust dependencies
+- `app/utils/bd-api.ts` - Frontend wrapper for Tauri commands
+
+### Development Commands
+
 ```bash
-pnpm dev      # Development with hot reload
-pnpm build    # Build production app (DMG on macOS)
+pnpm tauri:dev    # Development with hot reload (runs Nuxt + Tauri)
+pnpm tauri:build  # Build production app (DMG on macOS, MSI on Windows)
 ```
 
-**Important**: API calls use IPC in Electron (no Nitro server in production). The wrapper `app/utils/bd-api.ts` handles this automatically.
+### Tauri Commands Available
+
+The Rust backend exposes these commands to the frontend:
+- `bd_list`, `bd_count`, `bd_ready`, `bd_status` - Query issues
+- `bd_show`, `bd_create`, `bd_update`, `bd_close`, `bd_delete` - CRUD operations
+- `bd_comments_add` - Add comments to issues
+- `fs_exists`, `fs_list` - File system operations for project picker
+
+**Important**: All `bd` CLI calls go through the Rust backend (no Nitro server in production). The wrapper `app/utils/bd-api.ts` handles the Tauri invoke calls.
 
 ## Allowed Paths
 
