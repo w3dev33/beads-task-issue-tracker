@@ -314,6 +314,10 @@ const isDeleteDialogOpen = ref(false)
 const deleteTargetTitles = ref<string[]>([])
 const isDeleting = ref(false)
 
+// Close confirmation dialog
+const isCloseDialogOpen = ref(false)
+const isClosing = ref(false)
+
 // Close and clear panel when issue transitions to closed (not when selecting an already closed issue)
 watch(
   () => selectedIssue.value?.status,
@@ -445,10 +449,21 @@ const handleSaveIssue = async (payload: UpdateIssuePayload) => {
   await fetchStats(issues.value)
 }
 
-const handleCloseIssue = async () => {
+const handleCloseIssue = () => {
   if (selectedIssue.value) {
+    isCloseDialogOpen.value = true
+  }
+}
+
+const confirmClose = async () => {
+  if (!selectedIssue.value) return
+  isClosing.value = true
+  try {
     await closeIssue(selectedIssue.value.id)
     await fetchStats(issues.value)
+  } finally {
+    isClosing.value = false
+    isCloseDialogOpen.value = false
   }
 }
 
@@ -1204,17 +1219,17 @@ watch(
     <!-- Delete Confirmation Dialog -->
     <ConfirmDialog
       v-model:open="isDeleteDialogOpen"
-      title="Supprimer"
-      confirm-text="Supprimer"
-      cancel-text="Annuler"
+      title="Delete"
+      confirm-text="Delete"
+      cancel-text="Cancel"
       variant="destructive"
       :is-loading="isDeleting"
       @confirm="confirmDelete"
     >
       <template #description>
         <p class="text-sm text-muted-foreground">
-          Vous êtes sur le point de supprimer définitivement
-          {{ deleteTargetTitles.length > 1 ? 'les issues suivantes' : 'l\'issue' }} :
+          You are about to permanently delete
+          {{ deleteTargetTitles.length > 1 ? 'the following issues' : 'the issue' }}:
         </p>
         <div class="mt-2 space-y-1">
           <p
@@ -1225,11 +1240,34 @@ watch(
             {{ title }}
           </p>
           <p v-if="deleteTargetTitles.length > 5" class="text-sm text-muted-foreground">
-            ... et {{ deleteTargetTitles.length - 5 }} autre{{ deleteTargetTitles.length - 5 > 1 ? 's' : '' }} ({{ deleteTargetTitles.length }} au total)
+            ... and {{ deleteTargetTitles.length - 5 }} more ({{ deleteTargetTitles.length }} total)
           </p>
         </div>
         <p class="mt-3 text-sm text-muted-foreground">
-          Cette action est irréversible.
+          This action cannot be undone.
+        </p>
+      </template>
+    </ConfirmDialog>
+
+    <!-- Close Confirmation Dialog -->
+    <ConfirmDialog
+      v-model:open="isCloseDialogOpen"
+      title="Close issue"
+      confirm-text="Close"
+      cancel-text="Cancel"
+      :is-loading="isClosing"
+      @confirm="confirmClose"
+    >
+      <template #description>
+        <p class="text-sm text-muted-foreground">
+          You are about to close the issue:
+        </p>
+        <div class="mt-2">
+          <p class="text-sm text-sky-400 font-mono">{{ selectedIssue?.id }}</p>
+          <p class="text-sm font-medium">{{ selectedIssue?.title }}</p>
+        </div>
+        <p class="mt-3 text-sm text-muted-foreground">
+          The issue will be marked as completed.
         </p>
       </template>
     </ConfirmDialog>
