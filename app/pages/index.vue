@@ -12,6 +12,7 @@ import StatusChart from '~/components/dashboard/StatusChart.vue'
 import PriorityChart from '~/components/dashboard/PriorityChart.vue'
 import QuickList from '~/components/dashboard/QuickList.vue'
 import OnboardingCard from '~/components/dashboard/OnboardingCard.vue'
+import PrerequisitesCard from '~/components/dashboard/PrerequisitesCard.vue'
 
 // Issues components
 import IssuesToolbar from '~/components/issues/IssuesToolbar.vue'
@@ -557,10 +558,12 @@ watch(
     <div id="zoomable-content" class="grid grid-rows-[auto_1fr] overflow-hidden">
       <!-- Header -->
       <AppHeader
-      :favorite-name="currentFavoriteName"
-      :edit-context="editContext"
-      :edit-id="editId"
-    />
+        :favorite-name="currentFavoriteName"
+        :edit-context="editContext"
+        :edit-id="editId"
+        :show-refresh="!showOnboarding"
+        @refresh="handleRefresh"
+      />
 
     <!-- Desktop Layout (3 columns) -->
     <div v-if="!isMobileView" class="flex overflow-hidden">
@@ -703,7 +706,6 @@ watch(
             :multi-select-mode="multiSelectMode"
             :selected-count="selectedIds.length"
             :columns="columns"
-            @refresh="handleRefresh"
             @add="handleAddIssue"
             @delete="handleDeleteIssue"
             @toggle-multi-select="toggleMultiSelect"
@@ -726,7 +728,11 @@ watch(
           />
         </div>
 
-        <div class="flex-1 overflow-auto p-4">
+        <!-- Onboarding: Prerequisites Card -->
+        <PrerequisitesCard v-if="showOnboarding" @browse="openFolderPicker" />
+
+        <!-- Normal: Issues Table -->
+        <div v-else class="flex-1 overflow-auto p-4">
           <IssueTable
             v-model:selected-ids="selectedIds"
             :issues="filteredIssues"
@@ -738,7 +744,7 @@ watch(
             @deselect="handleDeselectIssue"
           />
 
-          <div v-if="isLoading && !showOnboarding" class="text-center text-muted-foreground py-4">
+          <div v-if="isLoading" class="text-center text-muted-foreground py-4">
             Loading...
           </div>
         </div>
@@ -984,51 +990,56 @@ watch(
 
       <!-- Issues Panel -->
       <div v-else-if="mobilePanel === 'issues'" class="flex-1 flex flex-col overflow-hidden">
-        <div class="p-4 border-b border-border space-y-3">
-          <IssuesToolbar
-            v-model:search="searchValue"
-            :active-status-filters="filters.status"
-            :active-type-filters="filters.type"
-            :active-priority-filters="filters.priority"
-            :has-selection="multiSelectMode ? selectedIds.length > 0 : !!selectedIssue"
-            :multi-select-mode="multiSelectMode"
-            :selected-count="selectedIds.length"
-            :columns="columns"
-            @refresh="handleRefresh"
-            @add="handleAddIssue"
-            @delete="handleDeleteIssue"
-            @toggle-multi-select="toggleMultiSelect"
-            @update:columns="setColumns"
-            @reset-columns="resetColumns"
-            @add-status-filter="handleAddStatusFilter"
-            @add-type-filter="handleAddTypeFilter"
-            @add-priority-filter="handleAddPriorityFilter"
-          />
+        <!-- Onboarding: Prerequisites Card -->
+        <PrerequisitesCard v-if="showOnboarding" @browse="openFolderPicker" />
 
-          <FilterChips
-            v-if="!isSearchActive"
-            :status-filters="filters.status"
-            :type-filters="filters.type"
-            :priority-filters="filters.priority"
-            @remove-status="toggleStatus"
-            @remove-type="toggleType"
-            @remove-priority="togglePriority"
-            @clear-all="clearFilters"
-          />
-        </div>
+        <!-- Normal: Issues Toolbar and Table -->
+        <template v-else>
+          <div class="p-4 border-b border-border space-y-3">
+            <IssuesToolbar
+              v-model:search="searchValue"
+              :active-status-filters="filters.status"
+              :active-type-filters="filters.type"
+              :active-priority-filters="filters.priority"
+              :has-selection="multiSelectMode ? selectedIds.length > 0 : !!selectedIssue"
+              :multi-select-mode="multiSelectMode"
+              :selected-count="selectedIds.length"
+              :columns="columns"
+              @add="handleAddIssue"
+              @delete="handleDeleteIssue"
+              @toggle-multi-select="toggleMultiSelect"
+              @update:columns="setColumns"
+              @reset-columns="resetColumns"
+              @add-status-filter="handleAddStatusFilter"
+              @add-type-filter="handleAddTypeFilter"
+              @add-priority-filter="handleAddPriorityFilter"
+            />
 
-        <div class="flex-1 overflow-auto p-4">
-          <IssueTable
-            v-model:selected-ids="selectedIds"
-            :issues="filteredIssues"
-            :columns="columns"
-            :selected-id="selectedIssue?.id"
-            :multi-select-mode="multiSelectMode"
-            @select="handleSelectIssue"
-            @edit="handleEditIssueFromTable"
-            @deselect="handleDeselectIssue"
-          />
-        </div>
+            <FilterChips
+              v-if="!isSearchActive"
+              :status-filters="filters.status"
+              :type-filters="filters.type"
+              :priority-filters="filters.priority"
+              @remove-status="toggleStatus"
+              @remove-type="toggleType"
+              @remove-priority="togglePriority"
+              @clear-all="clearFilters"
+            />
+          </div>
+
+          <div class="flex-1 overflow-auto p-4">
+            <IssueTable
+              v-model:selected-ids="selectedIds"
+              :issues="filteredIssues"
+              :columns="columns"
+              :selected-id="selectedIssue?.id"
+              :multi-select-mode="multiSelectMode"
+              @select="handleSelectIssue"
+              @edit="handleEditIssueFromTable"
+              @deselect="handleDeselectIssue"
+            />
+          </div>
+        </template>
       </div>
 
       <!-- Details Panel -->

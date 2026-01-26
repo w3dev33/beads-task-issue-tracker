@@ -31,7 +31,6 @@ const props = defineProps<{
 }>()
 
 defineEmits<{
-  refresh: []
   add: []
   delete: []
   toggleMultiSelect: []
@@ -188,25 +187,6 @@ const priorityOptions: { value: IssuePriority; label: string }[] = [
         </DropdownMenuGroup>
       </DropdownMenuContent>
     </DropdownMenu>
-
-    <Tooltip>
-      <TooltipTrigger as-child>
-        <Button variant="outline" size="icon" class="h-8 w-8" @click="$emit('refresh')">
-          <svg
-            class="w-3.5 h-3.5"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-          >
-            <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8" />
-            <path d="M21 3v5h-5" />
-          </svg>
-          <span class="sr-only">Refresh</span>
-        </Button>
-      </TooltipTrigger>
-      <TooltipContent>Refresh</TooltipContent>
-    </Tooltip>
 
     <Button
       v-if="hasSelection"

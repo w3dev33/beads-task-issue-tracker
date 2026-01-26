@@ -1,5 +1,5 @@
 export function useZoom() {
-  const zoomLevel = useLocalStorage('beads:zoomLevel', 120)
+  const zoomLevel = useLocalStorage('beads:zoomLevel', 100)
   const minZoom = 75
   const maxZoom = 150
   const step = 5

@@ -10,6 +10,11 @@ const props = defineProps<{
   favoriteName?: string
   editContext?: string
   editId?: string
+  showRefresh?: boolean
+}>()
+
+const emit = defineEmits<{
+  refresh: []
 }>()
 
 // Title: show favorite name if selected, otherwise default app title
@@ -136,6 +141,30 @@ const handleZoomIn = (event: MouseEvent) => {
           </Button>
         </TooltipTrigger>
         <TooltipContent>Zoom in (⌥ click to reset)</TooltipContent>
+      </Tooltip>
+
+      <!-- Refresh button -->
+      <Tooltip v-if="showRefresh">
+        <TooltipTrigger as-child>
+          <Button
+            variant="ghost"
+            size="icon"
+            class="h-8 w-8"
+            @click="emit('refresh')"
+          >
+            <svg
+              class="w-4 h-4"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8" />
+              <path d="M21 3v5h-5" />
+            </svg>
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent>Refresh</TooltipContent>
       </Tooltip>
 
       <!-- Theme toggle -->
