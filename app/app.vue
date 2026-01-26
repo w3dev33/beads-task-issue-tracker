@@ -2,6 +2,7 @@
   import { TooltipProvider } from '~/components/ui/tooltip'
 
   const { isDark } = useTheme()
+  const { showUpdateDialog, initializeMenu } = useAppMenu()
 
   useHead({
     title: 'Beads Task-Issue Tracker',
@@ -14,10 +15,15 @@
       class: () => isDark.value ? 'dark' : '',
     },
   })
+
+  onMounted(() => {
+    initializeMenu()
+  })
 </script>
 
 <template>
   <TooltipProvider>
     <NuxtPage />
+    <LayoutUpdateDialog v-model:open="showUpdateDialog" />
   </TooltipProvider>
 </template>

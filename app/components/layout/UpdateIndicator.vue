@@ -56,7 +56,7 @@ onUnmounted(() => {
         @click="handleClick"
       >
         <!-- Fade between version and "Up to date" message -->
-        <span class="relative inline-flex justify-end" style="width: 115px;">
+        <span class="relative inline-flex justify-end" style="width: 135px;">
           <span
             class="transition-opacity duration-300"
             :class="showUpToDate ? 'opacity-0' : 'opacity-100'"
@@ -64,10 +64,14 @@ onUnmounted(() => {
             v{{ currentVersion }}
           </span>
           <span
-            class="absolute right-0 text-green-500 transition-opacity duration-300"
+            class="absolute right-0 text-green-500 transition-opacity duration-300 inline-flex items-center gap-1"
             :class="showUpToDate ? 'opacity-100' : 'opacity-0'"
           >
-            Already up to date
+            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+              <polyline points="22 4 12 14.01 9 11.01" />
+            </svg>
+            You're up to date
           </span>
         </span>
 
