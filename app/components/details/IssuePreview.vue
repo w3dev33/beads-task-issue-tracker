@@ -8,6 +8,15 @@ defineProps<{
   issue: Issue
 }>()
 
+// Collapsible section states (all open by default)
+const isDescriptionOpen = ref(true)
+const isDetailsOpen = ref(true)
+const isDependenciesOpen = ref(true)
+const isExtendedOpen = ref(true)
+const isDesignNotesOpen = ref(true)
+const isAcceptanceCriteriaOpen = ref(true)
+const isWorkingNotesOpen = ref(true)
+
 const formatDate = (dateStr: string) => {
   if (!dateStr) return '-'
   const date = new Date(dateStr)
@@ -30,79 +39,214 @@ const formatEstimate = (minutes: number) => {
 
 <template>
   <div class="space-y-3">
+    <!-- Description Section -->
     <div>
-      <h4 class="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1">Description</h4>
-      <p class="text-xs whitespace-pre-wrap"><LinkifiedText :text="issue.description" fallback="No description provided." /></p>
+      <button
+        class="flex items-center gap-1.5 w-full text-left group"
+        @click="isDescriptionOpen = !isDescriptionOpen"
+      >
+        <svg
+          class="w-3 h-3 text-muted-foreground transition-transform"
+          :class="{ '-rotate-90': !isDescriptionOpen }"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+        >
+          <polyline points="6 9 12 15 18 9" />
+        </svg>
+        <h4 class="text-[10px] font-medium text-muted-foreground uppercase tracking-wide group-hover:text-foreground transition-colors">Description</h4>
+      </button>
+      <div v-show="isDescriptionOpen" class="mt-1 pl-4.5">
+        <p class="text-xs whitespace-pre-wrap"><LinkifiedText :text="issue.description" fallback="No description provided." /></p>
+      </div>
     </div>
 
-    <div class="grid grid-cols-2 gap-3 pb-3">
-      <div>
-        <h4 class="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1">Assignee</h4>
-        <p class="text-xs">{{ issue.assignee || 'Unassigned' }}</p>
-      </div>
+    <!-- Details Section (Assignee, Labels, Dates) -->
+    <div>
+      <button
+        class="flex items-center gap-1.5 w-full text-left group"
+        @click="isDetailsOpen = !isDetailsOpen"
+      >
+        <svg
+          class="w-3 h-3 text-muted-foreground transition-transform"
+          :class="{ '-rotate-90': !isDetailsOpen }"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+        >
+          <polyline points="6 9 12 15 18 9" />
+        </svg>
+        <h4 class="text-[10px] font-medium text-muted-foreground uppercase tracking-wide group-hover:text-foreground transition-colors">Details</h4>
+      </button>
+      <div v-show="isDetailsOpen" class="mt-1 pl-4.5">
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <h5 class="text-[10px] font-medium text-sky-400 uppercase tracking-wide mb-0.5">Assignee</h5>
+            <p class="text-xs">{{ issue.assignee || 'Unassigned' }}</p>
+          </div>
 
-      <div>
-        <h4 class="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1">Labels</h4>
-        <div v-if="issue.labels?.length" class="flex flex-wrap gap-1">
-          <LabelBadge v-for="label in issue.labels" :key="label" :label="label" size="sm" />
+          <div>
+            <h5 class="text-[10px] font-medium text-sky-400 uppercase tracking-wide mb-0.5">Labels</h5>
+            <div v-if="issue.labels?.length" class="flex flex-wrap gap-1">
+              <LabelBadge v-for="label in issue.labels" :key="label" :label="label" size="sm" />
+            </div>
+            <p v-else class="text-xs text-muted-foreground">No labels</p>
+          </div>
+
+          <div>
+            <h5 class="text-[10px] font-medium text-sky-400 uppercase tracking-wide mb-0.5">Created</h5>
+            <p class="text-xs">{{ formatDate(issue.createdAt) }}</p>
+          </div>
+
+          <div>
+            <h5 class="text-[10px] font-medium text-sky-400 uppercase tracking-wide mb-0.5">Updated</h5>
+            <p class="text-xs">{{ formatDate(issue.updatedAt) }}</p>
+          </div>
         </div>
-        <p v-else class="text-xs text-muted-foreground">No labels</p>
-      </div>
-
-      <div>
-        <h4 class="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1">Created</h4>
-        <p class="text-xs">{{ formatDate(issue.createdAt) }}</p>
-      </div>
-
-      <div>
-        <h4 class="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1">Updated</h4>
-        <p class="text-xs">{{ formatDate(issue.updatedAt) }}</p>
       </div>
     </div>
 
-    <div v-if="issue.blockedBy?.length">
-      <h4 class="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1">Blocked By</h4>
-      <div class="flex flex-wrap gap-1">
-        <Badge v-for="id in issue.blockedBy" :key="id" variant="secondary" class="text-[10px] px-1.5 py-0">
-          {{ id }}
-        </Badge>
+    <!-- Dependencies Section (only if exists) -->
+    <div v-if="issue.blockedBy?.length || issue.blocks?.length">
+      <button
+        class="flex items-center gap-1.5 w-full text-left group"
+        @click="isDependenciesOpen = !isDependenciesOpen"
+      >
+        <svg
+          class="w-3 h-3 text-muted-foreground transition-transform"
+          :class="{ '-rotate-90': !isDependenciesOpen }"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+        >
+          <polyline points="6 9 12 15 18 9" />
+        </svg>
+        <h4 class="text-[10px] font-medium text-muted-foreground uppercase tracking-wide group-hover:text-foreground transition-colors">Dependencies</h4>
+      </button>
+      <div v-show="isDependenciesOpen" class="mt-1 pl-4.5 space-y-2">
+        <div v-if="issue.blockedBy?.length">
+          <h5 class="text-[10px] font-medium text-sky-400 uppercase tracking-wide mb-0.5">Blocked By</h5>
+          <div class="flex flex-wrap gap-1">
+            <Badge v-for="id in issue.blockedBy" :key="id" variant="secondary" class="text-[10px] px-1.5 py-0">
+              {{ id }}
+            </Badge>
+          </div>
+        </div>
+
+        <div v-if="issue.blocks?.length">
+          <h5 class="text-[10px] font-medium text-sky-400 uppercase tracking-wide mb-0.5">Blocks</h5>
+          <div class="flex flex-wrap gap-1">
+            <Badge v-for="id in issue.blocks" :key="id" variant="secondary" class="text-[10px] px-1.5 py-0">
+              {{ id }}
+            </Badge>
+          </div>
+        </div>
       </div>
     </div>
 
-    <div v-if="issue.blocks?.length">
-      <h4 class="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1">Blocks</h4>
-      <div class="flex flex-wrap gap-1">
-        <Badge v-for="id in issue.blocks" :key="id" variant="secondary" class="text-[10px] px-1.5 py-0">
-          {{ id }}
-        </Badge>
+    <!-- Extended Info Section (only if exists) -->
+    <div v-if="issue.externalRef || issue.estimateMinutes" class="pb-2">
+      <button
+        class="flex items-center gap-1.5 w-full text-left group"
+        @click="isExtendedOpen = !isExtendedOpen"
+      >
+        <svg
+          class="w-3 h-3 text-muted-foreground transition-transform"
+          :class="{ '-rotate-90': !isExtendedOpen }"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+        >
+          <polyline points="6 9 12 15 18 9" />
+        </svg>
+        <h4 class="text-[10px] font-medium text-muted-foreground uppercase tracking-wide group-hover:text-foreground transition-colors">Extended Info</h4>
+      </button>
+      <div v-show="isExtendedOpen" class="mt-1 pl-4.5">
+        <div class="grid grid-cols-2 gap-3">
+          <div v-if="issue.externalRef">
+            <h5 class="text-[10px] font-medium text-sky-400 uppercase tracking-wide mb-0.5">External Reference</h5>
+            <p class="text-xs break-all"><LinkifiedText :text="issue.externalRef" /></p>
+          </div>
+
+          <div v-if="issue.estimateMinutes">
+            <h5 class="text-[10px] font-medium text-sky-400 uppercase tracking-wide mb-0.5">Estimate</h5>
+            <p class="text-xs">{{ formatEstimate(issue.estimateMinutes) }}</p>
+          </div>
+        </div>
       </div>
     </div>
 
-    <div v-if="issue.externalRef || issue.estimateMinutes" class="grid grid-cols-2 gap-3">
-      <div v-if="issue.externalRef">
-        <h4 class="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1">External Reference</h4>
-        <p class="text-xs break-all"><LinkifiedText :text="issue.externalRef" /></p>
-      </div>
-
-      <div v-if="issue.estimateMinutes">
-        <h4 class="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1">Estimate</h4>
-        <p class="text-xs">{{ formatEstimate(issue.estimateMinutes) }}</p>
-      </div>
-    </div>
-
+    <!-- Design Notes Section (only if exists) -->
     <div v-if="issue.designNotes">
-      <h4 class="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1">Design Notes</h4>
-      <p class="text-xs whitespace-pre-wrap"><LinkifiedText :text="issue.designNotes" /></p>
+      <button
+        class="flex items-center gap-1.5 w-full text-left group"
+        @click="isDesignNotesOpen = !isDesignNotesOpen"
+      >
+        <svg
+          class="w-3 h-3 text-muted-foreground transition-transform"
+          :class="{ '-rotate-90': !isDesignNotesOpen }"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+        >
+          <polyline points="6 9 12 15 18 9" />
+        </svg>
+        <h4 class="text-[10px] font-medium text-muted-foreground uppercase tracking-wide group-hover:text-foreground transition-colors">Design Notes</h4>
+      </button>
+      <div v-show="isDesignNotesOpen" class="mt-1 pl-4.5">
+        <p class="text-xs whitespace-pre-wrap"><LinkifiedText :text="issue.designNotes" /></p>
+      </div>
     </div>
 
+    <!-- Acceptance Criteria Section (only if exists) -->
     <div v-if="issue.acceptanceCriteria">
-      <h4 class="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1">Acceptance Criteria</h4>
-      <p class="text-xs whitespace-pre-wrap"><LinkifiedText :text="issue.acceptanceCriteria" /></p>
+      <button
+        class="flex items-center gap-1.5 w-full text-left group"
+        @click="isAcceptanceCriteriaOpen = !isAcceptanceCriteriaOpen"
+      >
+        <svg
+          class="w-3 h-3 text-muted-foreground transition-transform"
+          :class="{ '-rotate-90': !isAcceptanceCriteriaOpen }"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+        >
+          <polyline points="6 9 12 15 18 9" />
+        </svg>
+        <h4 class="text-[10px] font-medium text-muted-foreground uppercase tracking-wide group-hover:text-foreground transition-colors">Acceptance Criteria</h4>
+      </button>
+      <div v-show="isAcceptanceCriteriaOpen" class="mt-1 pl-4.5">
+        <p class="text-xs whitespace-pre-wrap"><LinkifiedText :text="issue.acceptanceCriteria" /></p>
+      </div>
     </div>
 
+    <!-- Working Notes Section (only if exists) -->
     <div v-if="issue.workingNotes">
-      <h4 class="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1">Working Notes</h4>
-      <p class="text-xs whitespace-pre-wrap"><LinkifiedText :text="issue.workingNotes" /></p>
+      <button
+        class="flex items-center gap-1.5 w-full text-left group"
+        @click="isWorkingNotesOpen = !isWorkingNotesOpen"
+      >
+        <svg
+          class="w-3 h-3 text-muted-foreground transition-transform"
+          :class="{ '-rotate-90': !isWorkingNotesOpen }"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+        >
+          <polyline points="6 9 12 15 18 9" />
+        </svg>
+        <h4 class="text-[10px] font-medium text-muted-foreground uppercase tracking-wide group-hover:text-foreground transition-colors">Working Notes</h4>
+      </button>
+      <div v-show="isWorkingNotesOpen" class="mt-1 pl-4.5">
+        <p class="text-xs whitespace-pre-wrap"><LinkifiedText :text="issue.workingNotes" /></p>
+      </div>
     </div>
   </div>
 </template>

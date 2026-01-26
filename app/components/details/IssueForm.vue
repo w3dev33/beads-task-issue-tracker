@@ -99,17 +99,17 @@ const priorityOptions: { value: IssuePriority; label: string }[] = [
 const handleSubmit = () => {
   const payload: UpdateIssuePayload = {
     title: form.title,
-    description: form.description || undefined,
+    description: form.description,
     type: form.type as IssueType,
     status: form.status as IssueStatus,
     priority: form.priority as IssuePriority,
-    assignee: form.assignee || undefined,
-    labels: form.labels ? form.labels.split(',').map((l) => l.trim()).filter(Boolean) : undefined,
-    externalRef: form.externalRef || undefined,
+    assignee: form.assignee,
+    labels: form.labels ? form.labels.split(',').map((l) => l.trim()).filter(Boolean) : [],
+    externalRef: form.externalRef,
     estimateMinutes: form.estimateMinutes || undefined,
-    designNotes: form.designNotes || undefined,
-    acceptanceCriteria: form.acceptanceCriteria || undefined,
-    workingNotes: form.workingNotes || undefined,
+    designNotes: form.designNotes,
+    acceptanceCriteria: form.acceptanceCriteria,
+    workingNotes: form.workingNotes,
   }
   emit('save', payload)
 }

@@ -50,6 +50,7 @@ const {
   isLoading,
   isUpdating,
   fetchIssues,
+  fetchIssue,
   createIssue,
   updateIssue,
   closeIssue,
@@ -359,7 +360,8 @@ const handleAddIssue = () => {
   }
 }
 
-const handleSelectIssue = (issue: Issue) => {
+const handleSelectIssue = async (issue: Issue) => {
+  // First set the issue from list for immediate feedback
   selectIssue(issue)
   isEditMode.value = false
   isCreatingNew.value = false
@@ -368,9 +370,12 @@ const handleSelectIssue = (issue: Issue) => {
   } else {
     isRightSidebarOpen.value = true
   }
+  // Then fetch full details (including extended fields) in background
+  await fetchIssue(issue.id)
 }
 
-const handleEditIssueFromTable = (issue: Issue) => {
+const handleEditIssueFromTable = async (issue: Issue) => {
+  // First set the issue from list for immediate feedback
   selectIssue(issue)
   isEditMode.value = true
   isCreatingNew.value = false
@@ -379,6 +384,8 @@ const handleEditIssueFromTable = (issue: Issue) => {
   } else {
     isRightSidebarOpen.value = true
   }
+  // Then fetch full details (including extended fields) in background
+  await fetchIssue(issue.id)
 }
 
 const handleDeselectIssue = () => {
@@ -411,12 +418,21 @@ const handleSaveIssue = async (payload: UpdateIssuePayload) => {
       priority: payload.priority,
       assignee: payload.assignee,
       labels: payload.labels,
+      externalRef: payload.externalRef,
+      estimateMinutes: payload.estimateMinutes,
+      designNotes: payload.designNotes,
+      acceptanceCriteria: payload.acceptanceCriteria,
+      workingNotes: payload.workingNotes,
     })
     if (result) {
       selectIssue(result)
+      // Fetch full issue details to get all fields
+      await fetchIssue(result.id)
     }
   } else if (selectedIssue.value) {
     await updateIssue(selectedIssue.value.id, payload)
+    // Fetch full issue details to get comments and all fields
+    await fetchIssue(selectedIssue.value.id)
   }
   isEditMode.value = false
   isCreatingNew.value = false

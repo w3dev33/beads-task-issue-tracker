@@ -279,7 +279,8 @@ fn execute_bd(command: &str, args: &[String], cwd: Option<&str>) -> Result<Strin
         .or_else(|| env::var("BEADS_PATH").ok())
         .unwrap_or_else(|| env::current_dir().unwrap().to_string_lossy().to_string());
 
-    let mut full_args: Vec<&str> = vec![command];
+    // Split command by spaces to handle subcommands like "comments add"
+    let mut full_args: Vec<&str> = command.split_whitespace().collect();
     for arg in args {
         full_args.push(arg);
     }
@@ -467,39 +468,49 @@ async fn bd_show(id: String, options: CwdOptions) -> Result<Option<Issue>, Strin
 
 #[tauri::command]
 async fn bd_create(payload: CreatePayload) -> Result<Option<Issue>, String> {
-    let mut args: Vec<String> = vec![format!("\"{}\"", payload.title)];
+    let mut args: Vec<String> = vec![payload.title.clone()];
 
     if let Some(ref desc) = payload.description {
-        args.push(format!("--description=\"{}\"", escape_quotes(desc)));
+        args.push("--description".to_string());
+        args.push(desc.clone());
     }
     if let Some(ref t) = payload.issue_type {
-        args.push(format!("--type={}", t));
+        args.push("--type".to_string());
+        args.push(t.clone());
     }
     if let Some(ref p) = payload.priority {
-        args.push(format!("--priority={}", priority_to_number(p)));
+        args.push("--priority".to_string());
+        args.push(priority_to_number(p));
     }
     if let Some(ref a) = payload.assignee {
-        args.push(format!("--assignee={}", a));
+        args.push("--assignee".to_string());
+        args.push(a.clone());
     }
     if let Some(ref labels) = payload.labels {
         if !labels.is_empty() {
-            args.push(format!("--labels={}", labels.join(",")));
+            args.push("--labels".to_string());
+            args.push(labels.join(","));
         }
     }
     if let Some(ref ext) = payload.external_ref {
-        args.push(format!("--external-ref=\"{}\"", escape_quotes(ext)));
+        args.push("--external-ref".to_string());
+        args.push(ext.clone());
     }
     if let Some(est) = payload.estimate_minutes {
-        args.push(format!("--estimate={}", est));
+        args.push("--estimate".to_string());
+        args.push(est.to_string());
     }
     if let Some(ref design) = payload.design_notes {
-        args.push(format!("--design=\"{}\"", escape_quotes(design)));
+        args.push("--design".to_string());
+        args.push(design.clone());
     }
     if let Some(ref acc) = payload.acceptance_criteria {
-        args.push(format!("--acceptance=\"{}\"", escape_quotes(acc)));
+        args.push("--acceptance".to_string());
+        args.push(acc.clone());
     }
     if let Some(ref notes) = payload.working_notes {
-        args.push(format!("--notes=\"{}\"", escape_quotes(notes)));
+        args.push("--notes".to_string());
+        args.push(notes.clone());
     }
 
     let output = execute_bd("create", &args, payload.cwd.as_deref())?;
@@ -515,42 +526,54 @@ async fn bd_update(id: String, updates: UpdatePayload) -> Result<Option<Issue>, 
     let mut args: Vec<String> = vec![id];
 
     if let Some(ref title) = updates.title {
-        args.push(format!("--title=\"{}\"", escape_quotes(title)));
+        args.push("--title".to_string());
+        args.push(title.clone());
     }
     if let Some(ref desc) = updates.description {
-        args.push(format!("--description=\"{}\"", escape_quotes(desc)));
+        args.push("--description".to_string());
+        args.push(desc.clone());
     }
     if let Some(ref t) = updates.issue_type {
-        args.push(format!("--type={}", t));
+        args.push("--type".to_string());
+        args.push(t.clone());
     }
     if let Some(ref s) = updates.status {
-        args.push(format!("--status={}", s));
+        args.push("--status".to_string());
+        args.push(s.clone());
     }
     if let Some(ref p) = updates.priority {
-        args.push(format!("--priority={}", priority_to_number(p)));
+        args.push("--priority".to_string());
+        args.push(priority_to_number(p));
     }
     if let Some(ref a) = updates.assignee {
-        args.push(format!("--assignee={}", a));
+        args.push("--assignee".to_string());
+        args.push(a.clone());
     }
     if let Some(ref labels) = updates.labels {
         if !labels.is_empty() {
-            args.push(format!("--labels={}", labels.join(",")));
+            args.push("--set-labels".to_string());
+            args.push(labels.join(","));
         }
     }
     if let Some(ref ext) = updates.external_ref {
-        args.push(format!("--external-ref=\"{}\"", escape_quotes(ext)));
+        args.push("--external-ref".to_string());
+        args.push(ext.clone());
     }
     if let Some(est) = updates.estimate_minutes {
-        args.push(format!("--estimate={}", est));
+        args.push("--estimate".to_string());
+        args.push(est.to_string());
     }
     if let Some(ref design) = updates.design_notes {
-        args.push(format!("--design=\"{}\"", escape_quotes(design)));
+        args.push("--design".to_string());
+        args.push(design.clone());
     }
     if let Some(ref acc) = updates.acceptance_criteria {
-        args.push(format!("--acceptance=\"{}\"", escape_quotes(acc)));
+        args.push("--acceptance".to_string());
+        args.push(acc.clone());
     }
     if let Some(ref notes) = updates.working_notes {
-        args.push(format!("--notes=\"{}\"", escape_quotes(notes)));
+        args.push("--notes".to_string());
+        args.push(notes.clone());
     }
 
     let output = execute_bd("update", &args, updates.cwd.as_deref())?;
@@ -588,8 +611,7 @@ async fn bd_delete(id: String, options: CwdOptions) -> Result<serde_json::Value,
 
 #[tauri::command]
 async fn bd_comments_add(id: String, content: String, options: CwdOptions) -> Result<serde_json::Value, String> {
-    let escaped_content = escape_quotes(&content);
-    let args = vec![id, format!("\"{}\"", escaped_content)];
+    let args = vec![id, content];
 
     execute_bd("comments add", &args, options.cwd.as_deref())?;
 

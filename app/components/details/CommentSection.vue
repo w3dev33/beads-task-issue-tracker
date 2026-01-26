@@ -4,12 +4,21 @@ import { Button } from '~/components/ui/button'
 import { Textarea } from '~/components/ui/textarea'
 import { Avatar, AvatarFallback } from '~/components/ui/avatar'
 import { ScrollArea } from '~/components/ui/scroll-area'
-import { Separator } from '~/components/ui/separator'
 import { LinkifiedText } from '~/components/ui/linkified-text'
 
-defineProps<{
+const props = defineProps<{
   comments: Comment[]
 }>()
+
+// Collapsible state (open by default)
+const isCommentsOpen = ref(true)
+
+// Sort comments by date descending (most recent first)
+const sortedComments = computed(() => {
+  return [...props.comments].sort((a, b) => {
+    return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+  })
+})
 
 const newComment = ref('')
 
@@ -48,52 +57,69 @@ const handleSubmit = () => {
 
 <template>
   <div class="space-y-3">
-    <Separator />
+    <button
+      class="flex items-center gap-1.5 w-full text-left group"
+      @click="isCommentsOpen = !isCommentsOpen"
+    >
+      <svg
+        class="w-3 h-3 text-muted-foreground transition-transform"
+        :class="{ '-rotate-90': !isCommentsOpen }"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+      >
+        <polyline points="6 9 12 15 18 9" />
+      </svg>
+      <h4 class="text-[10px] font-medium uppercase tracking-wide text-muted-foreground group-hover:text-foreground transition-colors">
+        Comments ({{ comments.length }})
+      </h4>
+    </button>
 
-    <h4 class="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Comments ({{ comments.length }})</h4>
+    <div v-show="isCommentsOpen" class="pl-4.5 space-y-3">
+      <ScrollArea v-if="sortedComments.length > 0" class="h-40">
+        <div class="space-y-3 pr-4">
+          <div
+            v-for="comment in sortedComments"
+            :key="comment.id"
+            class="flex gap-2"
+          >
+            <Avatar class="h-6 w-6">
+              <AvatarFallback class="text-[10px]">
+                {{ getInitials(comment.author) }}
+              </AvatarFallback>
+            </Avatar>
 
-    <ScrollArea v-if="comments.length > 0" class="h-40">
-      <div class="space-y-3 pr-4">
-        <div
-          v-for="comment in comments"
-          :key="comment.id"
-          class="flex gap-2"
-        >
-          <Avatar class="h-6 w-6">
-            <AvatarFallback class="text-[10px]">
-              {{ getInitials(comment.author) }}
-            </AvatarFallback>
-          </Avatar>
-
-          <div class="flex-1 space-y-0.5">
-            <div class="flex items-center gap-2">
-              <span class="text-xs font-medium">{{ comment.author }}</span>
-              <span class="text-[10px] text-muted-foreground">
-                {{ formatDate(comment.createdAt) }}
-              </span>
+            <div class="flex-1 space-y-0.5">
+              <div class="flex items-center gap-2">
+                <span class="text-xs font-medium">{{ comment.author }}</span>
+                <span class="text-[10px] text-muted-foreground">
+                  {{ formatDate(comment.createdAt) }}
+                </span>
+              </div>
+              <p class="text-xs whitespace-pre-wrap"><LinkifiedText :text="comment.content" /></p>
             </div>
-            <p class="text-xs whitespace-pre-wrap"><LinkifiedText :text="comment.content" /></p>
           </div>
         </div>
-      </div>
-    </ScrollArea>
+      </ScrollArea>
 
-    <div v-else class="text-center text-muted-foreground text-xs py-3">
-      No comments yet
+      <div v-else class="text-center text-muted-foreground text-xs py-3">
+        No comments yet
+      </div>
+
+      <form class="space-y-2" @submit.prevent="handleSubmit">
+        <Textarea
+          v-model="newComment"
+          placeholder="Add a comment..."
+          rows="2"
+          class="text-xs"
+        />
+        <div class="flex justify-end">
+          <Button type="submit" size="sm" class="h-7 text-xs" :disabled="!newComment.trim()">
+            Add Comment
+          </Button>
+        </div>
+      </form>
     </div>
-
-    <form class="space-y-2" @submit.prevent="handleSubmit">
-      <Textarea
-        v-model="newComment"
-        placeholder="Add a comment..."
-        rows="2"
-        class="text-xs"
-      />
-      <div class="flex justify-end">
-        <Button type="submit" size="sm" class="h-7 text-xs" :disabled="!newComment.trim()">
-          Add Comment
-        </Button>
-      </div>
-    </form>
   </div>
 </template>
