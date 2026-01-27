@@ -166,6 +166,56 @@ export async function bdSync(path?: string): Promise<void> {
 }
 
 // ============================================================================
+// Debug / Logging API
+// ============================================================================
+
+export async function getLoggingEnabled(): Promise<boolean> {
+  if (isTauri()) {
+    return invoke<boolean>('get_logging_enabled')
+  }
+  return false
+}
+
+export async function setLoggingEnabled(enabled: boolean): Promise<void> {
+  if (isTauri()) {
+    return invoke<void>('set_logging_enabled', { enabled })
+  }
+}
+
+export async function getVerboseLogging(): Promise<boolean> {
+  if (isTauri()) {
+    return invoke<boolean>('get_verbose_logging')
+  }
+  return false
+}
+
+export async function setVerboseLogging(enabled: boolean): Promise<void> {
+  if (isTauri()) {
+    return invoke<void>('set_verbose_logging', { enabled })
+  }
+}
+
+export async function clearLogs(): Promise<void> {
+  if (isTauri()) {
+    return invoke<void>('clear_logs')
+  }
+}
+
+export async function readLogs(tailLines?: number): Promise<string> {
+  if (isTauri()) {
+    return invoke<string>('read_logs', { tailLines })
+  }
+  return ''
+}
+
+export async function getLogPath(): Promise<string> {
+  if (isTauri()) {
+    return invoke<string>('get_log_path_string')
+  }
+  return ''
+}
+
+// ============================================================================
 // File System API - For folder picker
 // ============================================================================
 

@@ -1,8 +1,14 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::env;
+use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
+use std::sync::atomic::{AtomicBool, Ordering};
+
+// Global flags for logging
+static LOGGING_ENABLED: AtomicBool = AtomicBool::new(true);
+static VERBOSE_LOGGING: AtomicBool = AtomicBool::new(false);
 
 // ============================================================================
 // Update Checker Types
@@ -372,23 +378,38 @@ fn execute_bd(command: &str, args: &[String], cwd: Option<&str>) -> Result<Strin
     full_args.push("--no-daemon");
     full_args.push("--json");
 
+    log::info!("[bd] bd {} | cwd: {}", full_args.join(" "), working_dir);
+
     let output = Command::new("bd")
         .args(&full_args)
         .current_dir(&working_dir)
         .env("PATH", get_extended_path())
         .env("BEADS_PATH", &working_dir)
         .output()
-        .map_err(|e| format!("Failed to execute bd: {}", e))?;
+        .map_err(|e| {
+            log::error!("[bd] Failed to execute bd: {}", e);
+            format!("Failed to execute bd: {}", e)
+        })?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
+        log::error!("[bd] Command failed | status: {} | stderr: {}", output.status, stderr);
         if !stderr.is_empty() {
             return Err(stderr.to_string());
         }
         return Err(format!("bd command failed with status: {}", output.status));
     }
 
-    Ok(String::from_utf8_lossy(&output.stdout).to_string())
+    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+    log::info!("[bd] OK | {} bytes", stdout.len());
+
+    // Log output preview only if verbose mode is enabled
+    if VERBOSE_LOGGING.load(Ordering::Relaxed) {
+        let preview: String = stdout.chars().take(500).collect();
+        log::debug!("[bd] Output: {}", preview);
+    }
+
+    Ok(stdout)
 }
 
 /// Sync the beads database before read operations to ensure data is up-to-date
@@ -398,6 +419,8 @@ fn sync_bd_database(cwd: Option<&str>) {
         .or_else(|| env::var("BEADS_PATH").ok())
         .unwrap_or_else(|| env::current_dir().unwrap().to_string_lossy().to_string());
 
+    log::info!("[sync] Starting sync for: {}", working_dir);
+
     // Run bd sync --import-only with error logging
     match Command::new("bd")
         .args(["sync", "--import-only", "--no-daemon"])
@@ -406,16 +429,18 @@ fn sync_bd_database(cwd: Option<&str>) {
         .env("BEADS_PATH", &working_dir)
         .output()
     {
-        Ok(output) if !output.status.success() => {
+        Ok(output) if output.status.success() => {
+            log::info!("[sync] Sync completed successfully");
+        }
+        Ok(output) => {
             log::warn!(
-                "[beads-sync] bd sync failed: {}",
+                "[sync] bd sync failed: {}",
                 String::from_utf8_lossy(&output.stderr)
             );
         }
         Err(e) => {
-            log::warn!("[beads-sync] Failed to run bd sync: {}", e);
+            log::error!("[sync] Failed to run bd sync: {}", e);
         }
-        _ => {}
     }
 }
 
@@ -447,6 +472,8 @@ async fn bd_sync(cwd: Option<String>) -> Result<(), String> {
 
 #[tauri::command]
 async fn bd_list(options: ListOptions) -> Result<Vec<Issue>, String> {
+    log::info!("[bd_list] cwd: {:?}", options.cwd);
+
     // Sync database before reading to ensure data is up-to-date
     sync_bd_database(options.cwd.as_deref());
 
@@ -478,8 +505,12 @@ async fn bd_list(options: ListOptions) -> Result<Vec<Issue>, String> {
     let output = execute_bd("list", &args, options.cwd.as_deref())?;
 
     let raw_issues: Vec<BdRawIssue> = serde_json::from_str(&output)
-        .map_err(|e| format!("Failed to parse issues: {}", e))?;
+        .map_err(|e| {
+            log::error!("[bd_list] Failed to parse JSON: {} | output: {}", e, output.chars().take(200).collect::<String>());
+            format!("Failed to parse issues: {}", e)
+        })?;
 
+    log::info!("[bd_list] Found {} issues", raw_issues.len());
     Ok(raw_issues.into_iter().map(transform_issue).collect())
 }
 
@@ -543,14 +574,20 @@ async fn bd_count(options: CwdOptions) -> Result<CountResult, String> {
 
 #[tauri::command]
 async fn bd_ready(options: CwdOptions) -> Result<Vec<Issue>, String> {
+    log::info!("[bd_ready] Called with cwd: {:?}", options.cwd);
+
     // Sync database before reading to ensure data is up-to-date
     sync_bd_database(options.cwd.as_deref());
 
     let output = execute_bd("ready", &[], options.cwd.as_deref())?;
 
     let raw_issues: Vec<BdRawIssue> = serde_json::from_str(&output)
-        .map_err(|e| format!("Failed to parse issues: {}", e))?;
+        .map_err(|e| {
+            log::error!("[bd_ready] Failed to parse JSON: {} | output: {}", e, output.chars().take(200).collect::<String>());
+            format!("Failed to parse issues: {}", e)
+        })?;
 
+    log::info!("[bd_ready] Found {} ready issues", raw_issues.len());
     Ok(raw_issues.into_iter().map(transform_issue).collect())
 }
 
@@ -564,14 +601,19 @@ async fn bd_status(options: CwdOptions) -> Result<serde_json::Value, String> {
 
 #[tauri::command]
 async fn bd_show(id: String, options: CwdOptions) -> Result<Option<Issue>, String> {
+    log::info!("[bd_show] Called for issue: {} with cwd: {:?}", id, options.cwd);
+
     // Sync database before reading to ensure data is up-to-date
     sync_bd_database(options.cwd.as_deref());
 
-    let output = execute_bd("show", &[id], options.cwd.as_deref())?;
+    let output = execute_bd("show", &[id.clone()], options.cwd.as_deref())?;
 
     // bd show can return either a single object or an array
     let result: serde_json::Value = serde_json::from_str(&output)
-        .map_err(|e| format!("Failed to parse issue: {}", e))?;
+        .map_err(|e| {
+            log::error!("[bd_show] Failed to parse JSON for {}: {}", id, e);
+            format!("Failed to parse issue: {}", e)
+        })?;
 
     let raw_issue: Option<BdRawIssue> = if result.is_array() {
         result.as_array()
@@ -582,6 +624,7 @@ async fn bd_show(id: String, options: CwdOptions) -> Result<Option<Issue>, Strin
         serde_json::from_value(result).ok()
     };
 
+    log::info!("[bd_show] Issue {} found: {}", id, raw_issue.is_some());
     Ok(raw_issue.map(transform_issue))
 }
 
@@ -890,6 +933,75 @@ async fn check_for_updates() -> Result<UpdateInfo, String> {
 }
 
 // ============================================================================
+// Debug / Logging Commands
+// ============================================================================
+
+fn get_log_path() -> PathBuf {
+    let home = env::var("HOME").unwrap_or_default();
+    PathBuf::from(home)
+        .join("Library/Logs/com.beads.manager/beads.log")
+}
+
+#[tauri::command]
+async fn get_logging_enabled() -> bool {
+    LOGGING_ENABLED.load(Ordering::Relaxed)
+}
+
+#[tauri::command]
+async fn set_logging_enabled(enabled: bool) {
+    LOGGING_ENABLED.store(enabled, Ordering::Relaxed);
+    if enabled {
+        log::info!("[debug] Logging enabled");
+    }
+}
+
+#[tauri::command]
+async fn get_verbose_logging() -> bool {
+    VERBOSE_LOGGING.load(Ordering::Relaxed)
+}
+
+#[tauri::command]
+async fn set_verbose_logging(enabled: bool) {
+    VERBOSE_LOGGING.store(enabled, Ordering::Relaxed);
+    log::info!("[debug] Verbose logging: {}", if enabled { "ON" } else { "OFF" });
+}
+
+#[tauri::command]
+async fn clear_logs() -> Result<(), String> {
+    let log_path = get_log_path();
+    if log_path.exists() {
+        fs::write(&log_path, "").map_err(|e| format!("Failed to clear logs: {}", e))?;
+        log::info!("[debug] Logs cleared");
+    }
+    Ok(())
+}
+
+#[tauri::command]
+async fn read_logs(tail_lines: Option<usize>) -> Result<String, String> {
+    let log_path = get_log_path();
+    if !log_path.exists() {
+        return Ok(String::new());
+    }
+
+    let content = fs::read_to_string(&log_path)
+        .map_err(|e| format!("Failed to read logs: {}", e))?;
+
+    // If tail_lines is specified, return only the last N lines
+    if let Some(n) = tail_lines {
+        let lines: Vec<&str> = content.lines().collect();
+        let start = if lines.len() > n { lines.len() - n } else { 0 };
+        Ok(lines[start..].join("\n"))
+    } else {
+        Ok(content)
+    }
+}
+
+#[tauri::command]
+async fn get_log_path_string() -> String {
+    get_log_path().to_string_lossy().to_string()
+}
+
+// ============================================================================
 // App Entry Point
 // ============================================================================
 
@@ -907,8 +1019,37 @@ pub fn run() {
             app.handle().plugin(
                 tauri_plugin_log::Builder::default()
                     .level(log_level)
+                    .target(tauri_plugin_log::Target::new(
+                        tauri_plugin_log::TargetKind::LogDir { file_name: Some("beads.log".into()) },
+                    ))
+                    .target(tauri_plugin_log::Target::new(
+                        tauri_plugin_log::TargetKind::Stdout,
+                    ))
                     .build(),
             )?;
+
+            // Log startup info
+            log::info!("=== Beads Task-Issue Tracker starting ===");
+            log::info!("[startup] Extended PATH: {}", get_extended_path());
+
+            // Check if bd is accessible
+            match Command::new("bd")
+                .arg("--version")
+                .env("PATH", get_extended_path())
+                .output()
+            {
+                Ok(output) if output.status.success() => {
+                    let version = String::from_utf8_lossy(&output.stdout);
+                    log::info!("[startup] bd found: {}", version.trim());
+                }
+                Ok(output) => {
+                    log::warn!("[startup] bd command failed: {}", String::from_utf8_lossy(&output.stderr));
+                }
+                Err(e) => {
+                    log::error!("[startup] bd not found or not executable: {}", e);
+                }
+            }
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -919,6 +1060,13 @@ pub fn run() {
             bd_status,
             bd_show,
             bd_create,
+            get_logging_enabled,
+            set_logging_enabled,
+            get_verbose_logging,
+            set_verbose_logging,
+            clear_logs,
+            read_logs,
+            get_log_path_string,
             bd_update,
             bd_close,
             bd_delete,

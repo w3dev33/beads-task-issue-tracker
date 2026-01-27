@@ -1,6 +1,7 @@
-// Global state for dialog visibility
+// Global state for dialog/panel visibility
 const showUpdateDialog = ref(false)
 const showAboutDialog = ref(false)
+const showDebugPanel = ref(false)
 let menuInitialized = false
 
 export function useAppMenu() {
@@ -94,9 +95,23 @@ export function useAppMenu() {
         ],
       })
 
+      // Debug menu
+      const debugLogsItem = await MenuItem.new({
+        text: 'Show Logs...',
+        accelerator: 'CmdOrCtrl+Shift+L',
+        action: () => {
+          showDebugPanel.value = !showDebugPanel.value
+        },
+      })
+
+      const debugMenu = await Submenu.new({
+        text: 'Debug',
+        items: [debugLogsItem],
+      })
+
       // Create and set the menu
       const menu = await Menu.new({
-        items: [appMenu, editMenu, windowMenu],
+        items: [appMenu, editMenu, windowMenu, debugMenu],
       })
 
       await menu.setAsAppMenu()
@@ -108,6 +123,7 @@ export function useAppMenu() {
   return {
     showUpdateDialog,
     showAboutDialog,
+    showDebugPanel,
     initializeMenu,
   }
 }
