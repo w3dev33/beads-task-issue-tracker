@@ -201,6 +201,13 @@ export async function clearLogs(): Promise<void> {
   }
 }
 
+export async function exportLogs(): Promise<string> {
+  if (isTauri()) {
+    return invoke<string>('export_logs')
+  }
+  return ''
+}
+
 export async function readLogs(tailLines?: number): Promise<string> {
   if (isTauri()) {
     return invoke<string>('read_logs', { tailLines })
@@ -213,6 +220,13 @@ export async function getLogPath(): Promise<string> {
     return invoke<string>('get_log_path_string')
   }
   return ''
+}
+
+export async function getBdVersion(): Promise<string> {
+  if (isTauri()) {
+    return invoke<string>('get_bd_version')
+  }
+  return 'web mode'
 }
 
 // ============================================================================

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Button } from '~/components/ui/button'
-import { readLogs, clearLogs, getLogPath, getVerboseLogging, setVerboseLogging } from '~/utils/bd-api'
+import { readLogs, clearLogs, exportLogs as exportLogsApi, getLogPath, getBdVersion, getVerboseLogging, setVerboseLogging } from '~/utils/bd-api'
 
 const { isSyncing: isForceSyncing, forceSync, syncMessage, lastSyncSuccess } = useSyncStatus()
 
@@ -14,6 +14,7 @@ const emit = defineEmits<{
 
 const logs = ref('')
 const logPath = ref('')
+const bdVersion = ref('')
 const isAutoRefresh = ref(true)
 const isLoading = ref(false)
 const isVerbose = ref(false)
@@ -142,6 +143,23 @@ const toggleVerbose = async () => {
   await setVerboseLogging(isVerbose.value)
 }
 
+const exportedPath = ref('')
+
+const exportLogs = async () => {
+  try {
+    const path = await exportLogsApi()
+    if (path) {
+      exportedPath.value = path
+      // Clear message after 5 seconds
+      setTimeout(() => {
+        exportedPath.value = ''
+      }, 5000)
+    }
+  } catch (e) {
+    console.error('Failed to export logs:', e)
+  }
+}
+
 const close = () => {
   emit('update:isOpen', false)
 }
@@ -149,6 +167,7 @@ const close = () => {
 // Start/stop auto-refresh when panel opens/closes
 watch(() => props.isOpen, async (isOpen) => {
   if (isOpen) {
+    bdVersion.value = await getBdVersion()
     logPath.value = await getLogPath()
     isVerbose.value = await getVerboseLogging()
     if (isAutoRefresh.value) {
@@ -232,6 +251,17 @@ onUnmounted(() => {
           Clear
         </Button>
 
+        <Button
+          v-if="logs"
+          variant="outline"
+          size="sm"
+          class="h-7 px-2"
+          @click="exportLogs"
+        >
+          Export
+        </Button>
+        <span v-if="exportedPath" class="text-xs text-green-500 truncate max-w-[300px]" :title="exportedPath">{{ exportedPath }}</span>
+
         <div class="w-px h-4 bg-border mx-2" />
 
         <Button
@@ -259,6 +289,8 @@ onUnmounted(() => {
       </div>
 
       <div class="flex items-center gap-2">
+        <span class="text-xs font-medium text-foreground">{{ bdVersion }}</span>
+        <span class="text-muted-foreground">|</span>
         <span class="text-xs text-muted-foreground truncate max-w-[300px]">{{ logPath }}</span>
         <Button variant="outline" size="sm" class="h-7 w-7 p-0" @click="close">
           <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">

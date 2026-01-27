@@ -7,8 +7,41 @@ use std::process::Command;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 // Global flags for logging
-static LOGGING_ENABLED: AtomicBool = AtomicBool::new(true);
+static LOGGING_ENABLED: AtomicBool = AtomicBool::new(false);
 static VERBOSE_LOGGING: AtomicBool = AtomicBool::new(false);
+
+// Conditional logging macros
+macro_rules! log_info {
+    ($($arg:tt)*) => {
+        if LOGGING_ENABLED.load(std::sync::atomic::Ordering::Relaxed) {
+            log::info!($($arg)*);
+        }
+    };
+}
+
+macro_rules! log_warn {
+    ($($arg:tt)*) => {
+        if LOGGING_ENABLED.load(std::sync::atomic::Ordering::Relaxed) {
+            log::warn!($($arg)*);
+        }
+    };
+}
+
+macro_rules! log_error {
+    ($($arg:tt)*) => {
+        if LOGGING_ENABLED.load(std::sync::atomic::Ordering::Relaxed) {
+            log::error!($($arg)*);
+        }
+    };
+}
+
+macro_rules! log_debug {
+    ($($arg:tt)*) => {
+        if LOGGING_ENABLED.load(std::sync::atomic::Ordering::Relaxed) && VERBOSE_LOGGING.load(std::sync::atomic::Ordering::Relaxed) {
+            log::debug!($($arg)*);
+        }
+    };
+}
 
 // ============================================================================
 // Update Checker Types
@@ -38,13 +71,27 @@ struct GitHubRelease {
 // Types
 // ============================================================================
 
+/// Dependency relationship as returned by bd CLI
+/// Format: {"issue_id": "...", "depends_on_id": "...", "type": "blocks", "created_at": "...", "created_by": "..."}
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct BdRawDependency {
+    pub issue_id: Option<String>,
+    pub depends_on_id: Option<String>,
+    #[serde(rename = "type")]
+    pub dependency_type: Option<String>,
+    pub created_at: Option<String>,
+    pub created_by: Option<String>,
+}
+
+/// Dependent info (for parent-child relationships with full issue info)
+/// Some bd versions may return this format instead
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct BdRawDependent {
-    pub id: String,
-    pub title: String,
-    pub status: String,
-    pub priority: i32,
-    pub issue_type: String,
+    pub id: Option<String>,
+    pub title: Option<String>,
+    pub status: Option<String>,
+    pub priority: Option<i32>,
+    pub issue_type: Option<String>,
     pub dependency_type: Option<String>,
 }
 
@@ -63,6 +110,7 @@ pub struct BdRawIssue {
     pub created_by: Option<String>,
     pub updated_at: String,
     pub closed_at: Option<String>,
+    pub close_reason: Option<String>,
     pub blocked_by: Option<Vec<String>>,
     pub blocks: Option<Vec<String>>,
     pub comments: Option<Vec<BdRawComment>>,
@@ -73,12 +121,15 @@ pub struct BdRawIssue {
     pub notes: Option<String>,
     pub parent: Option<String>,
     pub dependents: Option<Vec<BdRawDependent>>,
-    pub dependencies: Option<Vec<BdRawDependent>>,
+    pub dependencies: Option<Vec<BdRawDependency>>,
+    pub dependency_count: Option<i32>,
+    pub dependent_count: Option<i32>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct BdRawComment {
     pub id: serde_json::Value,
+    pub issue_id: Option<String>,
     pub author: String,
     pub text: Option<String>,
     pub content: Option<String>,
@@ -278,32 +329,26 @@ fn normalize_issue_status(status: &str) -> String {
 }
 
 fn transform_issue(raw: BdRawIssue) -> Issue {
-    // Extract parent info from dependencies array (with dependency_type: "parent-child")
-    let parent = if raw.parent.is_some() {
-        // If we have a parent ID, look for full parent info in dependencies
-        raw.dependencies.as_ref().and_then(|deps| {
-            deps.iter()
-                .find(|d| d.dependency_type.as_deref() == Some("parent-child"))
-                .map(|p| ParentIssue {
-                    id: p.id.clone(),
-                    title: p.title.clone(),
-                    status: normalize_issue_status(&p.status),
-                    priority: priority_to_string(p.priority),
-                })
-        })
-    } else {
-        None
-    };
+    // Parent info - dependencies array now contains relationship info, not full issue details
+    // For now, we just use the parent ID if available
+    let parent = raw.parent.as_ref().map(|parent_id| {
+        ParentIssue {
+            id: parent_id.clone(),
+            title: String::new(), // Not available in dependency format
+            status: "open".to_string(),
+            priority: "p3".to_string(),
+        }
+    });
 
     // Extract children from dependents array (with dependency_type: "parent-child")
     let children: Option<Vec<ChildIssue>> = raw.dependents.as_ref().map(|deps| {
         deps.iter()
-            .filter(|d| d.dependency_type.as_deref() == Some("parent-child"))
+            .filter(|d| d.dependency_type.as_deref() == Some("parent-child") && d.id.is_some())
             .map(|c| ChildIssue {
-                id: c.id.clone(),
-                title: c.title.clone(),
-                status: normalize_issue_status(&c.status),
-                priority: priority_to_string(c.priority),
+                id: c.id.clone().unwrap_or_default(),
+                title: c.title.clone().unwrap_or_default(),
+                status: normalize_issue_status(&c.status.clone().unwrap_or_else(|| "open".to_string())),
+                priority: priority_to_string(c.priority.unwrap_or(3)),
             })
             .collect()
     }).filter(|v: &Vec<ChildIssue>| !v.is_empty());
@@ -353,16 +398,16 @@ fn parse_issues_tolerant(output: &str, context: &str) -> Result<Vec<BdRawIssue>,
     }
 
     // If strict parsing fails, try tolerant parsing
-    log::warn!("[{}] Strict parsing failed, attempting tolerant parsing", context);
+    log_warn!("[{}] Strict parsing failed, attempting tolerant parsing", context);
 
     let value: serde_json::Value = serde_json::from_str(output)
         .map_err(|e| {
-            log::error!("[{}] JSON is completely invalid: {}", context, e);
+            log_error!("[{}] JSON is completely invalid: {}", context, e);
             format!("Invalid JSON: {}", e)
         })?;
 
     let arr = value.as_array().ok_or_else(|| {
-        log::error!("[{}] Expected array, got: {:?}", context, value);
+        log_error!("[{}] Expected array, got: {:?}", context, value);
         "Expected JSON array".to_string()
     })?;
 
@@ -376,18 +421,18 @@ fn parse_issues_tolerant(output: &str, context: &str) -> Result<Vec<BdRawIssue>,
             Err(e) => {
                 failed_count += 1;
                 let id = obj.get("id").and_then(|v| v.as_str()).unwrap_or("unknown");
-                log::error!("[{}] Skipping issue {} (id={}): {}", context, i, id, e);
+                log_error!("[{}] Skipping issue {} (id={}): {}", context, i, id, e);
 
                 // Log which fields are present/missing
                 if let Some(obj_map) = obj.as_object() {
                     let keys: Vec<&str> = obj_map.keys().map(|s| s.as_str()).collect();
-                    log::error!("[{}] Issue {} has keys: {:?}", context, i, keys);
+                    log_error!("[{}] Issue {} has keys: {:?}", context, i, keys);
 
                     // Check for common missing required fields
                     let required = ["id", "title", "status", "priority", "issue_type", "created_at", "updated_at"];
                     let missing: Vec<&&str> = required.iter().filter(|k| !keys.contains(*k)).collect();
                     if !missing.is_empty() {
-                        log::error!("[{}] Issue {} missing required fields: {:?}", context, i, missing);
+                        log_error!("[{}] Issue {} missing required fields: {:?}", context, i, missing);
                     }
                 }
             }
@@ -395,7 +440,7 @@ fn parse_issues_tolerant(output: &str, context: &str) -> Result<Vec<BdRawIssue>,
     }
 
     if failed_count > 0 {
-        log::warn!("[{}] Parsed {} issues, skipped {} malformed entries", context, issues.len(), failed_count);
+        log_warn!("[{}] Parsed {} issues, skipped {} malformed entries", context, issues.len(), failed_count);
     }
 
     Ok(issues)
@@ -431,7 +476,7 @@ fn execute_bd(command: &str, args: &[String], cwd: Option<&str>) -> Result<Strin
     full_args.push("--no-daemon");
     full_args.push("--json");
 
-    log::info!("[bd] bd {} | cwd: {}", full_args.join(" "), working_dir);
+    log_info!("[bd] bd {} | cwd: {}", full_args.join(" "), working_dir);
 
     let output = Command::new("bd")
         .args(&full_args)
@@ -440,13 +485,13 @@ fn execute_bd(command: &str, args: &[String], cwd: Option<&str>) -> Result<Strin
         .env("BEADS_PATH", &working_dir)
         .output()
         .map_err(|e| {
-            log::error!("[bd] Failed to execute bd: {}", e);
+            log_error!("[bd] Failed to execute bd: {}", e);
             format!("Failed to execute bd: {}", e)
         })?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        log::error!("[bd] Command failed | status: {} | stderr: {}", output.status, stderr);
+        log_error!("[bd] Command failed | status: {} | stderr: {}", output.status, stderr);
         if !stderr.is_empty() {
             return Err(stderr.to_string());
         }
@@ -454,45 +499,46 @@ fn execute_bd(command: &str, args: &[String], cwd: Option<&str>) -> Result<Strin
     }
 
     let stdout = String::from_utf8_lossy(&output.stdout).to_string();
-    log::info!("[bd] OK | {} bytes", stdout.len());
+    log_info!("[bd] OK | {} bytes", stdout.len());
 
     // Log output preview only if verbose mode is enabled
     if VERBOSE_LOGGING.load(Ordering::Relaxed) {
         let preview: String = stdout.chars().take(500).collect();
-        log::debug!("[bd] Output: {}", preview);
+        log_debug!("[bd] Output: {}", preview);
     }
 
     Ok(stdout)
 }
 
 /// Sync the beads database before read operations to ensure data is up-to-date
+/// Uses bidirectional sync to preserve local changes while getting remote updates
 fn sync_bd_database(cwd: Option<&str>) {
     let working_dir = cwd
         .map(String::from)
         .or_else(|| env::var("BEADS_PATH").ok())
         .unwrap_or_else(|| env::current_dir().unwrap().to_string_lossy().to_string());
 
-    log::info!("[sync] Starting sync for: {}", working_dir);
+    log_info!("[sync] Starting bidirectional sync for: {}", working_dir);
 
-    // Run bd sync --import-only with error logging
+    // Run bd sync (bidirectional - exports local changes AND imports remote changes)
     match Command::new("bd")
-        .args(["sync", "--import-only", "--no-daemon"])
+        .args(["sync", "--no-daemon"])
         .current_dir(&working_dir)
         .env("PATH", get_extended_path())
         .env("BEADS_PATH", &working_dir)
         .output()
     {
         Ok(output) if output.status.success() => {
-            log::info!("[sync] Sync completed successfully");
+            log_info!("[sync] Sync completed successfully");
         }
         Ok(output) => {
-            log::warn!(
+            log_warn!(
                 "[sync] bd sync failed: {}",
                 String::from_utf8_lossy(&output.stderr)
             );
         }
         Err(e) => {
-            log::error!("[sync] Failed to run bd sync: {}", e);
+            log_error!("[sync] Failed to run bd sync: {}", e);
         }
     }
 }
@@ -507,8 +553,10 @@ async fn bd_sync(cwd: Option<String>) -> Result<(), String> {
         .or_else(|| env::var("BEADS_PATH").ok())
         .unwrap_or_else(|| env::current_dir().unwrap().to_string_lossy().to_string());
 
+    log_info!("[bd_sync] Manual sync requested for: {}", working_dir);
+
     let output = Command::new("bd")
-        .args(["sync", "--import-only", "--no-daemon"])
+        .args(["sync", "--no-daemon"])
         .current_dir(&working_dir)
         .env("PATH", get_extended_path())
         .env("BEADS_PATH", &working_dir)
@@ -517,15 +565,17 @@ async fn bd_sync(cwd: Option<String>) -> Result<(), String> {
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
+        log_error!("[bd_sync] Sync failed: {}", stderr.trim());
         return Err(format!("Sync failed: {}", stderr.trim()));
     }
 
+    log_info!("[bd_sync] Sync completed successfully");
     Ok(())
 }
 
 #[tauri::command]
 async fn bd_list(options: ListOptions) -> Result<Vec<Issue>, String> {
-    log::info!("[bd_list] cwd: {:?}", options.cwd);
+    log_info!("[bd_list] cwd: {:?}", options.cwd);
 
     // Sync database before reading to ensure data is up-to-date
     sync_bd_database(options.cwd.as_deref());
@@ -559,7 +609,7 @@ async fn bd_list(options: ListOptions) -> Result<Vec<Issue>, String> {
 
     let raw_issues = parse_issues_tolerant(&output, "bd_list")?;
 
-    log::info!("[bd_list] Found {} issues", raw_issues.len());
+    log_info!("[bd_list] Found {} issues", raw_issues.len());
     Ok(raw_issues.into_iter().map(transform_issue).collect())
 }
 
@@ -621,7 +671,7 @@ async fn bd_count(options: CwdOptions) -> Result<CountResult, String> {
 
 #[tauri::command]
 async fn bd_ready(options: CwdOptions) -> Result<Vec<Issue>, String> {
-    log::info!("[bd_ready] Called with cwd: {:?}", options.cwd);
+    log_info!("[bd_ready] Called with cwd: {:?}", options.cwd);
 
     // Sync database before reading to ensure data is up-to-date
     sync_bd_database(options.cwd.as_deref());
@@ -630,7 +680,7 @@ async fn bd_ready(options: CwdOptions) -> Result<Vec<Issue>, String> {
 
     let raw_issues = parse_issues_tolerant(&output, "bd_ready")?;
 
-    log::info!("[bd_ready] Found {} ready issues", raw_issues.len());
+    log_info!("[bd_ready] Found {} ready issues", raw_issues.len());
     Ok(raw_issues.into_iter().map(transform_issue).collect())
 }
 
@@ -644,7 +694,7 @@ async fn bd_status(options: CwdOptions) -> Result<serde_json::Value, String> {
 
 #[tauri::command]
 async fn bd_show(id: String, options: CwdOptions) -> Result<Option<Issue>, String> {
-    log::info!("[bd_show] Called for issue: {} with cwd: {:?}", id, options.cwd);
+    log_info!("[bd_show] Called for issue: {} with cwd: {:?}", id, options.cwd);
 
     // Sync database before reading to ensure data is up-to-date
     sync_bd_database(options.cwd.as_deref());
@@ -654,7 +704,7 @@ async fn bd_show(id: String, options: CwdOptions) -> Result<Option<Issue>, Strin
     // bd show can return either a single object or an array
     let result: serde_json::Value = serde_json::from_str(&output)
         .map_err(|e| {
-            log::error!("[bd_show] Failed to parse JSON for {}: {}", id, e);
+            log_error!("[bd_show] Failed to parse JSON for {}: {}", id, e);
             format!("Failed to parse issue: {}", e)
         })?;
 
@@ -667,7 +717,7 @@ async fn bd_show(id: String, options: CwdOptions) -> Result<Option<Issue>, Strin
         serde_json::from_value(result).ok()
     };
 
-    log::info!("[bd_show] Issue {} found: {}", id, raw_issue.is_some());
+    log_info!("[bd_show] Issue {} found: {}", id, raw_issue.is_some());
     Ok(raw_issue.map(transform_issue))
 }
 
@@ -728,7 +778,11 @@ async fn bd_create(payload: CreatePayload) -> Result<Option<Issue>, String> {
 
 #[tauri::command]
 async fn bd_update(id: String, updates: UpdatePayload) -> Result<Option<Issue>, String> {
-    let mut args: Vec<String> = vec![id];
+    // Always log update calls for debugging (regardless of LOGGING_ENABLED)
+    log::info!("[bd_update] Updating issue: {} with cwd: {:?}", id, updates.cwd);
+    log::info!("[bd_update] Updates: status={:?}, title={:?}, type={:?}", updates.status, updates.title, updates.issue_type);
+
+    let mut args: Vec<String> = vec![id.clone()];
 
     if let Some(ref title) = updates.title {
         args.push("--title".to_string());
@@ -751,8 +805,10 @@ async fn bd_update(id: String, updates: UpdatePayload) -> Result<Option<Issue>, 
         args.push(priority_to_number(p));
     }
     if let Some(ref a) = updates.assignee {
-        args.push("--assignee".to_string());
-        args.push(a.clone());
+        if !a.is_empty() {
+            args.push("--assignee".to_string());
+            args.push(a.clone());
+        }
     }
     if let Some(ref labels) = updates.labels {
         if !labels.is_empty() {
@@ -761,50 +817,85 @@ async fn bd_update(id: String, updates: UpdatePayload) -> Result<Option<Issue>, 
         }
     }
     if let Some(ref ext) = updates.external_ref {
-        args.push("--external-ref".to_string());
-        args.push(ext.clone());
+        if !ext.is_empty() {
+            args.push("--external-ref".to_string());
+            args.push(ext.clone());
+        }
     }
     if let Some(est) = updates.estimate_minutes {
         args.push("--estimate".to_string());
         args.push(est.to_string());
     }
     if let Some(ref design) = updates.design_notes {
-        args.push("--design".to_string());
-        args.push(design.clone());
+        if !design.is_empty() {
+            args.push("--design".to_string());
+            args.push(design.clone());
+        }
     }
     if let Some(ref acc) = updates.acceptance_criteria {
-        args.push("--acceptance".to_string());
-        args.push(acc.clone());
+        if !acc.is_empty() {
+            args.push("--acceptance".to_string());
+            args.push(acc.clone());
+        }
     }
     if let Some(ref notes) = updates.working_notes {
-        args.push("--notes".to_string());
-        args.push(notes.clone());
+        if !notes.is_empty() {
+            args.push("--notes".to_string());
+            args.push(notes.clone());
+        }
     }
 
+    log::info!("[bd_update] Executing: bd update {}", args.join(" "));
     let output = execute_bd("update", &args, updates.cwd.as_deref())?;
+
+    log::info!("[bd_update] Raw output: {}", output.chars().take(500).collect::<String>());
 
     // bd update can return either a single object or an array
     let result: serde_json::Value = serde_json::from_str(&output)
-        .map_err(|e| format!("Failed to parse updated issue: {}", e))?;
+        .map_err(|e| {
+            log::error!("[bd_update] Failed to parse JSON: {}", e);
+            format!("Failed to parse updated issue: {}", e)
+        })?;
 
     let raw_issue: Option<BdRawIssue> = if result.is_array() {
+        log::info!("[bd_update] Result is array");
         result.as_array()
             .and_then(|arr| arr.first())
             .map(|v| serde_json::from_value(v.clone()).ok())
             .flatten()
     } else {
-        serde_json::from_value(result).ok()
+        log::info!("[bd_update] Result is object");
+        serde_json::from_value(result.clone()).map_err(|e| {
+            log::error!("[bd_update] Failed to parse issue from result: {}", e);
+            e
+        }).ok()
     };
+
+    if let Some(ref issue) = raw_issue {
+        log::info!("[bd_update] Updated issue {} - new status: {}", id, issue.status);
+    } else {
+        log::warn!("[bd_update] Could not parse updated issue from response");
+    }
 
     Ok(raw_issue.map(transform_issue))
 }
 
 #[tauri::command]
 async fn bd_close(id: String, options: CwdOptions) -> Result<serde_json::Value, String> {
-    let output = execute_bd("close", &[id], options.cwd.as_deref())?;
+    log_info!("[bd_close] Closing issue: {} with cwd: {:?}", id, options.cwd);
 
-    serde_json::from_str(&output)
-        .map_err(|e| format!("Failed to parse close result: {}", e))
+    let output = execute_bd("close", &[id.clone()], options.cwd.as_deref())?;
+
+    log_info!("[bd_close] Raw output: {}", output.chars().take(500).collect::<String>());
+
+    let result: serde_json::Value = serde_json::from_str(&output)
+        .map_err(|e| {
+            log_error!("[bd_close] Failed to parse JSON: {}", e);
+            format!("Failed to parse close result: {}", e)
+        })?;
+
+    log_info!("[bd_close] Issue {} closed successfully", id);
+    Ok(result)
 }
 
 #[tauri::command]
@@ -994,7 +1085,7 @@ async fn get_logging_enabled() -> bool {
 async fn set_logging_enabled(enabled: bool) {
     LOGGING_ENABLED.store(enabled, Ordering::Relaxed);
     if enabled {
-        log::info!("[debug] Logging enabled");
+        log_info!("[debug] Logging enabled");
     }
 }
 
@@ -1006,7 +1097,7 @@ async fn get_verbose_logging() -> bool {
 #[tauri::command]
 async fn set_verbose_logging(enabled: bool) {
     VERBOSE_LOGGING.store(enabled, Ordering::Relaxed);
-    log::info!("[debug] Verbose logging: {}", if enabled { "ON" } else { "OFF" });
+    log_info!("[debug] Verbose logging: {}", if enabled { "ON" } else { "OFF" });
 }
 
 #[tauri::command]
@@ -1014,9 +1105,37 @@ async fn clear_logs() -> Result<(), String> {
     let log_path = get_log_path();
     if log_path.exists() {
         fs::write(&log_path, "").map_err(|e| format!("Failed to clear logs: {}", e))?;
-        log::info!("[debug] Logs cleared");
+        log_info!("[debug] Logs cleared");
     }
     Ok(())
+}
+
+#[tauri::command]
+async fn export_logs() -> Result<String, String> {
+    let log_path = get_log_path();
+    if !log_path.exists() {
+        return Err("No logs to export".to_string());
+    }
+
+    // Get export folder: Downloads > Documents > Home
+    let export_dir = dirs::download_dir()
+        .or_else(dirs::document_dir)
+        .or_else(dirs::home_dir)
+        .ok_or_else(|| "Could not find a folder to export logs".to_string())?;
+
+    // Generate filename with timestamp
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    let export_filename = format!("beads-logs-{}.log", now);
+    let export_path = export_dir.join(&export_filename);
+
+    // Copy log file
+    fs::copy(&log_path, &export_path)
+        .map_err(|e| format!("Failed to export logs: {}", e))?;
+
+    Ok(export_path.to_string_lossy().to_string())
 }
 
 #[tauri::command]
@@ -1044,6 +1163,20 @@ async fn get_log_path_string() -> String {
     get_log_path().to_string_lossy().to_string()
 }
 
+#[tauri::command]
+async fn get_bd_version() -> String {
+    match Command::new("bd")
+        .arg("--version")
+        .env("PATH", get_extended_path())
+        .output()
+    {
+        Ok(output) if output.status.success() => {
+            String::from_utf8_lossy(&output.stdout).trim().to_string()
+        }
+        _ => "bd not found".to_string(),
+    }
+}
+
 // ============================================================================
 // App Entry Point
 // ============================================================================
@@ -1062,6 +1195,8 @@ pub fn run() {
             app.handle().plugin(
                 tauri_plugin_log::Builder::default()
                     .level(log_level)
+                    .max_file_size(5_000_000) // 5 MB max per log file
+                    .rotation_strategy(tauri_plugin_log::RotationStrategy::KeepOne) // Keep only one backup
                     .target(tauri_plugin_log::Target::new(
                         tauri_plugin_log::TargetKind::LogDir { file_name: Some("beads.log".into()) },
                     ))
@@ -1108,8 +1243,10 @@ pub fn run() {
             get_verbose_logging,
             set_verbose_logging,
             clear_logs,
+            export_logs,
             read_logs,
             get_log_path_string,
+            get_bd_version,
             bd_update,
             bd_close,
             bd_delete,
