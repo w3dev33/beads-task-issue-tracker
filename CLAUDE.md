@@ -80,11 +80,13 @@ Always use the `/review-to-commit` skill when the user asks to commit changes. T
 ```markdown
 ## macOS Installation Note
 
-The app is not signed with an Apple Developer certificate. On first launch:
-1. macOS will show "App can't be opened because it is from an unidentified developer"
-2. Go to **System Preferences > Security & Privacy > General**
-3. Click **"Open Anyway"** next to the message about the app
-4. Or right-click the app and select **"Open"** from the context menu
+The app is not signed with an Apple Developer certificate. After installation, run this command in Terminal:
+
+\`\`\`bash
+xattr -cr /Applications/Beads\ Task-Issue\ Tracker.app
+\`\`\`
+
+Then you can open the app normally.
 ```
 
 ### Co-Authorship
