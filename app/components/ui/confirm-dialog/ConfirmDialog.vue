@@ -16,6 +16,7 @@ const props = withDefaults(defineProps<{
   cancelText?: string
   variant?: 'default' | 'destructive'
   isLoading?: boolean
+  showCancel?: boolean
 }>(), {
   title: 'Confirmation',
   description: 'Are you sure you want to continue?',
@@ -23,6 +24,7 @@ const props = withDefaults(defineProps<{
   cancelText: 'Cancel',
   variant: 'default',
   isLoading: false,
+  showCancel: true,
 })
 
 const open = defineModel<boolean>('open', { default: false })
@@ -69,6 +71,7 @@ const handleCancel = () => {
       </DialogHeader>
       <DialogFooter class="gap-3">
         <Button
+          v-if="showCancel"
           variant="outline"
           :disabled="isLoading"
           @click="handleCancel"

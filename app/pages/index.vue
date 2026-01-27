@@ -210,6 +210,9 @@ const checkViewport = () => {
   }
 }
 
+// Sync status composable
+const { isSyncing: isForceSyncing, forceSync, syncMessage, lastSyncSuccess, showErrorDialog: showSyncErrorDialog, lastSyncError, closeErrorDialog: closeSyncErrorDialog } = useSyncStatus()
+
 // Polling for external changes (replaces file watcher for lower CPU usage)
 const POLLING_INTERVAL = 5000 // 5 seconds
 let pollingInterval: ReturnType<typeof setInterval> | null = null
@@ -1167,19 +1170,52 @@ watch(
 
     <!-- Footer (outside zoomable content) -->
     <footer class="px-4 py-2 border-t border-border bg-card flex items-center justify-between text-xs text-muted-foreground font-mono">
-      <!-- Sync indicator -->
-      <div class="w-20 flex items-center gap-1.5">
-        <svg
-          :class="['w-3 h-3 transition-all', isSyncing ? 'animate-spin text-primary' : 'text-muted-foreground/50']"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-        >
-          <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8" />
-          <path d="M21 3v5h-5" />
-        </svg>
-        <span v-if="isSyncing" class="text-primary">Sync...</span>
+      <!-- Force Sync button + Sync indicator + Message -->
+      <div class="flex items-center gap-2">
+        <Tooltip>
+          <TooltipTrigger as-child>
+            <button
+              class="flex items-center gap-1.5 px-2 py-1 rounded hover:bg-muted/50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              :disabled="isSyncing || isForceSyncing"
+              @click="forceSync"
+            >
+              <!-- Cloud sync icon -->
+              <svg
+                :class="['w-3 h-3 transition-all', isForceSyncing ? 'animate-pulse text-primary' : 'text-muted-foreground hover:text-foreground']"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+              >
+                <path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242" />
+                <path d="M12 12v9" />
+                <path d="m8 17 4 4 4-4" />
+              </svg>
+              <span v-if="isForceSyncing" class="text-primary">Syncing...</span>
+            </button>
+          </TooltipTrigger>
+          <TooltipContent>{{ isForceSyncing ? 'Syncing...' : 'Force Sync' }}</TooltipContent>
+        </Tooltip>
+
+        <!-- Sync success message -->
+        <span v-if="syncMessage && lastSyncSuccess" class="text-green-500">
+          {{ syncMessage }}
+        </span>
+
+        <!-- Auto-sync indicator (separate from force sync) -->
+        <div v-if="isSyncing && !isForceSyncing && !syncMessage" class="flex items-center gap-1.5 text-muted-foreground/70">
+          <svg
+            class="w-3 h-3 animate-spin"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8" />
+            <path d="M21 3v5h-5" />
+          </svg>
+          <span>Auto...</span>
+        </div>
       </div>
 
       <!-- Center spacer -->
@@ -1251,5 +1287,21 @@ watch(
       current-path="~"
       @select="handleOnboardingFolderSelect"
     />
+
+    <!-- Sync Error Dialog -->
+    <ConfirmDialog
+      v-model:open="showSyncErrorDialog"
+      title="Sync Error"
+      confirm-text="OK"
+      :show-cancel="false"
+      @confirm="closeSyncErrorDialog"
+    >
+      <template #description>
+        <p class="text-sm text-muted-foreground mb-2">
+          The sync operation failed with the following error:
+        </p>
+        <pre class="text-sm text-destructive bg-muted p-3 rounded-md overflow-x-auto whitespace-pre-wrap break-words">{{ lastSyncError }}</pre>
+      </template>
+    </ConfirmDialog>
   </div>
 </template>

@@ -157,6 +157,14 @@ export async function bdAddComment(id: string, content: string, path?: string): 
   })
 }
 
+export async function bdSync(path?: string): Promise<void> {
+  if (isTauri()) {
+    return invoke<void>('bd_sync', { cwd: path })
+  }
+
+  // Web fallback - no-op (sync is handled by bd daemon in web mode)
+}
+
 // ============================================================================
 // File System API - For folder picker
 // ============================================================================

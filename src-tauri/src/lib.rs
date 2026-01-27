@@ -398,18 +398,52 @@ fn sync_bd_database(cwd: Option<&str>) {
         .or_else(|| env::var("BEADS_PATH").ok())
         .unwrap_or_else(|| env::current_dir().unwrap().to_string_lossy().to_string());
 
-    // Run bd sync --import-only silently (ignore errors, best effort)
-    let _ = Command::new("bd")
+    // Run bd sync --import-only with error logging
+    match Command::new("bd")
         .args(["sync", "--import-only", "--no-daemon"])
         .current_dir(&working_dir)
         .env("PATH", get_extended_path())
         .env("BEADS_PATH", &working_dir)
-        .output();
+        .output()
+    {
+        Ok(output) if !output.status.success() => {
+            log::warn!(
+                "[beads-sync] bd sync failed: {}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+        }
+        Err(e) => {
+            log::warn!("[beads-sync] Failed to run bd sync: {}", e);
+        }
+        _ => {}
+    }
 }
 
 // ============================================================================
 // Tauri Commands
 // ============================================================================
+
+#[tauri::command]
+async fn bd_sync(cwd: Option<String>) -> Result<(), String> {
+    let working_dir = cwd
+        .or_else(|| env::var("BEADS_PATH").ok())
+        .unwrap_or_else(|| env::current_dir().unwrap().to_string_lossy().to_string());
+
+    let output = Command::new("bd")
+        .args(["sync", "--import-only", "--no-daemon"])
+        .current_dir(&working_dir)
+        .env("PATH", get_extended_path())
+        .env("BEADS_PATH", &working_dir)
+        .output()
+        .map_err(|e| format!("Failed to run bd sync: {}", e))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("Sync failed: {}", stderr.trim()));
+    }
+
+    Ok(())
+}
 
 #[tauri::command]
 async fn bd_list(options: ListOptions) -> Result<Vec<Issue>, String> {
@@ -864,16 +898,21 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .setup(|app| {
-            if cfg!(debug_assertions) {
-                app.handle().plugin(
-                    tauri_plugin_log::Builder::default()
-                        .level(log::LevelFilter::Info)
-                        .build(),
-                )?;
-            }
+            // Enable logging in both debug and release builds
+            let log_level = if cfg!(debug_assertions) {
+                log::LevelFilter::Debug
+            } else {
+                log::LevelFilter::Info
+            };
+            app.handle().plugin(
+                tauri_plugin_log::Builder::default()
+                    .level(log_level)
+                    .build(),
+            )?;
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            bd_sync,
             bd_list,
             bd_count,
             bd_ready,
