@@ -80,7 +80,8 @@ Always use the `/review-to-commit` skill when the user asks to commit changes. T
 ```markdown
 ## macOS: First Launch
 
-macOS may block the app because it's not signed with an Apple Developer certificate. You'll see a message saying the app "is damaged and can't be opened."
+macOS may block the app because it's not signed with an Apple Developer certificate.
+You'll see a message saying the app "is damaged and can't be opened."
 
 **To fix this**, run the following command after installing:
 
