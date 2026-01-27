@@ -344,8 +344,61 @@ fn transform_issue(raw: BdRawIssue) -> Issue {
     }
 }
 
-fn escape_quotes(s: &str) -> String {
-    s.replace('"', "\\\"")
+/// Parse issues with tolerance for malformed entries
+/// Returns all successfully parsed issues and logs failures
+fn parse_issues_tolerant(output: &str, context: &str) -> Result<Vec<BdRawIssue>, String> {
+    // First try strict parsing
+    if let Ok(issues) = serde_json::from_str::<Vec<BdRawIssue>>(output) {
+        return Ok(issues);
+    }
+
+    // If strict parsing fails, try tolerant parsing
+    log::warn!("[{}] Strict parsing failed, attempting tolerant parsing", context);
+
+    let value: serde_json::Value = serde_json::from_str(output)
+        .map_err(|e| {
+            log::error!("[{}] JSON is completely invalid: {}", context, e);
+            format!("Invalid JSON: {}", e)
+        })?;
+
+    let arr = value.as_array().ok_or_else(|| {
+        log::error!("[{}] Expected array, got: {:?}", context, value);
+        "Expected JSON array".to_string()
+    })?;
+
+    let mut issues = Vec::new();
+    let mut failed_count = 0;
+
+    for (i, obj) in arr.iter().enumerate() {
+        let obj_str = serde_json::to_string(obj).unwrap_or_default();
+        match serde_json::from_str::<BdRawIssue>(&obj_str) {
+            Ok(issue) => issues.push(issue),
+            Err(e) => {
+                failed_count += 1;
+                let id = obj.get("id").and_then(|v| v.as_str()).unwrap_or("unknown");
+                log::error!("[{}] Skipping issue {} (id={}): {}", context, i, id, e);
+
+                // Log which fields are present/missing
+                if let Some(obj_map) = obj.as_object() {
+                    let keys: Vec<&str> = obj_map.keys().map(|s| s.as_str()).collect();
+                    log::error!("[{}] Issue {} has keys: {:?}", context, i, keys);
+
+                    // Check for common missing required fields
+                    let required = ["id", "title", "status", "priority", "issue_type", "created_at", "updated_at"];
+                    let missing: Vec<&&str> = required.iter().filter(|k| !keys.contains(*k)).collect();
+                    if !missing.is_empty() {
+                        log::error!("[{}] Issue {} missing required fields: {:?}", context, i, missing);
+                    }
+                }
+            }
+        }
+    }
+
+    if failed_count > 0 {
+        log::warn!("[{}] Parsed {} issues, skipped {} malformed entries", context, issues.len(), failed_count);
+    }
+
+    Ok(issues)
 }
 
 fn get_extended_path() -> String {
@@ -504,11 +557,7 @@ async fn bd_list(options: ListOptions) -> Result<Vec<Issue>, String> {
 
     let output = execute_bd("list", &args, options.cwd.as_deref())?;
 
-    let raw_issues: Vec<BdRawIssue> = serde_json::from_str(&output)
-        .map_err(|e| {
-            log::error!("[bd_list] Failed to parse JSON: {} | output: {}", e, output.chars().take(200).collect::<String>());
-            format!("Failed to parse issues: {}", e)
-        })?;
+    let raw_issues = parse_issues_tolerant(&output, "bd_list")?;
 
     log::info!("[bd_list] Found {} issues", raw_issues.len());
     Ok(raw_issues.into_iter().map(transform_issue).collect())
@@ -523,10 +572,8 @@ async fn bd_count(options: CwdOptions) -> Result<CountResult, String> {
     let open_output = execute_bd("list", &[], options.cwd.as_deref())?;
     let closed_output = execute_bd("list", &["--status=closed".to_string()], options.cwd.as_deref())?;
 
-    let open_issues: Vec<BdRawIssue> = serde_json::from_str(&open_output)
-        .map_err(|e| format!("Failed to parse open issues: {}", e))?;
-    let closed_issues: Vec<BdRawIssue> = serde_json::from_str(&closed_output)
-        .map_err(|e| format!("Failed to parse closed issues: {}", e))?;
+    let open_issues = parse_issues_tolerant(&open_output, "bd_count_open")?;
+    let closed_issues = parse_issues_tolerant(&closed_output, "bd_count_closed")?;
 
     // Combine all issues
     let mut raw_issues = open_issues;
@@ -581,11 +628,7 @@ async fn bd_ready(options: CwdOptions) -> Result<Vec<Issue>, String> {
 
     let output = execute_bd("ready", &[], options.cwd.as_deref())?;
 
-    let raw_issues: Vec<BdRawIssue> = serde_json::from_str(&output)
-        .map_err(|e| {
-            log::error!("[bd_ready] Failed to parse JSON: {} | output: {}", e, output.chars().take(200).collect::<String>());
-            format!("Failed to parse issues: {}", e)
-        })?;
+    let raw_issues = parse_issues_tolerant(&output, "bd_ready")?;
 
     log::info!("[bd_ready] Found {} ready issues", raw_issues.len());
     Ok(raw_issues.into_iter().map(transform_issue).collect())
