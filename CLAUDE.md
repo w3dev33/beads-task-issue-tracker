@@ -78,15 +78,17 @@ Always use the `/review-to-commit` skill when the user asks to commit changes. T
 - Always include the macOS unsigned certificate notice in release notes:
 
 ```markdown
-## macOS Installation Note
+## macOS: First Launch
 
-The app is not signed with an Apple Developer certificate. After installation, run this command in Terminal:
+macOS may block the app because it's not signed with an Apple Developer certificate. You'll see a message saying the app "is damaged and can't be opened."
+
+**To fix this**, run the following command after installing:
 
 \`\`\`bash
 xattr -cr /Applications/Beads\ Task-Issue\ Tracker.app
 \`\`\`
 
-Then you can open the app normally.
+Then open the app normally. This only needs to be done once.
 ```
 
 ### Co-Authorship
