@@ -73,6 +73,20 @@ Always use the `/review-to-commit` skill when the user asks to commit changes. T
 4. Push: `git push origin master --tags`
 5. Create release: `gh release create vX.Y.Z --title "..." --notes "..."`
 
+**IMPORTANT - Release Notes**:
+- **Never upload DMG files manually** - GitHub Actions automatically builds and attaches release artifacts
+- Always include the macOS unsigned certificate notice in release notes:
+
+```markdown
+## macOS Installation Note
+
+The app is not signed with an Apple Developer certificate. On first launch:
+1. macOS will show "App can't be opened because it is from an unidentified developer"
+2. Go to **System Preferences > Security & Privacy > General**
+3. Click **"Open Anyway"** next to the message about the app
+4. Or right-click the app and select **"Open"** from the context menu
+```
+
 ### Co-Authorship
 Keep `Co-Authored-By: Claude Code <noreply@anthropic.com>` in commits for transparency. This will show Claude Code as a contributor on GitHub - this is intentional and honest.
 
