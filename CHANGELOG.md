@@ -2,6 +2,17 @@
 
 All notable changes to Beads Task-Issue Tracker will be documented in this file.
 
+## [1.2.0] - 2026-01-28
+
+### New Features
+- **Multi-select filter dropdowns**: Replaced the monolithic "Filter" dropdown with 4 individual filter buttons (Status, Type, Priority, Labels)
+- **Label multi-select filter**: Labels now support multi-selection with AND logic (issues must have ALL selected labels)
+- **Collapsible favorites section**: Favorites in the sidebar can now be collapsed/expanded
+
+### Improvements
+- **Colored filter chips**: Filter badges now use the same colors as the app badges (status, type, priority, labels)
+- **Filter tooltips**: Added helpful tooltips to each filter button
+
 ## [1.1.5] - 2026-01-28
 
 ### Bug Fixes
