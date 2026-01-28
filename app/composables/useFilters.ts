@@ -6,14 +6,16 @@ const defaultFilters: FilterState = {
   priority: [],
   assignee: null,
   search: '',
+  labels: [],
 }
 
 export function useFilters() {
   const filters = useLocalStorage<FilterState>('beads:filters', defaultFilters)
 
-  // Clear search on init (search should not persist across page loads)
+  // Clear search and labels on init (should not persist across page loads)
   if (import.meta.client) {
     filters.value.search = ''
+    filters.value.labels = []
   }
 
   const toggleStatus = (status: IssueStatus) => {
@@ -51,12 +53,22 @@ export function useFilters() {
     filters.value.search = search
   }
 
+  const toggleLabelFilter = (label: string) => {
+    const index = filters.value.labels.indexOf(label)
+    if (index === -1) {
+      filters.value.labels.push(label)
+    } else {
+      filters.value.labels.splice(index, 1)
+    }
+  }
+
   const clearFilters = () => {
     filters.value.status = []
     filters.value.type = []
     filters.value.priority = []
     filters.value.assignee = null
     filters.value.search = ''
+    filters.value.labels = []
   }
 
   const setStatusFilter = (statuses: IssueStatus[]) => {
@@ -69,7 +81,8 @@ export function useFilters() {
       filters.value.type.length > 0 ||
       filters.value.priority.length > 0 ||
       filters.value.assignee !== null ||
-      filters.value.search !== ''
+      filters.value.search !== '' ||
+      filters.value.labels.length > 0
     )
   })
 
@@ -80,6 +93,7 @@ export function useFilters() {
     togglePriority,
     setAssignee,
     setSearch,
+    toggleLabelFilter,
     clearFilters,
     setStatusFilter,
     hasActiveFilters,

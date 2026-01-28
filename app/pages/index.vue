@@ -42,7 +42,7 @@ import {
 } from '~/components/ui/tooltip'
 
 // Composables
-const { filters, toggleStatus, toggleType, togglePriority, clearFilters, setStatusFilter, setSearch } = useFilters()
+const { filters, toggleStatus, toggleType, togglePriority, clearFilters, setStatusFilter, setSearch, toggleLabelFilter } = useFilters()
 const { columns, toggleColumn, setColumns, resetColumns } = useColumnConfig()
 const { beadsPath, hasStoredPath } = useBeadsPath()
 const { favorites } = useFavorites()
@@ -541,6 +541,19 @@ watch(searchValue, async (value) => {
   await fetchIssues(!!value.trim())
 })
 
+// Available labels computed from all issues
+const availableLabels = computed(() => {
+  const labelSet = new Set<string>()
+  issues.value.forEach(issue => {
+    issue.labels?.forEach(label => labelSet.add(label))
+  })
+  return Array.from(labelSet).sort()
+})
+
+const handleRemoveLabelFilter = (label: string) => {
+  toggleLabelFilter(label)
+}
+
 // KPI filter handlers
 type KpiFilter = 'total' | 'open' | 'in_progress' | 'blocked'
 const activeKpiFilter = computed<KpiFilter | null>(() => {
@@ -561,25 +574,6 @@ const handleKpiClick = (kpi: KpiFilter) => {
     setStatusFilter(['in_progress'])
   } else if (kpi === 'blocked') {
     setStatusFilter(['blocked'])
-  }
-}
-
-// Filter handlers for toolbar
-const handleAddStatusFilter = (status: IssueStatus) => {
-  if (!filters.value.status.includes(status)) {
-    toggleStatus(status)
-  }
-}
-
-const handleAddTypeFilter = (type: IssueType) => {
-  if (!filters.value.type.includes(type)) {
-    toggleType(type)
-  }
-}
-
-const handleAddPriorityFilter = (priority: IssuePriority) => {
-  if (!filters.value.priority.includes(priority)) {
-    togglePriority(priority)
   }
 }
 
@@ -743,9 +737,11 @@ watch(
         <div v-if="!showOnboarding" class="p-4 border-b border-border space-y-3">
           <IssuesToolbar
             v-model:search="searchValue"
-            :active-status-filters="filters.status"
-            :active-type-filters="filters.type"
-            :active-priority-filters="filters.priority"
+            :selected-statuses="filters.status"
+            :selected-types="filters.type"
+            :selected-priorities="filters.priority"
+            :available-labels="availableLabels"
+            :selected-labels="filters.labels"
             :has-selection="multiSelectMode ? selectedIds.length > 0 : !!selectedIssue"
             :multi-select-mode="multiSelectMode"
             :selected-count="selectedIds.length"
@@ -755,9 +751,10 @@ watch(
             @toggle-multi-select="toggleMultiSelect"
             @update:columns="setColumns"
             @reset-columns="resetColumns"
-            @add-status-filter="handleAddStatusFilter"
-            @add-type-filter="handleAddTypeFilter"
-            @add-priority-filter="handleAddPriorityFilter"
+            @toggle-status="toggleStatus"
+            @toggle-type="toggleType"
+            @toggle-priority="togglePriority"
+            @toggle-label="toggleLabelFilter"
           />
 
           <FilterChips
@@ -765,9 +762,11 @@ watch(
             :status-filters="filters.status"
             :type-filters="filters.type"
             :priority-filters="filters.priority"
+            :label-filters="filters.labels"
             @remove-status="toggleStatus"
             @remove-type="toggleType"
             @remove-priority="togglePriority"
+            @remove-label="handleRemoveLabelFilter"
             @clear-all="clearFilters"
           />
         </div>
@@ -1050,9 +1049,11 @@ watch(
           <div class="p-4 border-b border-border space-y-3">
             <IssuesToolbar
               v-model:search="searchValue"
-              :active-status-filters="filters.status"
-              :active-type-filters="filters.type"
-              :active-priority-filters="filters.priority"
+              :selected-statuses="filters.status"
+              :selected-types="filters.type"
+              :selected-priorities="filters.priority"
+              :available-labels="availableLabels"
+              :selected-labels="filters.labels"
               :has-selection="multiSelectMode ? selectedIds.length > 0 : !!selectedIssue"
               :multi-select-mode="multiSelectMode"
               :selected-count="selectedIds.length"
@@ -1062,9 +1063,10 @@ watch(
               @toggle-multi-select="toggleMultiSelect"
               @update:columns="setColumns"
               @reset-columns="resetColumns"
-              @add-status-filter="handleAddStatusFilter"
-              @add-type-filter="handleAddTypeFilter"
-              @add-priority-filter="handleAddPriorityFilter"
+              @toggle-status="toggleStatus"
+              @toggle-type="toggleType"
+              @toggle-priority="togglePriority"
+              @toggle-label="toggleLabelFilter"
             />
 
             <FilterChips
@@ -1072,9 +1074,11 @@ watch(
               :status-filters="filters.status"
               :type-filters="filters.type"
               :priority-filters="filters.priority"
+              :label-filters="filters.labels"
               @remove-status="toggleStatus"
               @remove-type="toggleType"
               @remove-priority="togglePriority"
+              @remove-label="handleRemoveLabelFilter"
               @clear-all="clearFilters"
             />
           </div>

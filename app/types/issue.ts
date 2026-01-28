@@ -53,6 +53,7 @@ export interface FilterState {
   priority: IssuePriority[]
   assignee: string | null
   search: string
+  labels: string[]
 }
 
 export interface ColumnConfig {
