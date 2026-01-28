@@ -18,6 +18,8 @@ const props = defineProps<{
 const { beadsPath, setPath, clearPath, isCustomPath } = useBeadsPath()
 const { favorites, addFavorite, removeFavorite, isFavorite } = useFavorites()
 
+const isFavoritesCollapsed = useLocalStorage('beads:favoritesCollapsed', false)
+
 const emit = defineEmits<{
   change: []
   reset: []
@@ -140,8 +142,27 @@ const currentIsFavorite = computed(() => isFavorite(beadsPath.value))
 
     <!-- Favorites -->
     <div v-if="favorites.length > 0" class="space-y-1">
-      <span class="text-[10px] text-muted-foreground uppercase tracking-wide">Favorites</span>
-      <div class="flex flex-col gap-1">
+      <button
+        class="flex items-center gap-2 text-[10px] text-muted-foreground hover:text-foreground transition-colors w-full"
+        @click="isFavoritesCollapsed = !isFavoritesCollapsed"
+      >
+        <svg
+          class="w-3 h-3 transition-transform"
+          :class="{ '-rotate-90': isFavoritesCollapsed }"
+          xmlns="http://www.w3.org/2000/svg"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          <polyline points="6 9 12 15 18 9" />
+        </svg>
+        <span class="uppercase tracking-wide">Favorites</span>
+        <span class="ml-auto">({{ favorites.length }})</span>
+      </button>
+      <div v-show="!isFavoritesCollapsed" class="flex flex-col gap-1">
         <Button
           v-for="fav in favorites"
           :key="fav.path"
