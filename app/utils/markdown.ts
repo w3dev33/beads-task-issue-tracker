@@ -50,6 +50,63 @@ export function extractImagesFromMarkdown(text: string): { src: string; alt: str
   return images
 }
 
+/**
+ * Image file extensions supported for attachment preview
+ */
+const IMAGE_EXTENSIONS = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.svg', '.ico', '.tiff', '.tif']
+
+/**
+ * Check if a path or URL is an image based on extension
+ * Supports both local paths and URLs (http/https)
+ */
+export function isImagePath(path: string): boolean {
+  if (!path) return false
+  // Remove query string and hash for URL checking
+  const cleanPath = path.split('?')[0].split('#')[0].toLowerCase()
+  return IMAGE_EXTENSIONS.some(ext => cleanPath.endsWith(ext))
+}
+
+/**
+ * Check if a string is a URL (http or https)
+ */
+export function isUrl(path: string): boolean {
+  if (!path) return false
+  return path.startsWith('http://') || path.startsWith('https://')
+}
+
+/**
+ * Extract image paths from externalRef field
+ * externalRef can contain multiple values separated by newlines
+ * Returns array of { src, alt } objects for image paths only
+ */
+export function extractImagesFromExternalRef(externalRef: string | undefined): { src: string; alt: string }[] {
+  if (!externalRef) return []
+
+  return externalRef
+    .split('\n')
+    .map(line => line.trim())
+    // Filter out cleared placeholders and non-image lines
+    .filter(line => line && !line.startsWith('cleared:') && isImagePath(line))
+    .map(path => ({
+      src: path,
+      alt: path.split('/').pop() || 'Image',
+    }))
+}
+
+/**
+ * Extract non-image references from externalRef field
+ * Returns array of URLs/IDs that are not image paths
+ */
+export function extractNonImageRefs(externalRef: string | undefined): string[] {
+  if (!externalRef) return []
+
+  return externalRef
+    .split('\n')
+    .map(line => line.trim())
+    // Filter out cleared placeholders and image paths
+    .filter(line => line && !line.startsWith('cleared:') && !isImagePath(line))
+}
+
 // Configure DOMPurify to allow our custom attributes
 const purifyConfig: DOMPurify.Config = {
   ALLOWED_TAGS: [

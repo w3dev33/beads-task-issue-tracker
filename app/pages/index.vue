@@ -333,6 +333,10 @@ const isDeleting = ref(false)
 const isCloseDialogOpen = ref(false)
 const isClosing = ref(false)
 
+// Detach image confirmation dialog
+const isDetachDialogOpen = ref(false)
+const detachImagePath = ref<string | null>(null)
+const isDetaching = ref(false)
 
 // Close and clear panel when issue transitions to closed (not when selecting an already closed issue)
 watch(
@@ -497,6 +501,66 @@ const handleNavigateToIssue = async (id: string) => {
   }
   // Fetch full details (including extended fields, parent, children)
   await fetchIssue(id)
+}
+
+const handleAttachImage = async (path: string) => {
+  if (!selectedIssue.value) return
+
+  // Append image path to externalRef (multiple values separated by newlines)
+  const currentRef = selectedIssue.value.externalRef || ''
+  const newRef = currentRef ? `${currentRef}\n${path}` : path
+
+  await updateIssue(selectedIssue.value.id, { externalRef: newRef })
+  // Refresh issue to show the new attachment
+  await fetchIssue(selectedIssue.value.id)
+}
+
+const confirmDetachImage = (path: string) => {
+  detachImagePath.value = path
+  isDetachDialogOpen.value = true
+}
+
+const handleDetachImage = async () => {
+  if (!selectedIssue.value || !detachImagePath.value) return
+
+  isDetaching.value = true
+  try {
+    // Remove image path from externalRef
+    const currentRef = selectedIssue.value.externalRef || ''
+    const lines = currentRef.split('\n')
+
+    console.log('[detach] Current externalRef:', currentRef)
+    console.log('[detach] Lines:', lines)
+    console.log('[detach] Target to remove:', detachImagePath.value)
+
+    const newRef = lines
+      .filter((line) => {
+        const trimmed = line.trim()
+        const keep = trimmed !== detachImagePath.value
+        console.log(`[detach] Line "${trimmed}" === target? ${!keep}, keep: ${keep}`)
+        return keep
+      })
+      .join('\n')
+
+    console.log('[detach] New externalRef:', newRef)
+
+    // bd CLI has UNIQUE constraint on external_ref - can't set to empty string
+    // Only update if there's remaining content, otherwise skip the update
+    if (newRef.trim()) {
+      await updateIssue(selectedIssue.value.id, { externalRef: newRef })
+    } else {
+      // Can't clear external_ref due to bd CLI limitation
+      // We need to set it to something unique - use a placeholder
+      console.log('[detach] Cannot clear external_ref, using placeholder')
+      await updateIssue(selectedIssue.value.id, { externalRef: `cleared:${selectedIssue.value.id}` })
+    }
+    // Refresh issue to update the attachments
+    await fetchIssue(selectedIssue.value.id)
+  } finally {
+    isDetaching.value = false
+    isDetachDialogOpen.value = false
+    detachImagePath.value = null
+  }
 }
 
 const handleDeleteIssue = () => {
@@ -917,6 +981,8 @@ watch(
                 <IssuePreview
                   :issue="selectedIssue"
                   @navigate-to-issue="handleNavigateToIssue"
+                  @attach-image="handleAttachImage"
+                  @detach-image="confirmDetachImage"
                 />
                 <CommentSection
                   class="mt-3"
@@ -1179,6 +1245,8 @@ watch(
               <IssuePreview
                 :issue="selectedIssue"
                 @navigate-to-issue="handleNavigateToIssue"
+                @attach-image="handleAttachImage"
+                @detach-image="confirmDetachImage"
               />
               <CommentSection
                 class="mt-3"
@@ -1277,6 +1345,29 @@ watch(
         </div>
         <p class="mt-3 text-sm text-muted-foreground">
           The issue will be marked as completed.
+        </p>
+      </template>
+    </ConfirmDialog>
+
+    <!-- Detach Image Confirmation Dialog -->
+    <ConfirmDialog
+      v-model:open="isDetachDialogOpen"
+      title="Detach image"
+      confirm-text="Detach"
+      cancel-text="Cancel"
+      variant="destructive"
+      :is-loading="isDetaching"
+      @confirm="handleDetachImage"
+    >
+      <template #description>
+        <p class="text-sm text-muted-foreground">
+          Are you sure you want to detach this image?
+        </p>
+        <p class="mt-2 text-xs text-muted-foreground font-mono break-all">
+          {{ detachImagePath }}
+        </p>
+        <p class="mt-3 text-sm text-muted-foreground">
+          The image file will not be deleted, only the reference will be removed.
         </p>
       </template>
     </ConfirmDialog>

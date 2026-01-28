@@ -817,11 +817,9 @@ async fn bd_update(id: String, updates: UpdatePayload) -> Result<Option<Issue>, 
         args.push(labels.join(","));
     }
     if let Some(ref ext) = updates.external_ref {
-        // Keep is_empty check for external_ref - bd CLI has UNIQUE constraint issues with empty strings
-        if !ext.is_empty() {
-            args.push("--external-ref".to_string());
-            args.push(ext.clone());
-        }
+        args.push("--external-ref".to_string());
+        // Pass empty string as empty quotes to bd CLI
+        args.push(ext.clone());
     }
     if let Some(est) = updates.estimate_minutes {
         args.push("--estimate".to_string());
@@ -845,8 +843,32 @@ async fn bd_update(id: String, updates: UpdatePayload) -> Result<Option<Issue>, 
 
     log::info!("[bd_update] Raw output: {}", output.chars().take(500).collect::<String>());
 
+    // Handle empty output from bd CLI (some updates return empty response)
+    let trimmed_output = output.trim();
+    if trimmed_output.is_empty() {
+        log::info!("[bd_update] Empty response from bd, fetching issue {} to get updated data", id);
+        // Fetch the updated issue directly
+        let show_output = execute_bd("show", &[id.clone()], updates.cwd.as_deref())?;
+        let show_result: serde_json::Value = serde_json::from_str(&show_output)
+            .map_err(|e| {
+                log::error!("[bd_update] Failed to parse show JSON: {}", e);
+                format!("Failed to fetch updated issue: {}", e)
+            })?;
+
+        let raw_issue: Option<BdRawIssue> = if show_result.is_array() {
+            show_result.as_array()
+                .and_then(|arr| arr.first())
+                .map(|v| serde_json::from_value(v.clone()).ok())
+                .flatten()
+        } else {
+            serde_json::from_value(show_result).ok()
+        };
+
+        return Ok(raw_issue.map(transform_issue));
+    }
+
     // bd update can return either a single object or an array
-    let result: serde_json::Value = serde_json::from_str(&output)
+    let result: serde_json::Value = serde_json::from_str(trimmed_output)
         .map_err(|e| {
             log::error!("[bd_update] Failed to parse JSON: {}", e);
             format!("Failed to parse updated issue: {}", e)
@@ -1303,6 +1325,7 @@ fn base64_encode(data: &[u8]) -> String {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             // Enable logging in both debug and release builds
             let log_level = if cfg!(debug_assertions) {

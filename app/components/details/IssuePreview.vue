@@ -1,12 +1,14 @@
 <script setup lang="ts">
+import { ImageIcon } from 'lucide-vue-next'
 import type { Issue } from '~/types/issue'
 import { Badge } from '~/components/ui/badge'
+import { Button } from '~/components/ui/button'
 import { LinkifiedText } from '~/components/ui/linkified-text'
 import LabelBadge from '~/components/issues/LabelBadge.vue'
 import StatusBadge from '~/components/issues/StatusBadge.vue'
 import PriorityBadge from '~/components/issues/PriorityBadge.vue'
 import ImageThumbnail from '~/components/ui/image-preview/ImageThumbnail.vue'
-import { extractImagesFromMarkdown } from '~/utils/markdown'
+import { extractImagesFromExternalRef, extractNonImageRefs, isUrl } from '~/utils/markdown'
 
 const props = defineProps<{
   issue: Issue
@@ -15,25 +17,50 @@ const props = defineProps<{
 const { beadsPath } = useBeadsPath()
 const { openImage } = useImagePreview()
 
-// Extract images from description
-const descriptionImages = computed(() => extractImagesFromMarkdown(props.issue.description))
+// Extract images from externalRef
+const attachedImages = computed(() => extractImagesFromExternalRef(props.issue.externalRef))
 
-const handleImageClick = (src: string, alt: string) => {
-  const fullPath = `${beadsPath.value}/.beads/${src}`
+// Extract non-image external references (URLs, IDs)
+const nonImageRefs = computed(() => extractNonImageRefs(props.issue.externalRef))
+
+const handleImageClick = async (src: string, alt: string) => {
+  // For URLs, open in browser
+  if (isUrl(src)) {
+    const { open } = await import('@tauri-apps/plugin-shell')
+    await open(src)
+    return
+  }
+  // For local paths, open in preview modal
+  const fullPath = src.startsWith('/') ? src : `${beadsPath.value}/.beads/${src}`
   openImage(fullPath, alt)
+}
+
+const attachImage = async () => {
+  const { open } = await import('@tauri-apps/plugin-dialog')
+  const selected = await open({
+    multiple: false,
+    filters: [{ name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp'] }],
+  })
+  if (selected) {
+    emit('attach-image', selected)
+  }
 }
 
 const emit = defineEmits<{
   'navigate-to-issue': [id: string]
+  'attach-image': [path: string]
+  'detach-image': [path: string]
 }>()
 
 // Collapsible section states (all open by default)
+const isAttachmentsOpen = ref(true)
 const isDescriptionOpen = ref(true)
 const isParentOpen = ref(true)
 const isChildrenOpen = ref(true)
 const isDetailsOpen = ref(true)
 const isDependenciesOpen = ref(true)
-const isExtendedOpen = ref(true)
+const isExternalRefOpen = ref(true)
+const isEstimateOpen = ref(true)
 const isDesignNotesOpen = ref(true)
 const isAcceptanceCriteriaOpen = ref(true)
 const isWorkingNotesOpen = ref(true)
@@ -60,17 +87,51 @@ const formatEstimate = (minutes: number) => {
 
 <template>
   <div class="space-y-3">
-    <!-- Images Section (only if description has images) -->
-    <div v-if="descriptionImages.length > 0">
-      <h4 class="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-2">Attachments</h4>
-      <div class="flex flex-wrap gap-2">
-        <ImageThumbnail
-          v-for="(img, index) in descriptionImages"
-          :key="index"
-          :src="img.src"
-          :alt="img.alt"
-          @click="handleImageClick(img.src, img.alt)"
-        />
+    <!-- Attachments Section (images from externalRef) -->
+    <div>
+      <div class="flex items-center justify-between">
+        <button
+          class="flex items-center gap-1.5 text-left group"
+          @click="isAttachmentsOpen = !isAttachmentsOpen"
+        >
+          <svg
+            class="w-3 h-3 text-muted-foreground transition-transform"
+            :class="{ '-rotate-90': !isAttachmentsOpen }"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <polyline points="6 9 12 15 18 9" />
+          </svg>
+          <h4 class="text-[10px] font-medium text-muted-foreground uppercase tracking-wide group-hover:text-foreground transition-colors">
+            Attachments
+            <span v-if="attachedImages.length > 0" class="text-muted-foreground">({{ attachedImages.length }})</span>
+          </h4>
+        </button>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          class="h-5 px-1.5 text-[10px] hover:bg-sky-500/20 hover:border-sky-500 hover:text-sky-400 active:scale-95 active:bg-sky-500/30 transition-all"
+          @click="attachImage"
+        >
+          <ImageIcon class="w-3 h-3 mr-1" />
+          Attach
+        </Button>
+      </div>
+      <div v-show="isAttachmentsOpen" class="mt-2 pl-4.5">
+        <div v-if="attachedImages.length > 0" class="flex flex-wrap gap-4">
+          <ImageThumbnail
+            v-for="img in attachedImages"
+            :key="img.src"
+            :src="img.src"
+            :alt="img.alt"
+            @click="handleImageClick(img.src, img.alt)"
+            @remove="emit('detach-image', img.src)"
+          />
+        </div>
+        <p v-else class="text-xs text-muted-foreground">No attachments</p>
       </div>
     </div>
 
@@ -170,6 +231,34 @@ const formatEstimate = (minutes: number) => {
       </div>
     </div>
 
+    <!-- External Reference Section (only if exists) -->
+    <div v-if="nonImageRefs.length > 0">
+      <button
+        class="flex items-center gap-1.5 w-full text-left group"
+        @click="isExternalRefOpen = !isExternalRefOpen"
+      >
+        <svg
+          class="w-3 h-3 text-muted-foreground transition-transform"
+          :class="{ '-rotate-90': !isExternalRefOpen }"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+        >
+          <polyline points="6 9 12 15 18 9" />
+        </svg>
+        <h4 class="text-[10px] font-medium text-muted-foreground uppercase tracking-wide group-hover:text-foreground transition-colors">
+          External Reference
+          <span class="text-muted-foreground">({{ nonImageRefs.length }})</span>
+        </h4>
+      </button>
+      <div v-show="isExternalRefOpen" class="mt-1 pl-4.5 space-y-1">
+        <p v-for="(ref, index) in nonImageRefs" :key="index" class="text-xs break-all">
+          <LinkifiedText :text="ref" />
+        </p>
+      </div>
+    </div>
+
     <!-- Details Section (Assignee, Labels, Dates) -->
     <div>
       <button
@@ -255,15 +344,15 @@ const formatEstimate = (minutes: number) => {
       </div>
     </div>
 
-    <!-- Extended Info Section (only if exists) -->
-    <div v-if="issue.externalRef || issue.estimateMinutes" class="pb-2">
+    <!-- Estimate Section (only if exists) -->
+    <div v-if="issue.estimateMinutes">
       <button
         class="flex items-center gap-1.5 w-full text-left group"
-        @click="isExtendedOpen = !isExtendedOpen"
+        @click="isEstimateOpen = !isEstimateOpen"
       >
         <svg
           class="w-3 h-3 text-muted-foreground transition-transform"
-          :class="{ '-rotate-90': !isExtendedOpen }"
+          :class="{ '-rotate-90': !isEstimateOpen }"
           viewBox="0 0 24 24"
           fill="none"
           stroke="currentColor"
@@ -271,20 +360,10 @@ const formatEstimate = (minutes: number) => {
         >
           <polyline points="6 9 12 15 18 9" />
         </svg>
-        <h4 class="text-[10px] font-medium text-muted-foreground uppercase tracking-wide group-hover:text-foreground transition-colors">Extended Info</h4>
+        <h4 class="text-[10px] font-medium text-muted-foreground uppercase tracking-wide group-hover:text-foreground transition-colors">Estimate</h4>
       </button>
-      <div v-show="isExtendedOpen" class="mt-1 pl-4.5">
-        <div class="grid grid-cols-2 gap-3">
-          <div v-if="issue.externalRef">
-            <h5 class="text-[10px] font-medium text-sky-400 uppercase tracking-wide mb-0.5">External Reference</h5>
-            <p class="text-xs break-all"><LinkifiedText :text="issue.externalRef" /></p>
-          </div>
-
-          <div v-if="issue.estimateMinutes">
-            <h5 class="text-[10px] font-medium text-sky-400 uppercase tracking-wide mb-0.5">Estimate</h5>
-            <p class="text-xs">{{ formatEstimate(issue.estimateMinutes) }}</p>
-          </div>
-        </div>
+      <div v-show="isEstimateOpen" class="mt-1 pl-4.5">
+        <p class="text-xs">{{ formatEstimate(issue.estimateMinutes) }}</p>
       </div>
     </div>
 

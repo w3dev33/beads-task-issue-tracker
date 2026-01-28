@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { nextTick } from 'vue'
+import { ImageIcon } from 'lucide-vue-next'
 import type { Issue, IssueType, IssueStatus, IssuePriority, UpdateIssuePayload } from '~/types/issue'
 import { Button } from '~/components/ui/button'
 import { Input } from '~/components/ui/input'
@@ -25,6 +26,15 @@ const emit = defineEmits<{
   cancel: []
 }>()
 
+// Filter out "cleared:" placeholder from externalRef for display
+const cleanExternalRef = (ref: string | undefined): string => {
+  if (!ref) return ''
+  return ref
+    .split('\n')
+    .filter(line => !line.trim().startsWith('cleared:'))
+    .join('\n')
+}
+
 const form = reactive({
   title: props.issue?.title || '',
   description: props.issue?.description || '',
@@ -33,7 +43,7 @@ const form = reactive({
   priority: props.issue?.priority || 'p3',
   assignee: props.issue?.assignee || '',
   labels: props.issue?.labels?.join(', ') || '',
-  externalRef: props.issue?.externalRef || '',
+  externalRef: cleanExternalRef(props.issue?.externalRef),
   estimateMinutes: props.issue?.estimateMinutes as number | undefined,
   designNotes: props.issue?.designNotes || '',
   acceptanceCriteria: props.issue?.acceptanceCriteria || '',
@@ -51,7 +61,7 @@ watch(
       form.priority = newIssue.priority
       form.assignee = newIssue.assignee || ''
       form.labels = newIssue.labels?.join(', ') || ''
-      form.externalRef = newIssue.externalRef || ''
+      form.externalRef = cleanExternalRef(newIssue.externalRef)
       form.estimateMinutes = newIssue.estimateMinutes
       form.designNotes = newIssue.designNotes || ''
       form.acceptanceCriteria = newIssue.acceptanceCriteria || ''
@@ -112,6 +122,22 @@ const handleSubmit = () => {
     workingNotes: form.workingNotes,
   }
   emit('save', payload)
+}
+
+const attachImage = async () => {
+  const { open } = await import('@tauri-apps/plugin-dialog')
+  const selected = await open({
+    multiple: false,
+    filters: [{ name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp'] }],
+  })
+  if (selected) {
+    // Add image path to externalRef (multiple values separated by newlines)
+    if (form.externalRef) {
+      form.externalRef += `\n${selected}`
+    } else {
+      form.externalRef = selected
+    }
+  }
 }
 </script>
 
@@ -224,28 +250,39 @@ const handleSubmit = () => {
           />
         </div>
 
-        <div class="grid grid-cols-2 gap-2">
-          <div class="space-y-1">
+        <div class="space-y-1">
+          <div class="flex items-center gap-2">
             <Label for="externalRef" class="text-[10px] uppercase tracking-wide text-sky-400">External Reference</Label>
-            <Input
-              id="externalRef"
-              v-model="form.externalRef"
-              placeholder="URL or ID"
-              class="h-8 text-xs"
-            />
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              class="h-5 px-1.5 text-[10px] hover:bg-sky-500/20 hover:border-sky-500 hover:text-sky-400 active:scale-95 active:bg-sky-500/30 transition-all"
+              @click="attachImage"
+            >
+              <ImageIcon class="w-3 h-3 mr-1" />
+              Attach
+            </Button>
           </div>
+          <Textarea
+            id="externalRef"
+            v-model="form.externalRef"
+            placeholder="URLs, IDs, or image paths (one per line)"
+            rows="2"
+            class="text-xs"
+          />
+        </div>
 
-          <div class="space-y-1">
-            <Label for="estimateMinutes" class="text-[10px] uppercase tracking-wide text-sky-400">Estimate (minutes)</Label>
-            <Input
-              id="estimateMinutes"
-              v-model.number="form.estimateMinutes"
-              type="number"
-              min="0"
-              placeholder="30"
-              class="h-8 text-xs"
-            />
-          </div>
+        <div class="space-y-1">
+          <Label for="estimateMinutes" class="text-[10px] uppercase tracking-wide text-sky-400">Estimate (minutes)</Label>
+          <Input
+            id="estimateMinutes"
+            v-model.number="form.estimateMinutes"
+            type="number"
+            min="0"
+            placeholder="30"
+            class="h-8 text-xs w-32"
+          />
         </div>
 
         <div class="space-y-1">

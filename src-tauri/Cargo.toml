@@ -1,6 +1,6 @@
 [package]
 name = "beads-issue-tracker"
-version = "1.2.2"
+version = "1.2.12"
 description = "Beads Task-Issue Tracker - Desktop app for managing bd Beads issues"
 authors = ["Laurent Chapin <laurent.chapin@w3dev.fr>"]
 license = "MIT"
@@ -22,6 +22,7 @@ log = "0.4"
 tauri = { version = "2.9.5", features = [] }
 tauri-plugin-log = "2"
 tauri-plugin-shell = "2"
+tauri-plugin-dialog = "2"
 dirs = "6.0"
 reqwest = { version = "0.12", features = ["json", "rustls-tls"], default-features = false }
 # notify dependencies removed - replaced by frontend polling for lower CPU usage
