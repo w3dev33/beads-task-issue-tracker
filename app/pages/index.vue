@@ -49,9 +49,17 @@ const { favorites } = useFavorites()
 const {
   issues,
   filteredIssues,
+  paginatedIssues,
   selectedIssue,
   isLoading,
   isUpdating,
+  // Pagination
+  hasMore,
+  loadMore,
+  sortField,
+  sortDirection,
+  setSort,
+  // Actions
   fetchIssues,
   fetchIssue,
   createIssue,
@@ -771,13 +779,19 @@ watch(
         <div v-else class="flex-1 overflow-auto p-4">
           <IssueTable
             v-model:selected-ids="selectedIds"
-            :issues="filteredIssues"
+            :issues="paginatedIssues"
             :columns="columns"
             :selected-id="selectedIssue?.id"
             :multi-select-mode="multiSelectMode"
+            :has-more="hasMore"
+            :total-count="filteredIssues.length"
+            :external-sort-column="sortField"
+            :external-sort-direction="sortDirection"
             @select="handleSelectIssue"
             @edit="handleEditIssueFromTable"
             @deselect="handleDeselectIssue"
+            @load-more="loadMore"
+            @sort="setSort"
           />
 
           <div v-if="isLoading" class="text-center text-muted-foreground py-4">
@@ -1068,13 +1082,19 @@ watch(
           <div class="flex-1 overflow-auto p-4">
             <IssueTable
               v-model:selected-ids="selectedIds"
-              :issues="filteredIssues"
+              :issues="paginatedIssues"
               :columns="columns"
               :selected-id="selectedIssue?.id"
               :multi-select-mode="multiSelectMode"
+              :has-more="hasMore"
+              :total-count="filteredIssues.length"
+              :external-sort-column="sortField"
+              :external-sort-direction="sortDirection"
               @select="handleSelectIssue"
               @edit="handleEditIssueFromTable"
               @deselect="handleDeselectIssue"
+              @load-more="loadMore"
+              @sort="setSort"
             />
           </div>
         </template>

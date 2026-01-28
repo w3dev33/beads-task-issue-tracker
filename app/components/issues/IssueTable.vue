@@ -13,6 +13,7 @@ import TypeBadge from '~/components/issues/TypeBadge.vue'
 import StatusBadge from '~/components/issues/StatusBadge.vue'
 import PriorityBadge from '~/components/issues/PriorityBadge.vue'
 import LabelBadge from '~/components/issues/LabelBadge.vue'
+import { Button } from '~/components/ui/button'
 
 const props = defineProps<{
   issues: Issue[]
@@ -20,6 +21,10 @@ const props = defineProps<{
   selectedId?: string | null
   multiSelectMode?: boolean
   selectedIds?: string[]
+  hasMore?: boolean
+  totalCount?: number
+  externalSortColumn?: string | null
+  externalSortDirection?: 'asc' | 'desc'
 }>()
 
 const emit = defineEmits<{
@@ -27,26 +32,40 @@ const emit = defineEmits<{
   edit: [issue: Issue]
   deselect: []
   'update:selectedIds': [ids: string[]]
+  loadMore: []
+  sort: [field: string | null, direction: 'asc' | 'desc']
 }>()
 
-// Sorting state
+// Sorting state - sync with external (composable) state if provided
 type SortDirection = 'asc' | 'desc'
-const sortColumn = ref<string | null>('createdAt')
-const sortDirection = ref<SortDirection>('desc')
+const internalSortColumn = ref<string | null>('updatedAt')
+const internalSortDirection = ref<SortDirection>('desc')
+
+// Use external sort state if provided, otherwise use internal
+const sortColumn = computed(() => props.externalSortColumn !== undefined ? props.externalSortColumn : internalSortColumn.value)
+const sortDirection = computed(() => props.externalSortDirection !== undefined ? props.externalSortDirection : internalSortDirection.value)
 
 const toggleSort = (columnId: string) => {
+  let newDirection: SortDirection = 'asc'
+  let newColumn: string | null = columnId
+
   if (sortColumn.value === columnId) {
-    // Toggle direction or clear sort
+    // Cycle: asc -> desc -> null -> asc -> ...
     if (sortDirection.value === 'asc') {
-      sortDirection.value = 'desc'
+      newDirection = 'desc'
     } else {
-      sortColumn.value = null
-      sortDirection.value = 'asc'
+      // Was desc, clear sort
+      newColumn = null
+      newDirection = 'asc'
     }
-  } else {
-    sortColumn.value = columnId
-    sortDirection.value = 'asc'
   }
+
+  // Always emit sort event (including null to clear)
+  emit('sort', newColumn, newDirection)
+
+  // Update internal state as fallback
+  internalSortColumn.value = newColumn
+  internalSortDirection.value = newDirection
 }
 
 // Sort order for status and priority
@@ -323,5 +342,12 @@ const formatTime = (dateStr: string) => {
         </TableRow>
       </TableBody>
     </Table>
+
+    <!-- Load More Button -->
+    <div v-if="hasMore" class="flex justify-center py-4 border-t border-border">
+      <Button variant="outline" size="sm" @click="emit('loadMore')">
+        Load more ({{ (totalCount ?? 0) - issues.length }} remaining)
+      </Button>
+    </div>
   </div>
 </template>

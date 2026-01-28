@@ -12,6 +12,12 @@ const error = ref<string | null>(null)
 const lastKnownCount = ref<number>(0)
 const lastKnownUpdated = ref<string | null>(null)
 
+// Pagination state
+const pageSize = ref(50)
+const currentPage = ref(1)
+const sortField = ref<string | null>('updatedAt')
+const sortDirection = ref<'asc' | 'desc'>('desc')
+
 export function useIssues() {
   const { filters } = useFilters()
   const { beadsPath } = useBeadsPath()
@@ -135,6 +141,118 @@ export function useIssues() {
 
     return result
   })
+
+  // Sort order for status and priority (matching IssueTable logic)
+  const statusOrder: Record<string, number> = {
+    in_progress: 0,
+    open: 1,
+    blocked: 2,
+    closed: 3,
+  }
+
+  const priorityOrder: Record<string, number> = {
+    p0: 0,
+    p1: 1,
+    p2: 2,
+    p3: 3,
+    p4: 4,
+  }
+
+  const typeOrder: Record<string, number> = {
+    bug: 0,
+    feature: 1,
+    task: 2,
+    epic: 3,
+    chore: 4,
+  }
+
+  // Computed for sorted issues (default: updatedAt DESC, null = no sort)
+  const sortedIssues = computed(() => {
+    // If no sort field, return unsorted
+    if (!sortField.value) {
+      return filteredIssues.value
+    }
+
+    const sorted = [...filteredIssues.value]
+    const dir = sortDirection.value === 'asc' ? 1 : -1
+    const field = sortField.value
+
+    sorted.sort((a, b) => {
+      let aVal: string | number | null = null
+      let bVal: string | number | null = null
+
+      switch (field) {
+        case 'status':
+          aVal = statusOrder[a.status] ?? 99
+          bVal = statusOrder[b.status] ?? 99
+          break
+        case 'priority':
+          aVal = priorityOrder[a.priority] ?? 99
+          bVal = priorityOrder[b.priority] ?? 99
+          break
+        case 'type':
+          aVal = typeOrder[a.type] ?? 99
+          bVal = typeOrder[b.type] ?? 99
+          break
+        case 'labels':
+          aVal = a.labels?.length ? a.labels[0]!.toLowerCase() : '\uffff'
+          bVal = b.labels?.length ? b.labels[0]!.toLowerCase() : '\uffff'
+          break
+        case 'createdAt':
+        case 'updatedAt':
+          aVal = a[field] ? new Date(a[field]).getTime() : 0
+          bVal = b[field] ? new Date(b[field]).getTime() : 0
+          break
+        default:
+          aVal = String(a[field as keyof Issue] ?? '').toLowerCase()
+          bVal = String(b[field as keyof Issue] ?? '').toLowerCase()
+      }
+
+      if (aVal < bVal) return -1 * dir
+      if (aVal > bVal) return 1 * dir
+      return 0
+    })
+
+    return sorted
+  })
+
+  // Computed for paginated issues
+  const paginatedIssues = computed(() => {
+    const end = currentPage.value * pageSize.value
+    return sortedIssues.value.slice(0, end)
+  })
+
+  const totalPages = computed(() =>
+    Math.ceil(filteredIssues.value.length / pageSize.value)
+  )
+
+  const hasMore = computed(() =>
+    currentPage.value < totalPages.value
+  )
+
+  // Pagination functions
+  function loadMore() {
+    if (hasMore.value) currentPage.value++
+  }
+
+  function resetPagination() {
+    currentPage.value = 1
+  }
+
+  function setSort(field: string | null, direction: 'asc' | 'desc') {
+    sortField.value = field
+    sortDirection.value = direction
+    resetPagination()
+  }
+
+  // Watch filters to reset pagination when they change
+  watch(
+    () => filters.value,
+    () => {
+      resetPagination()
+    },
+    { deep: true }
+  )
 
   const fetchIssue = async (id: string) => {
     isLoading.value = true
@@ -279,10 +397,23 @@ export function useIssues() {
   return {
     issues,
     filteredIssues,
+    sortedIssues,
+    paginatedIssues,
     selectedIssue,
     isLoading,
     isUpdating,
     error,
+    // Pagination
+    currentPage,
+    pageSize,
+    totalPages,
+    hasMore,
+    loadMore,
+    resetPagination,
+    sortField,
+    sortDirection,
+    setSort,
+    // Actions
     fetchIssues,
     fetchIssue,
     createIssue,
