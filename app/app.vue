@@ -1,5 +1,6 @@
 <script setup lang="ts">
   import { TooltipProvider } from '~/components/ui/tooltip'
+  import NotificationToast from '~/components/ui/NotificationToast.vue'
 
   const { isDark } = useTheme()
   const { showUpdateDialog, showAboutDialog, initializeMenu } = useAppMenu()
@@ -26,5 +27,6 @@
     <NuxtPage />
     <LayoutUpdateDialog v-model:open="showUpdateDialog" />
     <LayoutAboutDialog v-model:open="showAboutDialog" />
+    <NotificationToast />
   </TooltipProvider>
 </template>

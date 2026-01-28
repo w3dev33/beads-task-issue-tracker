@@ -47,6 +47,7 @@ const { filters, toggleStatus, toggleType, togglePriority, clearFilters, setStat
 const imagePreview = useImagePreview()
 const { columns, toggleColumn, setColumns, resetColumns } = useColumnConfig()
 const { beadsPath, hasStoredPath } = useBeadsPath()
+const { notify } = useNotification()
 const { favorites } = useFavorites()
 const {
   issues,
@@ -506,11 +507,40 @@ const handleNavigateToIssue = async (id: string) => {
 const handleAttachImage = async (path: string) => {
   if (!selectedIssue.value) return
 
-  // Append image path to externalRef (multiple values separated by newlines)
   const currentRef = selectedIssue.value.externalRef || ''
-  const newRef = currentRef ? `${currentRef}\n${path}` : path
 
-  await updateIssue(selectedIssue.value.id, { externalRef: newRef })
+  // Check for duplicates by filename
+  const selectedFilename = path.split('/').pop() || path
+  const existingRefs = currentRef ? currentRef.split('\n').filter(Boolean) : []
+  const isDuplicate = existingRefs.some((ref) => {
+    const refFilename = ref.split('/').pop() || ref
+    return refFilename === selectedFilename
+  })
+
+  if (isDuplicate) {
+    notify('Image already attached', selectedFilename)
+    return
+  }
+
+  try {
+    // Copy the image to .beads/attachments/{issue-id}/
+    const { invoke } = await import('@tauri-apps/api/core')
+    const copiedPath = await invoke<string>('copy_image_to_attachments', {
+      projectPath: beadsPath.value,
+      sourcePath: path,
+      issueId: selectedIssue.value.id,
+    })
+
+    // Append copied path to externalRef
+    const newRef = currentRef ? `${currentRef}\n${copiedPath}` : copiedPath
+    await updateIssue(selectedIssue.value.id, { externalRef: newRef })
+  } catch (error) {
+    console.error('Failed to copy image:', error)
+    // Fallback: use original path if copy fails
+    const newRef = currentRef ? `${currentRef}\n${path}` : path
+    await updateIssue(selectedIssue.value.id, { externalRef: newRef })
+  }
+
   // Refresh issue to show the new attachment
   await fetchIssue(selectedIssue.value.id)
 }

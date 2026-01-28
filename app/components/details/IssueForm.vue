@@ -21,6 +21,9 @@ const props = defineProps<{
   isSaving?: boolean
 }>()
 
+const { beadsPath } = useBeadsPath()
+const { notify } = useNotification()
+
 const emit = defineEmits<{
   save: [payload: UpdateIssuePayload]
   cancel: []
@@ -126,16 +129,50 @@ const handleSubmit = () => {
 
 const attachImage = async () => {
   const { open } = await import('@tauri-apps/plugin-dialog')
+  const { invoke } = await import('@tauri-apps/api/core')
+
   const selected = await open({
     multiple: false,
     filters: [{ name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp'] }],
   })
+
   if (selected) {
-    // Add image path to externalRef (multiple values separated by newlines)
-    if (form.externalRef) {
-      form.externalRef += `\n${selected}`
-    } else {
-      form.externalRef = selected
+    // Check for duplicates: extract filename and compare with existing refs
+    const selectedFilename = selected.split('/').pop() || selected
+    const existingRefs = form.externalRef ? form.externalRef.split('\n').filter(Boolean) : []
+    const isDuplicate = existingRefs.some((ref) => {
+      const refFilename = ref.split('/').pop() || ref
+      return refFilename === selectedFilename
+    })
+
+    if (isDuplicate) {
+      notify('Image already attached', selectedFilename)
+      return
+    }
+
+    try {
+      // Copy the image to .beads/attachments/{issue-id}/
+      const issueId = props.issue?.id || `new-${Date.now()}`
+      const copiedPath = await invoke<string>('copy_image_to_attachments', {
+        projectPath: beadsPath.value,
+        sourcePath: selected,
+        issueId,
+      })
+
+      // Add the absolute path of the copy to externalRef
+      if (form.externalRef) {
+        form.externalRef += `\n${copiedPath}`
+      } else {
+        form.externalRef = copiedPath
+      }
+    } catch (error) {
+      console.error('Failed to copy image:', error)
+      // Fallback: use original path if copy fails
+      if (form.externalRef) {
+        form.externalRef += `\n${selected}`
+      } else {
+        form.externalRef = selected
+      }
     }
   }
 }

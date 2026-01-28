@@ -919,6 +919,32 @@ async fn bd_close(id: String, options: CwdOptions) -> Result<serde_json::Value, 
 async fn bd_delete(id: String, options: CwdOptions) -> Result<serde_json::Value, String> {
     execute_bd("delete", &[id.clone(), "--force".to_string()], options.cwd.as_deref())?;
 
+    // Clean up attachments folder for this issue
+    let project_path = options.cwd.as_deref().unwrap_or(".");
+    let abs_project_path = if project_path == "." || project_path.is_empty() {
+        env::current_dir().ok()
+    } else {
+        let p = PathBuf::from(project_path);
+        if p.is_relative() {
+            env::current_dir().ok().map(|cwd| cwd.join(&p))
+        } else {
+            Some(p)
+        }
+    };
+
+    if let Some(path) = abs_project_path {
+        if let Ok(abs_path) = path.canonicalize() {
+            let attachments_dir = abs_path.join(".beads").join("attachments").join(&id);
+            if attachments_dir.exists() && attachments_dir.is_dir() {
+                if let Err(e) = fs::remove_dir_all(&attachments_dir) {
+                    log::warn!("[bd_delete] Failed to remove attachments folder: {}", e);
+                } else {
+                    log::info!("[bd_delete] Removed attachments folder: {:?}", attachments_dir);
+                }
+            }
+        }
+    }
+
     Ok(serde_json::json!({ "success": true, "id": id }))
 }
 
@@ -1317,6 +1343,102 @@ fn base64_encode(data: &[u8]) -> String {
     result
 }
 
+#[tauri::command]
+async fn copy_image_to_attachments(
+    project_path: String,
+    source_path: String,
+    issue_id: String,
+) -> Result<String, String> {
+    log::info!(
+        "[copy_image_to_attachments] project: {}, source: {}, issue: {}",
+        project_path,
+        source_path,
+        issue_id
+    );
+
+    // Validate image extension
+    let allowed_extensions = ["png", "jpg", "jpeg", "gif", "webp", "bmp", "svg", "ico", "tiff", "tif"];
+    let source_lower = source_path.to_lowercase();
+    let is_image = allowed_extensions
+        .iter()
+        .any(|ext| source_lower.ends_with(&format!(".{}", ext)));
+
+    if !is_image {
+        return Err("Only image files are allowed".to_string());
+    }
+
+    // Verify source file exists
+    let source = PathBuf::from(&source_path);
+    if !source.exists() {
+        return Err(format!("Source file not found: {}", source_path));
+    }
+
+    // Calculate absolute project path
+    let abs_project_path = if project_path == "." || project_path.is_empty() {
+        env::current_dir().map_err(|e| format!("Failed to get current directory: {}", e))?
+    } else {
+        let p = PathBuf::from(&project_path);
+        if p.is_relative() {
+            let cwd = env::current_dir()
+                .map_err(|e| format!("Failed to get current directory: {}", e))?;
+            cwd.join(&p)
+        } else {
+            p
+        }
+    };
+
+    // Canonicalize to resolve symlinks and get absolute path
+    let abs_project_path = abs_project_path
+        .canonicalize()
+        .map_err(|e| format!("Failed to resolve project path: {}", e))?;
+
+    // Build destination directory: {project}/.beads/attachments/{issue_id}/
+    let dest_dir = abs_project_path
+        .join(".beads")
+        .join("attachments")
+        .join(&issue_id);
+
+    // Create directory if needed
+    fs::create_dir_all(&dest_dir)
+        .map_err(|e| format!("Failed to create attachments directory: {}", e))?;
+
+    // Extract source filename
+    let source_filename = source
+        .file_name()
+        .ok_or_else(|| "Invalid source filename".to_string())?
+        .to_string_lossy()
+        .to_string();
+
+    // Handle duplicates: if image.png exists, try image-1.png, image-2.png, etc.
+    let (stem, ext) = match source_filename.rfind('.') {
+        Some(pos) => (&source_filename[..pos], &source_filename[pos..]),
+        None => (source_filename.as_str(), ""),
+    };
+
+    let mut dest_filename = source_filename.clone();
+    let mut dest_path = dest_dir.join(&dest_filename);
+    let mut counter = 1;
+
+    while dest_path.exists() {
+        dest_filename = format!("{}-{}{}", stem, counter, ext);
+        dest_path = dest_dir.join(&dest_filename);
+        counter += 1;
+
+        // Safety limit
+        if counter > 1000 {
+            return Err("Too many duplicate files".to_string());
+        }
+    }
+
+    // Copy the file
+    fs::copy(&source, &dest_path).map_err(|e| format!("Failed to copy file: {}", e))?;
+
+    let result_path = dest_path.to_string_lossy().to_string();
+    log::info!("[copy_image_to_attachments] Copied to: {}", result_path);
+
+    Ok(result_path)
+}
+
 // ============================================================================
 // App Entry Point
 // ============================================================================
@@ -1397,6 +1519,7 @@ pub fn run() {
             check_for_updates,
             open_image_file,
             read_image_file,
+            copy_image_to_attachments,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
