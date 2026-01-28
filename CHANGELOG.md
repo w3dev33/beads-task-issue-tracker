@@ -2,6 +2,13 @@
 
 All notable changes to Beads Task-Issue Tracker will be documented in this file.
 
+## [1.2.2] - 2026-01-28
+
+### Bug Fixes
+- **Filter dropdown behavior**: Fix Tooltip/DropdownMenu nesting order that was blocking click events
+- **Exclusive filter state**: Clicking one filter now automatically closes the others
+- **Click outside handling**: Clicking outside filter buttons now properly closes the open dropdown
+
 ## [1.2.1] - 2026-01-28
 
 ### New Features
