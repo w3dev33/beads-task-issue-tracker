@@ -12,6 +12,7 @@ import { extractImagesFromExternalRef, extractNonImageRefs, isUrl } from '~/util
 
 const props = defineProps<{
   issue: Issue
+  readonly?: boolean
 }>()
 
 const { beadsPath } = useBeadsPath()
@@ -110,6 +111,7 @@ const formatEstimate = (minutes: number) => {
           </h4>
         </button>
         <Button
+          v-if="!readonly"
           type="button"
           variant="outline"
           size="sm"
@@ -127,6 +129,7 @@ const formatEstimate = (minutes: number) => {
             :key="img.src"
             :src="img.src"
             :alt="img.alt"
+            :show-remove="!readonly"
             @click="handleImageClick(img.src, img.alt)"
             @remove="emit('detach-image', img.src)"
           />

@@ -45,7 +45,7 @@ export async function bdList(options: BdListOptions = {}): Promise<Issue[]> {
   const params = new URLSearchParams()
   if (options.path && options.path !== '.') params.set('path', options.path)
   if (options.includeAll) params.set('all', 'true')
-  if (options.status?.length === 1) params.set('status', options.status[0])
+  if (options.status?.length === 1 && options.status[0]) params.set('status', options.status[0])
   if (options.type?.length) params.set('type', options.type.join(','))
   if (options.priority?.length) params.set('priority', options.priority.join(','))
   if (options.assignee) params.set('assignee', options.assignee)
@@ -142,7 +142,7 @@ export async function bdDelete(id: string, path?: string): Promise<{ success: bo
   }
 
   const url = path && path !== '.' ? `/api/bd/delete/${id}?path=${encodeURIComponent(path)}` : `/api/bd/delete/${id}`
-  return $fetch(url, { method: 'DELETE' })
+  return $fetch<{ success: boolean; id: string }>(url, { method: 'DELETE' })
 }
 
 export async function bdAddComment(id: string, content: string, path?: string): Promise<{ success: boolean }> {
@@ -151,7 +151,7 @@ export async function bdAddComment(id: string, content: string, path?: string): 
   }
 
   const url = path && path !== '.' ? `/api/bd/comments/${id}?path=${encodeURIComponent(path)}` : `/api/bd/comments/${id}`
-  return $fetch(url, {
+  return $fetch<{ success: boolean }>(url, {
     method: 'POST',
     body: { content },
   })
@@ -163,6 +163,40 @@ export async function bdSync(path?: string): Promise<void> {
   }
 
   // Web fallback - no-op (sync is handled by bd daemon in web mode)
+}
+
+export interface PurgeResult {
+  deletedCount: number
+  deletedFolders: string[]
+}
+
+export async function bdPurgeOrphanAttachments(path?: string): Promise<PurgeResult> {
+  if (isTauri()) {
+    return invoke<PurgeResult>('purge_orphan_attachments', {
+      projectPath: path || '.',
+    })
+  }
+  // No server implementation needed
+  return { deletedCount: 0, deletedFolders: [] }
+}
+
+export async function bdCleanupEmptyAttachmentFolder(issueId: string, path?: string): Promise<boolean> {
+  if (isTauri()) {
+    return invoke<boolean>('cleanup_empty_attachment_folder', {
+      projectPath: path || '.',
+      issueId,
+    })
+  }
+  // No server implementation needed
+  return false
+}
+
+export async function bdDeleteAttachmentFile(filePath: string): Promise<boolean> {
+  if (isTauri()) {
+    return invoke<boolean>('delete_attachment_file', { filePath })
+  }
+  // No server implementation needed
+  return false
 }
 
 // ============================================================================

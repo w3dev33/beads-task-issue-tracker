@@ -8,6 +8,7 @@ import { LinkifiedText } from '~/components/ui/linkified-text'
 
 const props = defineProps<{
   comments: Comment[]
+  readonly?: boolean
 }>()
 
 // Collapsible state (open by default)
@@ -107,7 +108,7 @@ const handleSubmit = () => {
         No comments yet
       </div>
 
-      <form class="space-y-2" @submit.prevent="handleSubmit">
+      <form v-if="!readonly" class="space-y-2" @submit.prevent="handleSubmit">
         <Textarea
           v-model="newComment"
           placeholder="Add a comment..."

@@ -1,5 +1,5 @@
 import type { Issue, CreateIssuePayload, UpdateIssuePayload } from '~/types/issue'
-import { bdList, bdCount, bdShow, bdCreate, bdUpdate, bdClose, bdDelete, bdAddComment, type BdListOptions } from '~/utils/bd-api'
+import { bdList, bdCount, bdShow, bdCreate, bdUpdate, bdClose, bdDelete, bdAddComment, bdPurgeOrphanAttachments, type BdListOptions } from '~/utils/bd-api'
 
 // Shared state across all components (singleton pattern)
 const issues = ref<Issue[]>([])
@@ -362,6 +362,11 @@ export function useIssues() {
       if (selectedIssue.value?.id === id) {
         selectedIssue.value = null
       }
+
+      // Purge orphan attachments (silently, no need to wait or handle errors)
+      bdPurgeOrphanAttachments(getPath()).catch(() => {
+        // Silently ignore purge errors - it's a cleanup operation
+      })
 
       return true
     } catch (e) {

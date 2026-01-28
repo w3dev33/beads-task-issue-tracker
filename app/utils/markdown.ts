@@ -19,11 +19,14 @@ const defaultRender =
   }
 
 md.renderer.rules.link_open = function (tokens, idx, options, env, self) {
-  // Add target="_blank" and rel="noopener noreferrer" to all links
-  tokens[idx].attrSet('target', '_blank')
-  tokens[idx].attrSet('rel', 'noopener noreferrer')
-  // Add a data attribute to identify links for click handling
-  tokens[idx].attrSet('data-external-link', 'true')
+  const token = tokens[idx]
+  if (token) {
+    // Add target="_blank" and rel="noopener noreferrer" to all links
+    token.attrSet('target', '_blank')
+    token.attrSet('rel', 'noopener noreferrer')
+    // Add a data attribute to identify links for click handling
+    token.attrSet('data-external-link', 'true')
+  }
   return defaultRender(tokens, idx, options, env, self)
 }
 
@@ -44,7 +47,7 @@ export function extractImagesFromMarkdown(text: string): { src: string; alt: str
   while ((match = regex.exec(text)) !== null) {
     images.push({
       alt: match[1] || 'Image',
-      src: match[2],
+      src: match[2] || '',
     })
   }
   return images
@@ -62,7 +65,7 @@ const IMAGE_EXTENSIONS = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.sv
 export function isImagePath(path: string): boolean {
   if (!path) return false
   // Remove query string and hash for URL checking
-  const cleanPath = path.split('?')[0].split('#')[0].toLowerCase()
+  const cleanPath = (path.split('?')[0] ?? '').split('#')[0]?.toLowerCase() ?? ''
   return IMAGE_EXTENSIONS.some(ext => cleanPath.endsWith(ext))
 }
 
@@ -108,7 +111,7 @@ export function extractNonImageRefs(externalRef: string | undefined): string[] {
 }
 
 // Configure DOMPurify to allow our custom attributes
-const purifyConfig: DOMPurify.Config = {
+const purifyConfig = {
   ALLOWED_TAGS: [
     'p',
     'br',
@@ -145,5 +148,5 @@ const purifyConfig: DOMPurify.Config = {
 export function renderMarkdown(text: string): string {
   if (!text) return ''
   const html = md.render(text)
-  return DOMPurify.sanitize(html, purifyConfig)
+  return DOMPurify.sanitize(html, purifyConfig) as string
 }

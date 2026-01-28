@@ -47,7 +47,7 @@ const { filters, toggleStatus, toggleType, togglePriority, clearFilters, setStat
 const imagePreview = useImagePreview()
 const { columns, toggleColumn, setColumns, resetColumns } = useColumnConfig()
 const { beadsPath, hasStoredPath } = useBeadsPath()
-const { notify } = useNotification()
+const { notify, success: notifySuccess, error: notifyError } = useNotification()
 const { favorites } = useFavorites()
 const {
   issues,
@@ -441,33 +441,39 @@ const handleCancelEdit = () => {
 }
 
 const handleSaveIssue = async (payload: UpdateIssuePayload) => {
-  if (isCreatingNew.value) {
-    const result = await createIssue({
-      title: payload.title || '',
-      description: payload.description,
-      type: payload.type,
-      priority: payload.priority,
-      assignee: payload.assignee,
-      labels: payload.labels,
-      externalRef: payload.externalRef,
-      estimateMinutes: payload.estimateMinutes,
-      designNotes: payload.designNotes,
-      acceptanceCriteria: payload.acceptanceCriteria,
-      workingNotes: payload.workingNotes,
-    })
-    if (result) {
-      selectIssue(result)
-      // Fetch full issue details to get all fields
-      await fetchIssue(result.id)
+  try {
+    if (isCreatingNew.value) {
+      const result = await createIssue({
+        title: payload.title || '',
+        description: payload.description,
+        type: payload.type,
+        priority: payload.priority,
+        assignee: payload.assignee,
+        labels: payload.labels,
+        externalRef: payload.externalRef,
+        estimateMinutes: payload.estimateMinutes,
+        designNotes: payload.designNotes,
+        acceptanceCriteria: payload.acceptanceCriteria,
+        workingNotes: payload.workingNotes,
+      })
+      if (result) {
+        selectIssue(result)
+        // Fetch full issue details to get all fields
+        await fetchIssue(result.id)
+        notifySuccess('Issue created')
+      }
+    } else if (selectedIssue.value) {
+      await updateIssue(selectedIssue.value.id, payload)
+      // Fetch full issue details to get comments and all fields
+      await fetchIssue(selectedIssue.value.id)
+      notifySuccess('Issue saved')
     }
-  } else if (selectedIssue.value) {
-    await updateIssue(selectedIssue.value.id, payload)
-    // Fetch full issue details to get comments and all fields
-    await fetchIssue(selectedIssue.value.id)
+    isEditMode.value = false
+    isCreatingNew.value = false
+    await fetchStats(issues.value)
+  } catch {
+    notifyError('Failed to save issue')
   }
-  isEditMode.value = false
-  isCreatingNew.value = false
-  await fetchStats(issues.value)
 }
 
 const handleCloseIssue = () => {
@@ -478,19 +484,41 @@ const handleCloseIssue = () => {
 
 const confirmClose = async () => {
   if (!selectedIssue.value) return
+  const issueId = selectedIssue.value.id
+  const issueTitle = selectedIssue.value.title
   isClosing.value = true
   try {
-    await closeIssue(selectedIssue.value.id)
+    await closeIssue(issueId)
     await fetchStats(issues.value)
+    notifySuccess(`Issue ${issueId} closed`, issueTitle)
+  } catch {
+    notifyError(`Failed to close ${issueId}`, issueTitle)
   } finally {
     isClosing.value = false
     isCloseDialogOpen.value = false
   }
 }
 
+const handleReopenIssue = async () => {
+  if (!selectedIssue.value) return
+  const issueId = selectedIssue.value.id
+  const issueTitle = selectedIssue.value.title
+  try {
+    await updateIssue(issueId, { status: 'open' })
+    await fetchStats(issues.value)
+    notifySuccess(`Issue ${issueId} reopened`, issueTitle)
+  } catch {
+    notifyError(`Failed to reopen ${issueId}`, issueTitle)
+  }
+}
+
 const handleAddComment = async (content: string) => {
-  if (selectedIssue.value) {
+  if (!selectedIssue.value) return
+  try {
     await addComment(selectedIssue.value.id, content)
+    notifySuccess('Comment added')
+  } catch {
+    notifyError('Failed to add comment')
   }
 }
 
@@ -555,18 +583,20 @@ const handleDetachImage = async () => {
 
   isDetaching.value = true
   try {
+    const imagePath = detachImagePath.value
+
     // Remove image path from externalRef
     const currentRef = selectedIssue.value.externalRef || ''
     const lines = currentRef.split('\n')
 
     console.log('[detach] Current externalRef:', currentRef)
     console.log('[detach] Lines:', lines)
-    console.log('[detach] Target to remove:', detachImagePath.value)
+    console.log('[detach] Target to remove:', imagePath)
 
     const newRef = lines
       .filter((line) => {
         const trimmed = line.trim()
-        const keep = trimmed !== detachImagePath.value
+        const keep = trimmed !== imagePath
         console.log(`[detach] Line "${trimmed}" === target? ${!keep}, keep: ${keep}`)
         return keep
       })
@@ -584,6 +614,21 @@ const handleDetachImage = async () => {
       console.log('[detach] Cannot clear external_ref, using placeholder')
       await updateIssue(selectedIssue.value.id, { externalRef: `cleared:${selectedIssue.value.id}` })
     }
+
+    // If the image is in .beads/attachments/, delete the file
+    if (imagePath.includes('.beads/attachments/')) {
+      console.log('[detach] Deleting attachment file:', imagePath)
+      await bdDeleteAttachmentFile(imagePath).catch((e) => {
+        console.warn('[detach] Failed to delete attachment file:', e)
+      })
+    }
+
+    // Cleanup empty attachment folder for this issue
+    const path = beadsPath.value && beadsPath.value !== '.' ? beadsPath.value : undefined
+    bdCleanupEmptyAttachmentFolder(selectedIssue.value.id, path).catch(() => {
+      // Silently ignore cleanup errors
+    })
+
     // Refresh issue to update the attachments
     await fetchIssue(selectedIssue.value.id)
   } finally {
@@ -956,13 +1001,28 @@ watch(
             <!-- Action buttons -->
             <div class="flex items-center justify-between pb-3">
               <div class="flex items-center gap-1">
-                <Button size="sm" class="h-7 text-xs px-2" @click="handleEditIssue">
+                <!-- Edit button: only when not closed -->
+                <Button v-if="selectedIssue.status !== 'closed'" size="sm" class="h-7 text-xs px-2" @click="handleEditIssue">
                   <svg class="w-3 h-3 mr-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
                     <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
                   </svg>
                   Edit
                 </Button>
+                <!-- Reopen button: only when closed -->
+                <Button
+                  v-if="selectedIssue.status === 'closed'"
+                  size="sm"
+                  class="h-7 text-xs px-2"
+                  @click="handleReopenIssue"
+                >
+                  <svg class="w-3 h-3 mr-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+                    <path d="M3 3v5h5" />
+                  </svg>
+                  Reopen
+                </Button>
+                <!-- Close button: only when not closed -->
                 <Button
                   v-if="selectedIssue.status !== 'closed'"
                   variant="outline"
@@ -1010,6 +1070,7 @@ watch(
               <div v-if="selectedIssue">
                 <IssuePreview
                   :issue="selectedIssue"
+                  :readonly="selectedIssue.status === 'closed'"
                   @navigate-to-issue="handleNavigateToIssue"
                   @attach-image="handleAttachImage"
                   @detach-image="confirmDetachImage"
@@ -1017,6 +1078,7 @@ watch(
                 <CommentSection
                   class="mt-3"
                   :comments="selectedIssue.comments || []"
+                  :readonly="selectedIssue.status === 'closed'"
                   @add-comment="handleAddComment"
                 />
               </div>
@@ -1220,13 +1282,28 @@ watch(
           <!-- Action buttons -->
           <div class="flex items-center justify-between pb-3">
             <div class="flex items-center gap-1">
-              <Button size="sm" class="h-7 text-xs px-2" @click="handleEditIssue">
+              <!-- Edit button: only when not closed -->
+              <Button v-if="selectedIssue.status !== 'closed'" size="sm" class="h-7 text-xs px-2" @click="handleEditIssue">
                 <svg class="w-3 h-3 mr-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
                   <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
                 </svg>
                 Edit
               </Button>
+              <!-- Reopen button: only when closed -->
+              <Button
+                v-if="selectedIssue.status === 'closed'"
+                size="sm"
+                class="h-7 text-xs px-2"
+                @click="handleReopenIssue"
+              >
+                <svg class="w-3 h-3 mr-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+                  <path d="M3 3v5h5" />
+                </svg>
+                Reopen
+              </Button>
+              <!-- Close button: only when not closed -->
               <Button
                 v-if="selectedIssue.status !== 'closed'"
                 variant="outline"
@@ -1274,6 +1351,7 @@ watch(
             <div v-if="selectedIssue">
               <IssuePreview
                 :issue="selectedIssue"
+                :readonly="selectedIssue.status === 'closed'"
                 @navigate-to-issue="handleNavigateToIssue"
                 @attach-image="handleAttachImage"
                 @detach-image="confirmDetachImage"
@@ -1281,6 +1359,7 @@ watch(
               <CommentSection
                 class="mt-3"
                 :comments="selectedIssue.comments || []"
+                :readonly="selectedIssue.status === 'closed'"
                 @add-comment="handleAddComment"
               />
             </div>
@@ -1396,8 +1475,11 @@ watch(
         <p class="mt-2 text-xs text-muted-foreground font-mono break-all">
           {{ detachImagePath }}
         </p>
-        <p class="mt-3 text-sm text-muted-foreground">
-          The image file will not be deleted, only the reference will be removed.
+        <p v-if="detachImagePath?.includes('.beads/attachments/')" class="mt-3 text-sm text-destructive">
+          The attachment file will be permanently deleted.
+        </p>
+        <p v-else class="mt-3 text-sm text-muted-foreground">
+          Only the reference will be removed. The original file will not be deleted.
         </p>
       </template>
     </ConfirmDialog>

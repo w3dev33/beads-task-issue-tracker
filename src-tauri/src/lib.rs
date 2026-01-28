@@ -217,6 +217,14 @@ pub struct DirectoryEntry {
     pub has_beads: bool,
 }
 
+#[derive(Debug, Serialize)]
+pub struct PurgeResult {
+    #[serde(rename = "deletedCount")]
+    pub deleted_count: usize,
+    #[serde(rename = "deletedFolders")]
+    pub deleted_folders: Vec<String>,
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct FsListResult {
     #[serde(rename = "currentPath")]
@@ -1344,6 +1352,164 @@ fn base64_encode(data: &[u8]) -> String {
 }
 
 #[tauri::command]
+async fn delete_attachment_file(file_path: String) -> Result<bool, String> {
+    log::info!("[delete_attachment_file] path: {}", file_path);
+
+    let path = PathBuf::from(&file_path);
+
+    // Security: Only allow deleting files inside .beads/attachments/
+    let path_str = path.to_string_lossy();
+    if !path_str.contains(".beads/attachments/") {
+        log::warn!("[delete_attachment_file] Refusing to delete file outside attachments: {}", file_path);
+        return Err("Can only delete files inside .beads/attachments/".to_string());
+    }
+
+    // Check if file exists
+    if !path.exists() {
+        log::info!("[delete_attachment_file] File does not exist: {}", file_path);
+        return Ok(false);
+    }
+
+    // Delete the file
+    fs::remove_file(&path)
+        .map_err(|e| format!("Failed to delete file: {}", e))?;
+
+    log::info!("[delete_attachment_file] Deleted: {}", file_path);
+    Ok(true)
+}
+
+#[tauri::command]
+async fn cleanup_empty_attachment_folder(project_path: String, issue_id: String) -> Result<bool, String> {
+    log::info!("[cleanup_empty_attachment_folder] project: {}, issue: {}", project_path, issue_id);
+
+    // Calculate absolute project path
+    let abs_project_path = if project_path == "." || project_path.is_empty() {
+        env::current_dir().map_err(|e| format!("Failed to get current directory: {}", e))?
+    } else {
+        let p = PathBuf::from(&project_path);
+        if p.is_relative() {
+            let cwd = env::current_dir()
+                .map_err(|e| format!("Failed to get current directory: {}", e))?;
+            cwd.join(&p)
+        } else {
+            p
+        }
+    };
+
+    let abs_project_path = abs_project_path
+        .canonicalize()
+        .map_err(|e| format!("Failed to resolve project path: {}", e))?;
+
+    // Build attachment folder path for this issue
+    let attachment_dir = abs_project_path
+        .join(".beads")
+        .join("attachments")
+        .join(&issue_id);
+
+    // If folder doesn't exist, nothing to do
+    if !attachment_dir.exists() || !attachment_dir.is_dir() {
+        log::info!("[cleanup_empty_attachment_folder] Folder does not exist: {:?}", attachment_dir);
+        return Ok(false);
+    }
+
+    // Check if folder is empty
+    let entries = fs::read_dir(&attachment_dir)
+        .map_err(|e| format!("Failed to read attachment directory: {}", e))?;
+
+    let is_empty = entries.count() == 0;
+
+    if is_empty {
+        log::info!("[cleanup_empty_attachment_folder] Deleting empty folder: {:?}", attachment_dir);
+        fs::remove_dir(&attachment_dir)
+            .map_err(|e| format!("Failed to remove empty folder: {}", e))?;
+        Ok(true)
+    } else {
+        log::info!("[cleanup_empty_attachment_folder] Folder not empty, keeping: {:?}", attachment_dir);
+        Ok(false)
+    }
+}
+
+#[tauri::command]
+async fn purge_orphan_attachments(project_path: String) -> Result<PurgeResult, String> {
+    log::info!("[purge_orphan_attachments] project: {}", project_path);
+
+    // Calculate absolute project path (reusing pattern from bd_delete)
+    let abs_project_path = if project_path == "." || project_path.is_empty() {
+        env::current_dir().map_err(|e| format!("Failed to get current directory: {}", e))?
+    } else {
+        let p = PathBuf::from(&project_path);
+        if p.is_relative() {
+            let cwd = env::current_dir()
+                .map_err(|e| format!("Failed to get current directory: {}", e))?;
+            cwd.join(&p)
+        } else {
+            p
+        }
+    };
+
+    let abs_project_path = abs_project_path
+        .canonicalize()
+        .map_err(|e| format!("Failed to resolve project path: {}", e))?;
+
+    // Build attachments directory path
+    let attachments_dir = abs_project_path.join(".beads").join("attachments");
+
+    // If attachments directory doesn't exist, nothing to purge
+    if !attachments_dir.exists() || !attachments_dir.is_dir() {
+        log::info!("[purge_orphan_attachments] No attachments directory found");
+        return Ok(PurgeResult {
+            deleted_count: 0,
+            deleted_folders: vec![],
+        });
+    }
+
+    // Get list of all existing issue IDs via bd list --all
+    let existing_ids: std::collections::HashSet<String> = {
+        let output = execute_bd("list", &["--all".to_string(), "--limit=0".to_string()], Some(&abs_project_path.to_string_lossy()))?;
+        let issues = parse_issues_tolerant(&output, "purge_orphan_attachments")?;
+        issues.into_iter().map(|i| i.id).collect()
+    };
+
+    log::info!("[purge_orphan_attachments] Found {} existing issues", existing_ids.len());
+
+    // List all subdirectories in attachments folder
+    let entries = fs::read_dir(&attachments_dir)
+        .map_err(|e| format!("Failed to read attachments directory: {}", e))?;
+
+    let mut deleted_folders: Vec<String> = Vec::new();
+
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if !path.is_dir() {
+            continue;
+        }
+
+        let folder_name = match path.file_name() {
+            Some(name) => name.to_string_lossy().to_string(),
+            None => continue,
+        };
+
+        // Check if this folder corresponds to an existing issue
+        if !existing_ids.contains(&folder_name) {
+            log::info!("[purge_orphan_attachments] Deleting orphan folder: {}", folder_name);
+            if let Err(e) = fs::remove_dir_all(&path) {
+                log::warn!("[purge_orphan_attachments] Failed to delete {}: {}", folder_name, e);
+            } else {
+                deleted_folders.push(folder_name);
+            }
+        }
+    }
+
+    let deleted_count = deleted_folders.len();
+    log::info!("[purge_orphan_attachments] Purged {} orphan folders", deleted_count);
+
+    Ok(PurgeResult {
+        deleted_count,
+        deleted_folders,
+    })
+}
+
+#[tauri::command]
 async fn copy_image_to_attachments(
     project_path: String,
     source_path: String,
@@ -1520,6 +1686,9 @@ pub fn run() {
             open_image_file,
             read_image_file,
             copy_image_to_attachments,
+            delete_attachment_file,
+            cleanup_empty_attachment_folder,
+            purge_orphan_attachments,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

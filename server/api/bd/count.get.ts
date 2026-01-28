@@ -46,15 +46,15 @@ export default defineEventHandler(async (event) => {
   for (const issue of issues) {
     // Count by type
     const type = issue.issue_type?.toLowerCase() || 'task'
-    if (type in byType) {
-      byType[type]++
+    if (type in byType && byType[type] !== undefined) {
+      byType[type] = (byType[type] ?? 0) + 1
     }
 
     // Count by priority (priority is a number 0-4)
     const priorityNum = typeof issue.priority === 'number' ? issue.priority : 3
     const priorityKey = `p${priorityNum}`
-    if (priorityKey in byPriority) {
-      byPriority[priorityKey]++
+    if (priorityKey in byPriority && byPriority[priorityKey] !== undefined) {
+      byPriority[priorityKey] = (byPriority[priorityKey] ?? 0) + 1
     }
 
     // Track most recent update

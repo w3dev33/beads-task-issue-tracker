@@ -4,10 +4,13 @@ import { X } from 'lucide-vue-next'
 import { readImageFile } from '~/utils/open-url'
 import { isUrl } from '~/utils/markdown'
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   src: string
   alt: string
-}>()
+  showRemove?: boolean
+}>(), {
+  showRemove: true,
+})
 
 const emit = defineEmits<{
   click: []
@@ -83,6 +86,7 @@ const handleImageError = () => {
   >
     <!-- Remove button (appears on hover) -->
     <button
+      v-if="showRemove"
       type="button"
       class="absolute -top-2 -right-2 z-10 w-6 h-6 rounded-full bg-destructive text-destructive-foreground opacity-0 group-hover:opacity-100 hover:bg-destructive/80 active:scale-90 transition-all flex items-center justify-center shadow-md"
       @click="handleRemove"

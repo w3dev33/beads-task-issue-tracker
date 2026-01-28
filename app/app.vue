@@ -1,6 +1,6 @@
 <script setup lang="ts">
   import { TooltipProvider } from '~/components/ui/tooltip'
-  import NotificationToast from '~/components/ui/NotificationToast.vue'
+  import { NotificationToast } from '~/components/ui/notification-toast'
 
   const { isDark } = useTheme()
   const { showUpdateDialog, showAboutDialog, initializeMenu } = useAppMenu()

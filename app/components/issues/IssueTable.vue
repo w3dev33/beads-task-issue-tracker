@@ -118,8 +118,8 @@ const sortedIssues = computed(() => {
         break
       case 'labels':
         // Sort by first label alphabetically, issues without labels at the end
-        aVal = a.labels?.length ? a.labels[0].toLowerCase() : '\uffff'
-        bVal = b.labels?.length ? b.labels[0].toLowerCase() : '\uffff'
+        aVal = a.labels?.length ? a.labels[0]!.toLowerCase() : '\uffff'
+        bVal = b.labels?.length ? b.labels[0]!.toLowerCase() : '\uffff'
         break
       case 'createdAt':
       case 'updatedAt':
@@ -336,7 +336,7 @@ const formatTime = (dateStr: string) => {
             </template>
 
             <template v-else>
-              <span class="text-xs">{{ (issue as Record<string, unknown>)[col.id] || '-' }}</span>
+              <span class="text-xs">{{ (issue as unknown as Record<string, unknown>)[col.id] || '-' }}</span>
             </template>
           </TableCell>
         </TableRow>
