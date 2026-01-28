@@ -23,6 +23,7 @@ node_modules
 .idea
 .vscode
 .claude
+.claude_root
 .beads
 *.swp
 *.swo

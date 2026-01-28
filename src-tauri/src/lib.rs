@@ -605,6 +605,9 @@ async fn bd_list(options: ListOptions) -> Result<Vec<Issue>, String> {
         args.push(format!("--assignee={}", assignee));
     }
 
+    // Always disable limit to get all issues (bd defaults to 50)
+    args.push("--limit=0".to_string());
+
     let output = execute_bd("list", &args, options.cwd.as_deref())?;
 
     let raw_issues = parse_issues_tolerant(&output, "bd_list")?;
@@ -619,8 +622,9 @@ async fn bd_count(options: CwdOptions) -> Result<CountResult, String> {
     sync_bd_database(options.cwd.as_deref());
 
     // Fetch both open and closed issues to match fetchIssues behavior
-    let open_output = execute_bd("list", &[], options.cwd.as_deref())?;
-    let closed_output = execute_bd("list", &["--status=closed".to_string()], options.cwd.as_deref())?;
+    // Use --limit=0 to get all issues (bd defaults to 50)
+    let open_output = execute_bd("list", &["--limit=0".to_string()], options.cwd.as_deref())?;
+    let closed_output = execute_bd("list", &["--status=closed".to_string(), "--limit=0".to_string()], options.cwd.as_deref())?;
 
     let open_issues = parse_issues_tolerant(&open_output, "bd_count_open")?;
     let closed_issues = parse_issues_tolerant(&closed_output, "bd_count_closed")?;
