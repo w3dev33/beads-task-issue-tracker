@@ -95,6 +95,21 @@ export function useIssues() {
   const filteredIssues = computed(() => {
     let result = issues.value
 
+    // Check if search is active - if so, bypass all other filters
+    // Search takes priority and searches ALL issues including closed
+    const searchTerm = filters.value.search?.trim()
+    if (searchTerm) {
+      const search = searchTerm.toLowerCase()
+      return result.filter(
+        (issue) =>
+          issue.title.toLowerCase().includes(search) ||
+          issue.id.toLowerCase().includes(search) ||
+          issue.description?.toLowerCase().includes(search)
+      )
+    }
+
+    // No search active - apply additive filters (AND logic)
+
     // Apply client-side status filter
     // When no status filter is selected, exclude closed issues by default
     if (filters.value.status.length > 0) {
@@ -124,18 +139,6 @@ export function useIssues() {
     if (filters.value.assignee) {
       result = result.filter((issue) =>
         issue.assignee === filters.value.assignee
-      )
-    }
-
-    // Apply search filter
-    const searchTerm = filters.value.search?.trim()
-    if (searchTerm) {
-      const search = searchTerm.toLowerCase()
-      result = result.filter(
-        (issue) =>
-          issue.title.toLowerCase().includes(search) ||
-          issue.id.toLowerCase().includes(search) ||
-          issue.description?.toLowerCase().includes(search)
       )
     }
 
