@@ -17,18 +17,20 @@ import LabelBadge from '~/components/issues/LabelBadge.vue'
 const props = defineProps<{
   availableLabels: string[]
   selectedLabels: string[]
+  open?: boolean
 }>()
 
 defineEmits<{
   toggle: [label: string]
+  'update:open': [value: boolean]
 }>()
 
 const isSelected = (label: string) => props.selectedLabels.includes(label)
 </script>
 
 <template>
-  <DropdownMenu>
-    <Tooltip>
+  <Tooltip>
+    <DropdownMenu :open="open" :modal="false" @update:open="$emit('update:open', $event)">
       <TooltipTrigger as-child>
         <DropdownMenuTrigger as-child>
           <Button variant="outline" size="sm" class="h-8 text-xs gap-1">
@@ -53,8 +55,7 @@ const isSelected = (label: string) => props.selectedLabels.includes(label)
         </DropdownMenuTrigger>
       </TooltipTrigger>
       <TooltipContent>Filter by label</TooltipContent>
-    </Tooltip>
-    <DropdownMenuContent align="start" class="w-48">
+      <DropdownMenuContent align="start" class="w-48">
       <div v-if="availableLabels.length === 0" class="px-2 py-3 text-xs text-muted-foreground text-center">
         No labels found
       </div>
@@ -69,6 +70,7 @@ const isSelected = (label: string) => props.selectedLabels.includes(label)
           <LabelBadge :label="label" size="sm" />
         </DropdownMenuCheckboxItem>
       </ScrollArea>
-    </DropdownMenuContent>
-  </DropdownMenu>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  </Tooltip>
 </template>

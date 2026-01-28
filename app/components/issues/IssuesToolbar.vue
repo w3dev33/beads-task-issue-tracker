@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { IssueStatus, IssueType, IssuePriority, ColumnConfig } from '~/types/issue'
+import { onClickOutside } from '@vueuse/core'
 import { Input } from '~/components/ui/input'
 import { Button } from '~/components/ui/button'
 import {
@@ -38,6 +39,29 @@ defineEmits<{
   'update:columns': [columns: ColumnConfig[]]
   resetColumns: []
 }>()
+
+// Track which filter dropdown is currently open (exclusive group)
+type FilterType = 'type' | 'label' | 'status' | 'priority' | null
+const activeFilter = ref<FilterType>(null)
+
+// Ref for the filter buttons container
+const filterButtonsRef = ref<HTMLElement | null>(null)
+
+// Close dropdown when clicking outside filter buttons (ignore dropdown content)
+onClickOutside(filterButtonsRef, () => {
+  activeFilter.value = null
+}, {
+  ignore: ['[data-slot="dropdown-menu-content"]']
+})
+
+// Handle click on filter button - toggle the filter
+const handleFilterClick = (filter: FilterType) => {
+  if (activeFilter.value === filter) {
+    activeFilter.value = null
+  } else {
+    activeFilter.value = filter
+  }
+}
 </script>
 
 <template>
@@ -89,27 +113,41 @@ defineEmits<{
         />
       </div>
 
-      <!-- Filter dropdowns -->
-      <StatusFilterDropdown
-        :selected-statuses="selectedStatuses"
-        @toggle="$emit('toggleStatus', $event)"
-      />
+      <!-- Filter dropdowns (order matches table columns) -->
+      <div ref="filterButtonsRef" class="flex items-center gap-2">
+        <div @pointerdown.capture="handleFilterClick('type')">
+          <TypeFilterDropdown
+            :selected-types="selectedTypes"
+            :open="activeFilter === 'type'"
+            @toggle="$emit('toggleType', $event)"
+          />
+        </div>
 
-      <TypeFilterDropdown
-        :selected-types="selectedTypes"
-        @toggle="$emit('toggleType', $event)"
-      />
+        <div @pointerdown.capture="handleFilterClick('label')">
+          <LabelFilterDropdown
+            :available-labels="availableLabels"
+            :selected-labels="selectedLabels"
+            :open="activeFilter === 'label'"
+            @toggle="$emit('toggleLabel', $event)"
+          />
+        </div>
 
-      <PriorityFilterDropdown
-        :selected-priorities="selectedPriorities"
-        @toggle="$emit('togglePriority', $event)"
-      />
+        <div @pointerdown.capture="handleFilterClick('status')">
+          <StatusFilterDropdown
+            :selected-statuses="selectedStatuses"
+            :open="activeFilter === 'status'"
+            @toggle="$emit('toggleStatus', $event)"
+          />
+        </div>
 
-      <LabelFilterDropdown
-        :available-labels="availableLabels"
-        :selected-labels="selectedLabels"
-        @toggle="$emit('toggleLabel', $event)"
-      />
+        <div @pointerdown.capture="handleFilterClick('priority')">
+          <PriorityFilterDropdown
+            :selected-priorities="selectedPriorities"
+            :open="activeFilter === 'priority'"
+            @toggle="$emit('togglePriority', $event)"
+          />
+        </div>
+      </div>
 
     <Button
       v-if="hasSelection"

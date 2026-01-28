@@ -16,10 +16,12 @@ import TypeBadge from '~/components/issues/TypeBadge.vue'
 
 const props = defineProps<{
   selectedTypes: IssueType[]
+  open?: boolean
 }>()
 
 defineEmits<{
   toggle: [type: IssueType]
+  'update:open': [value: boolean]
 }>()
 
 const typeOptions: { value: IssueType; label: string }[] = [
@@ -34,8 +36,8 @@ const isSelected = (type: IssueType) => props.selectedTypes.includes(type)
 </script>
 
 <template>
-  <DropdownMenu>
-    <Tooltip>
+  <Tooltip>
+    <DropdownMenu :open="open" :modal="false" @update:open="$emit('update:open', $event)">
       <TooltipTrigger as-child>
         <DropdownMenuTrigger as-child>
           <Button variant="outline" size="sm" class="h-8 text-xs gap-1">
@@ -60,8 +62,7 @@ const isSelected = (type: IssueType) => props.selectedTypes.includes(type)
         </DropdownMenuTrigger>
       </TooltipTrigger>
       <TooltipContent>Filter by type</TooltipContent>
-    </Tooltip>
-    <DropdownMenuContent align="start" class="w-36">
+      <DropdownMenuContent align="start" class="w-36">
       <DropdownMenuCheckboxItem
         v-for="opt in typeOptions"
         :key="opt.value"
@@ -71,6 +72,7 @@ const isSelected = (type: IssueType) => props.selectedTypes.includes(type)
       >
         <TypeBadge :type="opt.value" size="sm" />
       </DropdownMenuCheckboxItem>
-    </DropdownMenuContent>
-  </DropdownMenu>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  </Tooltip>
 </template>

@@ -16,10 +16,12 @@ import StatusBadge from '~/components/issues/StatusBadge.vue'
 
 const props = defineProps<{
   selectedStatuses: IssueStatus[]
+  open?: boolean
 }>()
 
 defineEmits<{
   toggle: [status: IssueStatus]
+  'update:open': [value: boolean]
 }>()
 
 const statusOptions: { value: IssueStatus; label: string }[] = [
@@ -33,8 +35,8 @@ const isSelected = (status: IssueStatus) => props.selectedStatuses.includes(stat
 </script>
 
 <template>
-  <DropdownMenu>
-    <Tooltip>
+  <Tooltip>
+    <DropdownMenu :open="open" :modal="false" @update:open="$emit('update:open', $event)">
       <TooltipTrigger as-child>
         <DropdownMenuTrigger as-child>
           <Button variant="outline" size="sm" class="h-8 text-xs gap-1">
@@ -59,8 +61,7 @@ const isSelected = (status: IssueStatus) => props.selectedStatuses.includes(stat
         </DropdownMenuTrigger>
       </TooltipTrigger>
       <TooltipContent>Filter by status</TooltipContent>
-    </Tooltip>
-    <DropdownMenuContent align="start" class="w-40">
+      <DropdownMenuContent align="start" class="w-40">
       <DropdownMenuCheckboxItem
         v-for="opt in statusOptions"
         :key="opt.value"
@@ -70,6 +71,7 @@ const isSelected = (status: IssueStatus) => props.selectedStatuses.includes(stat
       >
         <StatusBadge :status="opt.value" size="sm" />
       </DropdownMenuCheckboxItem>
-    </DropdownMenuContent>
-  </DropdownMenu>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  </Tooltip>
 </template>
