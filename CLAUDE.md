@@ -44,6 +44,22 @@ Unlike web-based issue trackers (Jira, GitHub Issues), Beads stores issues as fi
 
 This is a bd Beads issue tracking management repository. It uses **bd** (beads) for AI-native issue tracking that lives directly in the codebase.
 
+## Issue Workflow
+
+**IMPORTANT**: When starting work on any issue (bug, task, or feature), always use the `/run-issue` skill with the issue ID:
+
+```
+/run-issue <issue-id>
+```
+
+This ensures:
+- Issue status is set to `in_progress`
+- Session stats are tracked for the issue
+- Proper plan mode is entered for exploration
+- Issue is closed properly at the end via `/close-issue`
+
+**Never start working on an issue without running `/run-issue` first.**
+
 ## Commit Workflow
 
 Always use the `/review-to-commit` skill when the user asks to commit changes. This skill reviews changes and creates proper commits.
