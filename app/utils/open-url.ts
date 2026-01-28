@@ -21,6 +21,19 @@ export function isValidUrl(url: string): boolean {
 }
 
 /**
+ * Check if a path is a local file path (relative or absolute)
+ */
+export function isLocalPath(path: string): boolean {
+  // Relative paths (screenshots/..., ./..., ../) or absolute paths starting with /
+  return (
+    path.startsWith('screenshots/') ||
+    path.startsWith('./') ||
+    path.startsWith('../') ||
+    path.startsWith('/')
+  )
+}
+
+/**
  * Normalize a URL by adding https:// if it starts with www.
  */
 export function normalizeUrl(url: string): string {
@@ -56,5 +69,47 @@ export async function openUrl(url: string): Promise<void> {
     }
   } else {
     window.open(normalizedUrl, '_blank', 'noopener,noreferrer')
+  }
+}
+
+/**
+ * Open a local file with the system default application
+ * @param filePath - Absolute path to the file
+ */
+export async function openImageFile(filePath: string): Promise<void> {
+  if (!isTauri()) {
+    console.warn('openImageFile is only available in Tauri mode')
+    return
+  }
+
+  try {
+    const { invoke } = await import('@tauri-apps/api/core')
+    await invoke('open_image_file', { path: filePath })
+  } catch (error) {
+    console.error('Failed to open image file:', error)
+  }
+}
+
+export interface ImageData {
+  base64: string
+  mimeType: string
+}
+
+export async function readImageFile(filePath: string): Promise<ImageData | null> {
+  if (!isTauri()) {
+    console.warn('readImageFile is only available in Tauri mode')
+    return null
+  }
+
+  try {
+    const { invoke } = await import('@tauri-apps/api/core')
+    const result = await invoke<{ base64: string; mime_type: string }>('read_image_file', { path: filePath })
+    return {
+      base64: result.base64,
+      mimeType: result.mime_type,
+    }
+  } catch (error) {
+    console.error('Failed to read image file:', error)
+    return null
   }
 }

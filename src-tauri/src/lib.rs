@@ -1172,6 +1172,129 @@ async fn get_bd_version() -> String {
     }
 }
 
+#[tauri::command]
+async fn open_image_file(path: String) -> Result<(), String> {
+    log_info!("[open_image_file] Opening: {}", path);
+
+    // Security: Only allow image file extensions
+    let allowed_extensions = ["png", "jpg", "jpeg", "gif", "webp", "bmp", "svg", "ico", "tiff", "tif"];
+    let path_lower = path.to_lowercase();
+    let is_image = allowed_extensions.iter().any(|ext| path_lower.ends_with(&format!(".{}", ext)));
+
+    if !is_image {
+        return Err("Only image files are allowed".to_string());
+    }
+
+    // Verify file exists
+    if !std::path::Path::new(&path).exists() {
+        return Err(format!("File not found: {}", path));
+    }
+
+    // Use platform-specific command to open file with default application
+    #[cfg(target_os = "macos")]
+    {
+        Command::new("open")
+            .arg(&path)
+            .spawn()
+            .map_err(|e| format!("Failed to open file: {}", e))?;
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        Command::new("cmd")
+            .args(["/C", "start", "", &path])
+            .spawn()
+            .map_err(|e| format!("Failed to open file: {}", e))?;
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        Command::new("xdg-open")
+            .arg(&path)
+            .spawn()
+            .map_err(|e| format!("Failed to open file: {}", e))?;
+    }
+
+    Ok(())
+}
+
+#[derive(Debug, Serialize)]
+pub struct ImageData {
+    pub base64: String,
+    pub mime_type: String,
+}
+
+#[tauri::command]
+async fn read_image_file(path: String) -> Result<ImageData, String> {
+    log_info!("[read_image_file] Reading: {}", path);
+
+    // Security: Only allow image file extensions
+    let allowed_extensions: &[(&str, &str)] = &[
+        ("png", "image/png"),
+        ("jpg", "image/jpeg"),
+        ("jpeg", "image/jpeg"),
+        ("gif", "image/gif"),
+        ("webp", "image/webp"),
+        ("bmp", "image/bmp"),
+        ("svg", "image/svg+xml"),
+        ("ico", "image/x-icon"),
+        ("tiff", "image/tiff"),
+        ("tif", "image/tiff"),
+    ];
+
+    let path_lower = path.to_lowercase();
+    let mime_type = allowed_extensions
+        .iter()
+        .find(|(ext, _)| path_lower.ends_with(&format!(".{}", ext)))
+        .map(|(_, mime)| *mime);
+
+    let mime_type = match mime_type {
+        Some(m) => m.to_string(),
+        None => return Err("Only image files are allowed".to_string()),
+    };
+
+    // Verify file exists
+    if !std::path::Path::new(&path).exists() {
+        return Err(format!("File not found: {}", path));
+    }
+
+    // Read file and encode as base64
+    let data = fs::read(&path).map_err(|e| format!("Failed to read file: {}", e))?;
+    let base64 = base64_encode(&data);
+
+    Ok(ImageData { base64, mime_type })
+}
+
+fn base64_encode(data: &[u8]) -> String {
+    const ALPHABET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+    let mut result = String::with_capacity((data.len() + 2) / 3 * 4);
+
+    for chunk in data.chunks(3) {
+        let mut buf = [0u8; 3];
+        buf[..chunk.len()].copy_from_slice(chunk);
+
+        let n = ((buf[0] as u32) << 16) | ((buf[1] as u32) << 8) | (buf[2] as u32);
+
+        result.push(ALPHABET[(n >> 18) as usize & 0x3F] as char);
+        result.push(ALPHABET[(n >> 12) as usize & 0x3F] as char);
+
+        if chunk.len() > 1 {
+            result.push(ALPHABET[(n >> 6) as usize & 0x3F] as char);
+        } else {
+            result.push('=');
+        }
+
+        if chunk.len() > 2 {
+            result.push(ALPHABET[n as usize & 0x3F] as char);
+        } else {
+            result.push('=');
+        }
+    }
+
+    result
+}
+
 // ============================================================================
 // App Entry Point
 // ============================================================================
@@ -1249,6 +1372,8 @@ pub fn run() {
             fs_exists,
             fs_list,
             check_for_updates,
+            open_image_file,
+            read_image_file,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

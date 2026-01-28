@@ -27,6 +27,29 @@ md.renderer.rules.link_open = function (tokens, idx, options, env, self) {
   return defaultRender(tokens, idx, options, env, self)
 }
 
+// Remove images from rendered output (they'll be shown separately)
+md.renderer.rules.image = function () {
+  return ''
+}
+
+/**
+ * Extract image references from markdown text
+ * Returns array of { src, alt } objects
+ */
+export function extractImagesFromMarkdown(text: string): { src: string; alt: string }[] {
+  if (!text) return []
+  const regex = /!\[([^\]]*)\]\(([^)]+)\)/g
+  const images: { src: string; alt: string }[] = []
+  let match
+  while ((match = regex.exec(text)) !== null) {
+    images.push({
+      alt: match[1] || 'Image',
+      src: match[2],
+    })
+  }
+  return images
+}
+
 // Configure DOMPurify to allow our custom attributes
 const purifyConfig: DOMPurify.Config = {
   ALLOWED_TAGS: [

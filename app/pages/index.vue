@@ -40,9 +40,11 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '~/components/ui/tooltip'
+import ImagePreviewDialog from '~/components/ui/image-preview/ImagePreviewDialog.vue'
 
 // Composables
 const { filters, toggleStatus, toggleType, togglePriority, clearFilters, setStatusFilter, setSearch, toggleLabelFilter } = useFilters()
+const imagePreview = useImagePreview()
 const { columns, toggleColumn, setColumns, resetColumns } = useColumnConfig()
 const { beadsPath, hasStoredPath } = useBeadsPath()
 const { favorites } = useFavorites()
@@ -1301,5 +1303,12 @@ watch(
         <pre class="text-sm text-destructive bg-muted p-3 rounded-md overflow-x-auto whitespace-pre-wrap break-words">{{ lastSyncError }}</pre>
       </template>
     </ConfirmDialog>
+
+    <!-- Image Preview Dialog -->
+    <ImagePreviewDialog
+      v-model:open="imagePreview.isOpen.value"
+      :image-src="imagePreview.imageSrc.value"
+      :image-alt="imagePreview.imageAlt.value"
+    />
   </div>
 </template>

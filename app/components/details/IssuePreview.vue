@@ -5,10 +5,23 @@ import { LinkifiedText } from '~/components/ui/linkified-text'
 import LabelBadge from '~/components/issues/LabelBadge.vue'
 import StatusBadge from '~/components/issues/StatusBadge.vue'
 import PriorityBadge from '~/components/issues/PriorityBadge.vue'
+import ImageThumbnail from '~/components/ui/image-preview/ImageThumbnail.vue'
+import { extractImagesFromMarkdown } from '~/utils/markdown'
 
-defineProps<{
+const props = defineProps<{
   issue: Issue
 }>()
+
+const { beadsPath } = useBeadsPath()
+const { openImage } = useImagePreview()
+
+// Extract images from description
+const descriptionImages = computed(() => extractImagesFromMarkdown(props.issue.description))
+
+const handleImageClick = (src: string, alt: string) => {
+  const fullPath = `${beadsPath.value}/.beads/${src}`
+  openImage(fullPath, alt)
+}
 
 const emit = defineEmits<{
   'navigate-to-issue': [id: string]
@@ -47,6 +60,20 @@ const formatEstimate = (minutes: number) => {
 
 <template>
   <div class="space-y-3">
+    <!-- Images Section (only if description has images) -->
+    <div v-if="descriptionImages.length > 0">
+      <h4 class="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-2">Attachments</h4>
+      <div class="flex flex-wrap gap-2">
+        <ImageThumbnail
+          v-for="(img, index) in descriptionImages"
+          :key="index"
+          :src="img.src"
+          :alt="img.alt"
+          @click="handleImageClick(img.src, img.alt)"
+        />
+      </div>
+    </div>
+
     <!-- Description Section -->
     <div>
       <button

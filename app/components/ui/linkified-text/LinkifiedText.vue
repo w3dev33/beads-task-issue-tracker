@@ -20,7 +20,7 @@ const containerRef = ref<HTMLElement | null>(null)
 // Debounce flag to prevent multiple opens
 let isOpening = false
 
-// Handle clicks on links to open them with our openUrl utility
+// Handle clicks on links
 const handleClick = (event: MouseEvent) => {
   const target = event.target as HTMLElement
   const link = target.closest('a[data-external-link]') as HTMLAnchorElement | null
@@ -29,7 +29,6 @@ const handleClick = (event: MouseEvent) => {
     event.preventDefault()
     event.stopPropagation()
 
-    // Prevent multiple rapid clicks
     if (isOpening) return
     isOpening = true
     setTimeout(() => { isOpening = false }, 500)
