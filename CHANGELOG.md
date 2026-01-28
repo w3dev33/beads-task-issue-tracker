@@ -2,6 +2,13 @@
 
 All notable changes to Beads Task-Issue Tracker will be documented in this file.
 
+## [1.2.1] - 2026-01-28
+
+### New Features
+- **Image preview system**: Issue attachments (screenshots) now display as thumbnails in an "Attachments" section
+- **Full-screen image viewer**: Click on thumbnails to view images in a full-screen modal
+- **Secure image handling**: Tauri commands restricted to image files only (png, jpg, gif, webp, svg, etc.)
+
 ## [1.2.0] - 2026-01-28
 
 ### New Features
