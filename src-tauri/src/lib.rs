@@ -809,18 +809,15 @@ async fn bd_update(id: String, updates: UpdatePayload) -> Result<Option<Issue>, 
         args.push(priority_to_number(p));
     }
     if let Some(ref a) = updates.assignee {
-        if !a.is_empty() {
-            args.push("--assignee".to_string());
-            args.push(a.clone());
-        }
+        args.push("--assignee".to_string());
+        args.push(a.clone());
     }
     if let Some(ref labels) = updates.labels {
-        if !labels.is_empty() {
-            args.push("--set-labels".to_string());
-            args.push(labels.join(","));
-        }
+        args.push("--set-labels".to_string());
+        args.push(labels.join(","));
     }
     if let Some(ref ext) = updates.external_ref {
+        // Keep is_empty check for external_ref - bd CLI has UNIQUE constraint issues with empty strings
         if !ext.is_empty() {
             args.push("--external-ref".to_string());
             args.push(ext.clone());
@@ -831,22 +828,16 @@ async fn bd_update(id: String, updates: UpdatePayload) -> Result<Option<Issue>, 
         args.push(est.to_string());
     }
     if let Some(ref design) = updates.design_notes {
-        if !design.is_empty() {
-            args.push("--design".to_string());
-            args.push(design.clone());
-        }
+        args.push("--design".to_string());
+        args.push(design.clone());
     }
     if let Some(ref acc) = updates.acceptance_criteria {
-        if !acc.is_empty() {
-            args.push("--acceptance".to_string());
-            args.push(acc.clone());
-        }
+        args.push("--acceptance".to_string());
+        args.push(acc.clone());
     }
     if let Some(ref notes) = updates.working_notes {
-        if !notes.is_empty() {
-            args.push("--notes".to_string());
-            args.push(notes.clone());
-        }
+        args.push("--notes".to_string());
+        args.push(notes.clone());
     }
 
     log::info!("[bd_update] Executing: bd update {}", args.join(" "));
