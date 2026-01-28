@@ -2,6 +2,20 @@
 
 All notable changes to Beads Task-Issue Tracker will be documented in this file.
 
+## [1.3.0] - 2026-01-29
+
+### New Features
+- **Image attachment system**: Attach images from local files or URLs to issues, stored in `.beads/attachments/{issue-id}/`
+- **Attachment cleanup**: Automatic purge of orphan attachment folders when deleting issues
+- **File deletion on detach**: Detaching an image from an issue now deletes the file from attachments folder
+- **Closed issue restrictions**: Closed issues are now read-only (no edit, attach, comment) until reopened
+- **Reopen button**: New button to reopen closed issues directly from the preview panel
+- **Action notifications**: Toast notifications for all issue actions (create, save, close, reopen, comment) with issue ID and title
+
+### Improvements
+- **Update dialog**: Replaced footer version tooltip with a proper update dialog
+- **TypeScript fixes**: Fixed type errors in IssueTable, bd-api, markdown, and count.get
+
 ## [1.2.2] - 2026-01-28
 
 ### Bug Fixes
