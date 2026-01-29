@@ -43,7 +43,7 @@ import {
 import ImagePreviewDialog from '~/components/ui/image-preview/ImagePreviewDialog.vue'
 
 // Composables
-const { filters, toggleStatus, toggleType, togglePriority, clearFilters, setStatusFilter, setSearch, toggleLabelFilter } = useFilters()
+const { filters, toggleStatus, toggleType, togglePriority, toggleAssignee, clearFilters, setStatusFilter, setSearch, toggleLabelFilter } = useFilters()
 const imagePreview = useImagePreview()
 const { columns, toggleColumn, setColumns, resetColumns } = useColumnConfig()
 const { beadsPath, hasStoredPath } = useBeadsPath()
@@ -369,6 +369,9 @@ const handlePathChange = async () => {
   selectIssue(null)
   isEditMode.value = false
   isCreatingNew.value = false
+  // Clear project-specific exclusion filters (labels and assignees)
+  const { clearProjectSpecific } = useExclusionFilters()
+  clearProjectSpecific()
   await fetchIssues()
   await fetchStats(issues.value)
 }
@@ -692,6 +695,17 @@ const availableLabels = computed(() => {
   return Array.from(labelSet).sort()
 })
 
+// Available assignees computed from all issues
+const availableAssignees = computed(() => {
+  const assigneeSet = new Set<string>()
+  issues.value.forEach(issue => {
+    if (issue.assignee) {
+      assigneeSet.add(issue.assignee)
+    }
+  })
+  return Array.from(assigneeSet).sort()
+})
+
 const handleRemoveLabelFilter = (label: string) => {
   toggleLabelFilter(label)
 }
@@ -884,6 +898,8 @@ watch(
             :selected-priorities="filters.priority"
             :available-labels="availableLabels"
             :selected-labels="filters.labels"
+            :available-assignees="availableAssignees"
+            :selected-assignees="filters.assignee"
             :has-selection="multiSelectMode ? selectedIds.length > 0 : !!selectedIssue"
             :multi-select-mode="multiSelectMode"
             :selected-count="selectedIds.length"
@@ -897,6 +913,7 @@ watch(
             @toggle-type="toggleType"
             @toggle-priority="togglePriority"
             @toggle-label="toggleLabelFilter"
+            @toggle-assignee="toggleAssignee"
           />
 
           <FilterChips
@@ -905,10 +922,12 @@ watch(
             :type-filters="filters.type"
             :priority-filters="filters.priority"
             :label-filters="filters.labels"
+            :assignee-filters="filters.assignee"
             @remove-status="toggleStatus"
             @remove-type="toggleType"
             @remove-priority="togglePriority"
             @remove-label="handleRemoveLabelFilter"
+            @remove-assignee="toggleAssignee"
             @clear-all="clearFilters"
           />
         </div>
@@ -1216,6 +1235,8 @@ watch(
               :selected-priorities="filters.priority"
               :available-labels="availableLabels"
               :selected-labels="filters.labels"
+              :available-assignees="availableAssignees"
+              :selected-assignees="filters.assignee"
               :has-selection="multiSelectMode ? selectedIds.length > 0 : !!selectedIssue"
               :multi-select-mode="multiSelectMode"
               :selected-count="selectedIds.length"
@@ -1229,6 +1250,7 @@ watch(
               @toggle-type="toggleType"
               @toggle-priority="togglePriority"
               @toggle-label="toggleLabelFilter"
+              @toggle-assignee="toggleAssignee"
             />
 
             <FilterChips
@@ -1237,10 +1259,12 @@ watch(
               :type-filters="filters.type"
               :priority-filters="filters.priority"
               :label-filters="filters.labels"
+              :assignee-filters="filters.assignee"
               @remove-status="toggleStatus"
               @remove-type="toggleType"
               @remove-priority="togglePriority"
               @remove-label="handleRemoveLabelFilter"
+              @remove-assignee="toggleAssignee"
               @clear-all="clearFilters"
             />
           </div>

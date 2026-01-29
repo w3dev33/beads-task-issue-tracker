@@ -102,6 +102,7 @@ export function useIssues() {
 
   const filteredIssues = computed(() => {
     let result = issues.value
+    const { exclusions } = useExclusionFilters()
 
     // Check if search is active - if so, bypass all other filters
     // Search takes priority and searches ALL issues including closed
@@ -144,9 +145,9 @@ export function useIssues() {
     }
 
     // Apply client-side assignee filter
-    if (filters.value.assignee) {
+    if (filters.value.assignee.length > 0) {
       result = result.filter((issue) =>
-        issue.assignee === filters.value.assignee
+        issue.assignee && filters.value.assignee.includes(issue.assignee)
       )
     }
 
@@ -156,6 +157,27 @@ export function useIssues() {
         filters.value.labels.every(filterLabel =>
           issue.labels?.some(l => l.toLowerCase() === filterLabel.toLowerCase())
         )
+      )
+    }
+
+    // Apply exclusion filters (checked = hidden)
+    if (exclusions.value.status.length > 0) {
+      result = result.filter(issue => !exclusions.value.status.includes(issue.status))
+    }
+    if (exclusions.value.priority.length > 0) {
+      result = result.filter(issue => !exclusions.value.priority.includes(issue.priority))
+    }
+    if (exclusions.value.type.length > 0) {
+      result = result.filter(issue => !exclusions.value.type.includes(issue.type))
+    }
+    if (exclusions.value.labels.length > 0) {
+      result = result.filter(issue =>
+        !issue.labels?.some(l => exclusions.value.labels.includes(l.toLowerCase()))
+      )
+    }
+    if (exclusions.value.assignee.length > 0) {
+      result = result.filter(issue =>
+        !exclusions.value.assignee.includes(issue.assignee || '')
       )
     }
 

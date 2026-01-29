@@ -13,6 +13,8 @@ import StatusFilterDropdown from '~/components/issues/StatusFilterDropdown.vue'
 import TypeFilterDropdown from '~/components/issues/TypeFilterDropdown.vue'
 import PriorityFilterDropdown from '~/components/issues/PriorityFilterDropdown.vue'
 import LabelFilterDropdown from '~/components/issues/LabelFilterDropdown.vue'
+import AssigneeFilterDropdown from '~/components/issues/AssigneeFilterDropdown.vue'
+import ExclusionFilterDropdown from '~/components/issues/ExclusionFilterDropdown.vue'
 
 const search = defineModel<string>('search', { default: '' })
 
@@ -22,6 +24,8 @@ defineProps<{
   selectedPriorities: IssuePriority[]
   availableLabels: string[]
   selectedLabels: string[]
+  availableAssignees: string[]
+  selectedAssignees: string[]
   hasSelection?: boolean
   multiSelectMode?: boolean
   selectedCount?: number
@@ -36,12 +40,13 @@ defineEmits<{
   toggleType: [type: IssueType]
   togglePriority: [priority: IssuePriority]
   toggleLabel: [label: string]
+  toggleAssignee: [assignee: string]
   'update:columns': [columns: ColumnConfig[]]
   resetColumns: []
 }>()
 
 // Track which filter dropdown is currently open (exclusive group)
-type FilterType = 'type' | 'label' | 'status' | 'priority' | null
+type FilterType = 'type' | 'label' | 'status' | 'priority' | 'assignee' | null
 const activeFilter = ref<FilterType>(null)
 
 // Ref for the filter buttons container
@@ -147,6 +152,20 @@ const handleFilterClick = (filter: FilterType) => {
             @toggle="$emit('togglePriority', $event)"
           />
         </div>
+
+        <div @pointerdown.capture="handleFilterClick('assignee')">
+          <AssigneeFilterDropdown
+            :available-assignees="availableAssignees"
+            :selected-assignees="selectedAssignees"
+            :open="activeFilter === 'assignee'"
+            @toggle="$emit('toggleAssignee', $event)"
+          />
+        </div>
+
+        <ExclusionFilterDropdown
+          :available-labels="availableLabels"
+          :available-assignees="availableAssignees"
+        />
       </div>
 
     <Button

@@ -51,7 +51,7 @@ export interface FilterState {
   status: IssueStatus[]
   type: IssueType[]
   priority: IssuePriority[]
-  assignee: string | null
+  assignee: string[]
   search: string
   labels: string[]
 }
