@@ -2,6 +2,19 @@
 
 All notable changes to Beads Task-Issue Tracker will be documented in this file.
 
+## [1.5.0] - 2026-01-29
+
+### New Features
+- **Exclusion filter panel**: Hide issues by type, labels, status, priority, or assignee via a new dropdown with collapsible sections
+- **Assignee filter dropdown**: Multi-select filter by assignee with slate-colored badge
+- **Two-row filter chips**: "Filters:" row for inclusions, "Hidden:" row for exclusions with independent Clear buttons
+
+### Improvements
+- **Red checkmark indicator**: Excluded items show bright red checkmark (#ff3333) with grayed text
+- **Auto-open sections**: Exclusion sections auto-open when they contain active filters
+- **Unified filter order**: Type, Labels, Status, Priority, Assignee across all filter components
+- **Project-specific reset**: Labels and assignees exclusions cleared on project change
+
 ## [1.4.0] - 2026-01-29
 
 ### New Features
