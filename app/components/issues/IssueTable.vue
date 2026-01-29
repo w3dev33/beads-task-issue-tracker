@@ -15,7 +15,6 @@ import StatusBadge from '~/components/issues/StatusBadge.vue'
 import PriorityBadge from '~/components/issues/PriorityBadge.vue'
 import LabelBadge from '~/components/issues/LabelBadge.vue'
 import { Button } from '~/components/ui/button'
-import { useLocalStorage } from '@vueuse/core'
 
 const props = defineProps<{
   issues: Issue[]
@@ -168,17 +167,14 @@ const sortedIssues = computed(() => {
   })
 })
 
-// Epic expand/collapse state (persisted) - default to expanded (true)
-const expandedEpics = useLocalStorage<Record<string, boolean>>('beads:expandedEpics', {})
+// Epic expand/collapse state (from composable, shared with index.vue)
+const { isEpicExpanded, toggleEpicExpand } = useIssues()
 
-const isExpanded = (epicId: string) => {
-  // Default to expanded (true) if not explicitly set to false
-  return expandedEpics.value[epicId] !== false
-}
+const isExpanded = (epicId: string) => isEpicExpanded(epicId)
 
 const toggleExpand = (epicId: string, event: Event) => {
   event.stopPropagation()
-  expandedEpics.value[epicId] = !isExpanded(epicId)
+  toggleEpicExpand(epicId)
 }
 
 // Check if we should use hierarchical display
@@ -268,6 +264,27 @@ const formatTime = (dateStr: string) => {
     minute: '2-digit',
   })
 }
+
+// Epic border colors for visual grouping (left and right)
+const epicBorderColors = [
+  { left: 'border-l-blue-500', right: 'border-r-blue-500' },
+  { left: 'border-l-green-500', right: 'border-r-green-500' },
+  { left: 'border-l-purple-500', right: 'border-r-purple-500' },
+  { left: 'border-l-orange-500', right: 'border-r-orange-500' },
+  { left: 'border-l-pink-500', right: 'border-r-pink-500' },
+  { left: 'border-l-cyan-500', right: 'border-r-cyan-500' },
+  { left: 'border-l-yellow-500', right: 'border-r-yellow-500' },
+  { left: 'border-l-red-500', right: 'border-r-red-500' },
+]
+
+const getEpicBorderColors = (epicId: string): { left: string; right: string } => {
+  let hash = 0
+  for (let i = 0; i < epicId.length; i++) {
+    hash = ((hash << 5) - hash) + epicId.charCodeAt(i)
+    hash = hash & hash
+  }
+  return epicBorderColors[Math.abs(hash) % epicBorderColors.length]!
+}
 </script>
 
 <template>
@@ -351,10 +368,13 @@ const formatTime = (dateStr: string) => {
             <!-- Epic row with expand/collapse -->
             <template v-if="group.epic">
               <TableRow
-                class="cursor-pointer bg-muted/30"
-                :class="multiSelectMode
-                  ? (isSelected(group.epic.id) ? 'bg-accent/50 hover:bg-accent/70' : 'hover:bg-muted/50')
-                  : (selectedId === group.epic.id ? 'bg-accent/50 hover:bg-accent/70' : 'hover:bg-muted/50')"
+                class="cursor-pointer bg-black/30"
+                :class="[
+                  multiSelectMode
+                    ? (isSelected(group.epic.id) ? 'bg-accent/50 hover:bg-accent/70' : 'hover:bg-muted/50')
+                    : (selectedId === group.epic.id ? 'bg-accent/50 hover:bg-accent/70' : 'hover:bg-muted/50'),
+                  isExpanded(group.epic.id) && group.childCount > 0 ? ['border-l-4', 'border-r-4', getEpicBorderColors(group.epic.id).left, getEpicBorderColors(group.epic.id).right] : ''
+                ]"
                 @click="multiSelectMode ? toggleSelect(group.epic.id) : $emit('select', group.epic)"
                 @dblclick="!multiSelectMode && $emit('edit', group.epic)"
               >
@@ -460,10 +480,14 @@ const formatTime = (dateStr: string) => {
                 <TableRow
                   v-for="child in group.children"
                   :key="child.id"
-                  class="cursor-pointer bg-black/20"
-                  :class="multiSelectMode
-                    ? (isSelected(child.id) ? 'bg-accent/50 hover:bg-accent/70' : 'hover:bg-muted/50')
-                    : (selectedId === child.id ? 'bg-accent/50 hover:bg-accent/70' : 'hover:bg-muted/50')"
+                  class="cursor-pointer border-l-4 border-r-4"
+                  :class="[
+                    getEpicBorderColors(group.epic.id).left,
+                    getEpicBorderColors(group.epic.id).right,
+                    multiSelectMode
+                      ? (isSelected(child.id) ? 'bg-accent/50 hover:bg-accent/70' : 'hover:bg-muted/50')
+                      : (selectedId === child.id ? 'bg-accent/50 hover:bg-accent/70' : 'hover:bg-muted/50')
+                  ]"
                   @click="multiSelectMode ? toggleSelect(child.id) : $emit('select', child)"
                   @dblclick="!multiSelectMode && $emit('edit', child)"
                 >

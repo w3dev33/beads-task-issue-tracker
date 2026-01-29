@@ -63,6 +63,8 @@ const {
   sortField,
   sortDirection,
   setSort,
+  // Epic expand
+  expandEpic,
   // Actions
   fetchIssues,
   fetchIssue,
@@ -527,6 +529,14 @@ const handleAddComment = async (content: string) => {
 }
 
 const handleNavigateToIssue = async (id: string) => {
+  // Check if this is a child issue (format: parent-id.number)
+  // If so, expand the parent epic to make the child visible
+  const lastDotIndex = id.lastIndexOf('.')
+  if (lastDotIndex > 0) {
+    const parentId = id.slice(0, lastDotIndex)
+    expandEpic(parentId)
+  }
+
   // Find the issue in the current list or fetch it
   const existingIssue = issues.value.find(i => i.id === id)
   if (existingIssue) {
