@@ -2,6 +2,20 @@
 
 All notable changes to Beads Task-Issue Tracker will be documented in this file.
 
+## [1.6.0] - 2026-01-29
+
+### New Features
+- **Parent/child relationship management**: Attach or detach issues to/from Epic parents via dropdown selector in edit form
+- **Create child from Epic**: New "Create child" button in Epic preview to quickly create child issues with parent pre-selected
+- **Epic visual styling**: Colored left borders on Epic rows for better visual distinction
+
+### Improvements
+- **Smart form fields**: Parent selector hidden when editing Epic issues (Epics cannot have parents)
+- **CLAUDE.md documentation**: Added gotchas about external_ref UNIQUE constraint and its various uses
+
+### Bug Fixes
+- **Fix update failures**: Skip empty --external-ref to avoid UNIQUE constraint errors that caused silent update failures
+
 ## [1.5.0] - 2026-01-29
 
 ### New Features
