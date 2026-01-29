@@ -336,61 +336,57 @@ export function useIssues() {
     const groups: IssueGroup[] = []
     const processedIds = new Set<string>()
 
-    // Build maps for quick lookup
-    const filteredIssueMap = new Map<string, Issue>()
-    for (const issue of issueList) {
-      filteredIssueMap.set(issue.id, issue)
-    }
-
+    // Build map for all issues (for accurate child counts)
     const allIssueMap = new Map<string, Issue>()
     for (const issue of allIssues) {
       allIssueMap.set(issue.id, issue)
+    }
+
+    // Identify all EPIC IDs in the full list
+    const allEpicIds = new Set<string>()
+    for (const issue of allIssues) {
+      if (issue.type === 'epic') {
+        allEpicIds.add(issue.id)
+      }
+    }
+
+    // Identify visible EPIC IDs (in paginated list)
+    const visibleEpicIds = new Set<string>()
+    for (const issue of issueList) {
+      if (issue.type === 'epic') {
+        visibleEpicIds.add(issue.id)
+      }
     }
 
     // Find all children for each epic from the FULL list (for accurate counts)
     const allEpicChildrenMap = new Map<string, Issue[]>()
     for (const issue of allIssues) {
       const parentId = getParentIdFromIssue(issue)
-      if (parentId) {
-        const parent = allIssueMap.get(parentId)
-        if (parent && parent.type === 'epic') {
-          if (!allEpicChildrenMap.has(parentId)) {
-            allEpicChildrenMap.set(parentId, [])
-          }
-          allEpicChildrenMap.get(parentId)!.push(issue)
+      if (parentId && allEpicIds.has(parentId)) {
+        if (!allEpicChildrenMap.has(parentId)) {
+          allEpicChildrenMap.set(parentId, [])
         }
+        allEpicChildrenMap.get(parentId)!.push(issue)
       }
     }
 
     // Find children that are in the filtered/paginated list (for display)
+    // Use visibleEpicIds for reliable parent detection
     const filteredEpicChildrenMap = new Map<string, Issue[]>()
     for (const issue of issueList) {
       const parentId = getParentIdFromIssue(issue)
-      if (parentId) {
-        const parent = filteredIssueMap.get(parentId)
-        if (parent && parent.type === 'epic') {
-          if (!filteredEpicChildrenMap.has(parentId)) {
-            filteredEpicChildrenMap.set(parentId, [])
-          }
-          filteredEpicChildrenMap.get(parentId)!.push(issue)
+      if (parentId && visibleEpicIds.has(parentId)) {
+        if (!filteredEpicChildrenMap.has(parentId)) {
+          filteredEpicChildrenMap.set(parentId, [])
         }
+        filteredEpicChildrenMap.get(parentId)!.push(issue)
       }
     }
 
-    // Create groups
+    // Create groups - process EPICs first to ensure correct grouping
+    // First pass: Add all EPICs with their children
     for (const issue of issueList) {
-      if (processedIds.has(issue.id)) continue
-
-      const parentId = getParentIdFromIssue(issue)
-      const isChildOfEpic = parentId && filteredIssueMap.get(parentId)?.type === 'epic'
-
-      // Skip children - they will be added with their parent
-      if (isChildOfEpic) {
-        continue
-      }
-
-      // Check if this is an epic
-      if (issue.type === 'epic') {
+      if (issue.type === 'epic' && !processedIds.has(issue.id)) {
         const filteredChildren = filteredEpicChildrenMap.get(issue.id) || []
         const allChildren = allEpicChildrenMap.get(issue.id) || []
         const closedCount = allChildren.filter(c => c.status === 'closed').length
@@ -404,16 +400,24 @@ export function useIssues() {
         processedIds.add(issue.id)
         filteredChildren.forEach(c => processedIds.add(c.id))
       }
-      // Regular issue (not an epic, not a child of an epic in the filtered list)
-      else {
-        groups.push({
-          epic: null,
-          children: [issue],
-          childCount: 0,
-          closedChildCount: 0,
-        })
-        processedIds.add(issue.id)
-      }
+    }
+
+    // Second pass: Add orphan issues (not EPICs, not children of visible EPICs)
+    for (const issue of issueList) {
+      if (processedIds.has(issue.id)) continue
+
+      const parentId = getParentIdFromIssue(issue)
+      // Skip if this is a child of a visible EPIC (should have been processed above)
+      if (parentId && visibleEpicIds.has(parentId)) continue
+
+      // Add as orphan issue
+      groups.push({
+        epic: null,
+        children: [issue],
+        childCount: 0,
+        closedChildCount: 0,
+      })
+      processedIds.add(issue.id)
     }
 
     return groups

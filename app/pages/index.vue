@@ -706,9 +706,9 @@ const handleDeleteIssue = async () => {
     (issue): issue is Issue => !!issue.children?.length
   )
 
-  if (issuesWithChildren.length > 0) {
+  const firstEpic = issuesWithChildren[0]
+  if (firstEpic) {
     // Show epic delete dialog for the first issue with children
-    const firstEpic = issuesWithChildren[0]
     epicToDelete.value = firstEpic
     epicChildren.value = firstEpic.children || []
     // Store remaining IDs to delete after epic processing

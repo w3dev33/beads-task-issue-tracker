@@ -52,6 +52,7 @@ const internalSortDirection = ref<SortDirection>('desc')
 const sortColumn = computed(() => props.externalSortColumn !== undefined ? props.externalSortColumn : internalSortColumn.value)
 const sortDirection = computed(() => props.externalSortDirection !== undefined ? props.externalSortDirection : internalSortDirection.value)
 
+
 const toggleSort = (columnId: string) => {
   let newDirection: SortDirection = 'asc'
   let newColumn: string | null = columnId
@@ -246,7 +247,14 @@ const commonPrefix = computed(() => {
 const getShortId = (id: string) => {
   const prefix = commonPrefix.value
   if (prefix && id.startsWith(prefix)) {
-    return id.slice(prefix.length)
+    const short = id.slice(prefix.length)
+    if (!short) {
+      // ID equals prefix (e.g., EPIC ID "beads-demo-5tg" when prefix is "beads-demo-5tg")
+      // Return last segment after hyphen
+      const lastHyphen = id.lastIndexOf('-')
+      return lastHyphen > 0 ? id.slice(lastHyphen + 1) : id
+    }
+    return short
   }
   return id
 }
