@@ -15,6 +15,11 @@ import StatusBadge from '~/components/issues/StatusBadge.vue'
 import PriorityBadge from '~/components/issues/PriorityBadge.vue'
 import LabelBadge from '~/components/issues/LabelBadge.vue'
 import { Button } from '~/components/ui/button'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '~/components/ui/tooltip'
 
 const props = defineProps<{
   issues: Issue[]
@@ -420,10 +425,17 @@ const getEpicBorderColors = (epicId: string): { left: string; right: string } =>
                   <template v-else-if="col.id === 'type'">
                     <div class="flex items-center gap-1.5">
                       <TypeBadge :type="group.epic.type" size="sm" />
-                      <!-- Child count badge -->
-                      <span v-if="group.childCount > 0" class="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded-full">
-                        {{ group.closedChildCount }}/{{ group.childCount }}
-                      </span>
+                      <!-- Child count badge with tooltip -->
+                      <Tooltip v-if="group.childCount > 0">
+                        <TooltipTrigger as-child>
+                          <span class="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded-full cursor-help">
+                            {{ group.closedChildCount }}/{{ group.childCount }}
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>{{ group.closedChildCount }} closed / {{ group.childCount }} {{ group.childCount === 1 ? 'child' : 'children' }}</p>
+                        </TooltipContent>
+                      </Tooltip>
                     </div>
                   </template>
 

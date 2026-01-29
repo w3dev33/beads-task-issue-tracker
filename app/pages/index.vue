@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { Issue, UpdateIssuePayload, IssueStatus, IssueType, IssuePriority } from '~/types/issue'
+import type { Issue, ChildIssue, UpdateIssuePayload, IssueStatus, IssueType, IssuePriority } from '~/types/issue'
 
 // Layout components
 import AppHeader from '~/components/layout/AppHeader.vue'
@@ -35,6 +35,14 @@ import PriorityBadge from '~/components/issues/PriorityBadge.vue'
 import { Button } from '~/components/ui/button'
 import { ScrollArea } from '~/components/ui/scroll-area'
 import { ConfirmDialog } from '~/components/ui/confirm-dialog'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '~/components/ui/dialog'
 import {
   Tooltip,
   TooltipContent,
@@ -332,6 +340,14 @@ watch(
 const isDeleteDialogOpen = ref(false)
 const deleteTargetTitles = ref<string[]>([])
 const isDeleting = ref(false)
+
+// Epic delete dialog state (for issues with children)
+const isEpicDeleteDialogOpen = ref(false)
+const epicToDelete = ref<Issue | null>(null)
+const epicChildren = ref<ChildIssue[]>([])
+const isDeletingEpic = ref(false)
+// Track remaining issues to delete after epic processing (for multi-select)
+const remainingDeleteIds = ref<string[]>([])
 
 // Close confirmation dialog
 const isCloseDialogOpen = ref(false)
@@ -657,18 +673,54 @@ const handleDetachImage = async () => {
   }
 }
 
-const handleDeleteIssue = () => {
+const handleDeleteIssue = async () => {
+  // Determine which IDs we're deleting
+  let idsToDelete: string[] = []
   if (multiSelectMode.value && selectedIds.value.length > 0) {
-    // Get titles of selected issues
-    deleteTargetTitles.value = selectedIds.value
-      .map(id => filteredIssues.value.find(i => i.id === id)?.title)
-      .filter((t): t is string => !!t)
+    idsToDelete = [...selectedIds.value]
   } else if (selectedIssue.value) {
-    deleteTargetTitles.value = [selectedIssue.value.title]
+    idsToDelete = [selectedIssue.value.id]
   } else {
     return
   }
-  isDeleteDialogOpen.value = true
+
+  // For each ID, fetch full issue to check for children
+  // (list view may not have children populated, need to use bdShow)
+  const issuesToCheck: Issue[] = []
+  for (const id of idsToDelete) {
+    // Fetch full issue details (including children) via bdShow
+    const fullIssue = await fetchIssue(id)
+    if (fullIssue) {
+      issuesToCheck.push(fullIssue)
+    } else {
+      // Fallback to list data if fetch fails
+      const issueFromList = filteredIssues.value.find(i => i.id === id)
+      if (issueFromList) {
+        issuesToCheck.push(issueFromList)
+      }
+    }
+  }
+
+  // Check if any selected issue has children
+  const issuesWithChildren = issuesToCheck.filter(
+    (issue): issue is Issue => !!issue.children?.length
+  )
+
+  if (issuesWithChildren.length > 0) {
+    // Show epic delete dialog for the first issue with children
+    const firstEpic = issuesWithChildren[0]
+    epicToDelete.value = firstEpic
+    epicChildren.value = firstEpic.children || []
+    // Store remaining IDs to delete after epic processing
+    remainingDeleteIds.value = idsToDelete.filter(id => id !== firstEpic.id)
+    isEpicDeleteDialogOpen.value = true
+  } else {
+    // Standard delete flow (no children)
+    deleteTargetTitles.value = issuesToCheck
+      .map(issue => issue.title)
+      .filter((t): t is string => !!t)
+    isDeleteDialogOpen.value = true
+  }
 }
 
 const confirmDelete = async () => {
@@ -688,6 +740,71 @@ const confirmDelete = async () => {
   } finally {
     isDeleting.value = false
     isDeleteDialogOpen.value = false
+  }
+}
+
+const confirmEpicDelete = async (mode: 'delete-all' | 'detach') => {
+  if (!epicToDelete.value) return
+  isDeletingEpic.value = true
+
+  try {
+    if (mode === 'detach') {
+      // Detach all children first (set parent to empty string)
+      for (const child of epicChildren.value) {
+        await updateIssue(child.id, { parent: '' })
+      }
+    } else {
+      // Delete all children first
+      for (const child of epicChildren.value) {
+        await deleteIssue(child.id)
+      }
+    }
+    // Then delete the epic
+    await deleteIssue(epicToDelete.value.id)
+
+    // Clear selection if deleted epic was selected
+    if (selectedIssue.value?.id === epicToDelete.value.id) {
+      isEditMode.value = false
+      isCreatingNew.value = false
+    }
+
+    // Remove the epic ID from selectedIds if in multi-select mode
+    if (multiSelectMode.value) {
+      selectedIds.value = selectedIds.value.filter(id => id !== epicToDelete.value?.id)
+    }
+
+    // Check if there are more issues with children to process
+    if (remainingDeleteIds.value.length > 0) {
+      // Check remaining issues for children
+      const remainingIssues = remainingDeleteIds.value
+        .map(id => issues.value.find(i => i.id === id))
+        .filter((issue): issue is Issue => !!issue)
+
+      const nextIssueWithChildren = remainingIssues.find(issue => issue.children?.length)
+
+      if (nextIssueWithChildren) {
+        // Show dialog for next epic with children
+        epicToDelete.value = nextIssueWithChildren
+        epicChildren.value = nextIssueWithChildren.children || []
+        remainingDeleteIds.value = remainingDeleteIds.value.filter(id => id !== nextIssueWithChildren.id)
+        isDeletingEpic.value = false
+        return // Keep dialog open for next epic
+      } else {
+        // No more epics with children, delete remaining issues
+        for (const id of remainingDeleteIds.value) {
+          await deleteIssue(id)
+        }
+        selectedIds.value = []
+      }
+    }
+
+    await fetchStats(issues.value)
+  } finally {
+    isDeletingEpic.value = false
+    isEpicDeleteDialogOpen.value = false
+    epicToDelete.value = null
+    epicChildren.value = []
+    remainingDeleteIds.value = []
   }
 }
 
@@ -1504,6 +1621,68 @@ watch(
         </p>
       </template>
     </ConfirmDialog>
+
+    <!-- Epic Delete Confirmation Dialog (for issues with children) -->
+    <Dialog v-model:open="isEpicDeleteDialogOpen">
+      <DialogContent class="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle class="flex items-center gap-2">
+            <svg class="w-5 h-5 text-destructive" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10" />
+              <line x1="12" y1="8" x2="12" y2="12" />
+              <line x1="12" y1="16" x2="12.01" y2="16" />
+            </svg>
+            Delete Issue with Children
+          </DialogTitle>
+          <DialogDescription as="div">
+            <p class="text-sm text-muted-foreground">
+              The issue "<span class="font-medium text-sky-400">{{ epicToDelete?.title }}</span>" has {{ epicChildren.length }} child issue{{ epicChildren.length > 1 ? 's' : '' }}:
+            </p>
+            <div class="mt-2 space-y-1 max-h-32 overflow-y-auto">
+              <p v-for="child in epicChildren.slice(0, 5)" :key="child.id" class="text-sm text-muted-foreground">
+                <span class="font-medium">{{ child.title }}</span>
+              </p>
+              <p v-if="epicChildren.length > 5" class="text-sm text-muted-foreground">
+                ... and {{ epicChildren.length - 5 }} more
+              </p>
+            </div>
+            <p class="mt-3 text-sm text-muted-foreground">
+              What would you like to do?
+            </p>
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter class="flex-col gap-2 sm:flex-col">
+          <Button
+            variant="destructive"
+            class="w-full"
+            :disabled="isDeletingEpic"
+            @click="confirmEpicDelete('delete-all')"
+          >
+            <svg v-if="isDeletingEpic" class="animate-spin -ml-1 mr-2 h-4 w-4" viewBox="0 0 24 24" fill="none">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+            </svg>
+            Delete Issue and All Children
+          </Button>
+          <Button
+            variant="outline"
+            class="w-full"
+            :disabled="isDeletingEpic"
+            @click="confirmEpicDelete('detach')"
+          >
+            Delete Issue Only (Detach Children)
+          </Button>
+          <Button
+            variant="ghost"
+            class="w-full"
+            :disabled="isDeletingEpic"
+            @click="isEpicDeleteDialogOpen = false"
+          >
+            Cancel
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
 
     <!-- Close Confirmation Dialog -->
     <ConfirmDialog

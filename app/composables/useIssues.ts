@@ -309,16 +309,22 @@ export function useIssues() {
     return sortedIssues.value.slice(0, end)
   })
 
-  // Helper to detect parent ID from child ID pattern (e.g., "beads-manager-40b.1" -> "beads-manager-40b")
-  const getParentId = (issueId: string): string | null => {
-    // Child IDs have pattern: {parent-id}.{number}
-    const lastDotIndex = issueId.lastIndexOf('.')
+  // Helper to get parent ID - uses issue.parent.id if available, falls back to ID pattern
+  const getParentIdFromIssue = (issue: Issue): string | null => {
+    // Priority 1: Use explicit parent field if available (from bdShow)
+    if (issue.parent?.id) {
+      return issue.parent.id
+    }
+
+    // Priority 2: Fallback to ID pattern (e.g., "beads-manager-40b.1" -> "beads-manager-40b")
+    // This works for newly created children but not for re-parented issues
+    const lastDotIndex = issue.id.lastIndexOf('.')
     if (lastDotIndex === -1) return null
 
-    const suffix = issueId.slice(lastDotIndex + 1)
+    const suffix = issue.id.slice(lastDotIndex + 1)
     // Check if suffix is a number (child indicator)
     if (/^\d+$/.test(suffix)) {
-      return issueId.slice(0, lastDotIndex)
+      return issue.id.slice(0, lastDotIndex)
     }
     return null
   }
@@ -344,7 +350,7 @@ export function useIssues() {
     // Find all children for each epic from the FULL list (for accurate counts)
     const allEpicChildrenMap = new Map<string, Issue[]>()
     for (const issue of allIssues) {
-      const parentId = getParentId(issue.id)
+      const parentId = getParentIdFromIssue(issue)
       if (parentId) {
         const parent = allIssueMap.get(parentId)
         if (parent && parent.type === 'epic') {
@@ -359,7 +365,7 @@ export function useIssues() {
     // Find children that are in the filtered/paginated list (for display)
     const filteredEpicChildrenMap = new Map<string, Issue[]>()
     for (const issue of issueList) {
-      const parentId = getParentId(issue.id)
+      const parentId = getParentIdFromIssue(issue)
       if (parentId) {
         const parent = filteredIssueMap.get(parentId)
         if (parent && parent.type === 'epic') {
@@ -375,7 +381,7 @@ export function useIssues() {
     for (const issue of issueList) {
       if (processedIds.has(issue.id)) continue
 
-      const parentId = getParentId(issue.id)
+      const parentId = getParentIdFromIssue(issue)
       const isChildOfEpic = parentId && filteredIssueMap.get(parentId)?.type === 'epic'
 
       // Skip children - they will be added with their parent
@@ -452,6 +458,16 @@ export function useIssues() {
     try {
       const data = await bdShow(id, getPath())
       selectedIssue.value = data
+
+      // Also update the issue in the issues array to preserve parent/children info
+      // (bd list doesn't return parent field, but bd show does)
+      if (data) {
+        const index = issues.value.findIndex(i => i.id === id)
+        if (index !== -1) {
+          issues.value[index] = data
+        }
+      }
+
       return data
     } catch (e) {
       error.value = e instanceof Error ? e.message : 'Failed to fetch issue'
