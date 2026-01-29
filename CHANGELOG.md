@@ -2,6 +2,20 @@
 
 All notable changes to Beads Task-Issue Tracker will be documented in this file.
 
+## [1.4.0] - 2026-01-29
+
+### New Features
+- **Hierarchical epic display**: Child issues are now grouped under their parent epic with collapsible sections
+- **Epic progress badge**: Shows closed/total count on epic rows (e.g., "1/10")
+- **Short ID display**: Table shows only the unique ID suffix without project prefix (full ID still copied)
+- **Natural ID sorting**: IDs with numbers now sort correctly (40b.2 before 40b.10)
+
+### Improvements
+- **Visual hierarchy**: Child rows have darker background to distinguish from parent
+- **Compact table rows**: Reduced vertical padding in table cells
+- **Markdown spacing**: Fixed double-spacing issue in description panel
+- **Quick list spacing**: Reduced spacing in "Ready to Work" list
+
 ## [1.3.0] - 2026-01-29
 
 ### New Features
