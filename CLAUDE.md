@@ -190,17 +190,26 @@ The `bd` CLI has a **UNIQUE constraint** on the `external_ref` field. This cause
 - **Redmine IDs**: When importing issues from Redmine, the original Redmine bug/issue ID is stored here for traceability.
 - **External references**: Any external system reference (URLs, ticket IDs from other trackers, etc.)
 
-**Solution in code**: In `src-tauri/src/lib.rs`, the `bd_update` function skips sending `--external-ref` when the value is empty:
+**Solution in code**: In `src-tauri/src/lib.rs`, the `bd_update` function uses a unique sentinel value when clearing the external_ref:
 ```rust
 if let Some(ref ext) = updates.external_ref {
-    if !ext.is_empty() {
-        args.push("--external-ref".to_string());
+    args.push("--external-ref".to_string());
+    if ext.is_empty() {
+        // Use issue ID as unique sentinel to satisfy UNIQUE constraint
+        // Frontend filters out "cleared:" prefixes for display
+        args.push(format!("cleared:{}", id));
+    } else {
         args.push(ext.clone());
     }
 }
 ```
 
-**Impact**: If a bd update command fails silently, check if `--external-ref ""` is being passed. This error can cause the entire update to fail, including other fields like `--parent`.
+**How clearing works**: When a user clears the external_ref field:
+1. Backend sends `cleared:{issue_id}` instead of empty string to satisfy UNIQUE constraint
+2. Frontend's `cleanExternalRef()` filters out lines starting with `cleared:` for display
+3. Markdown utilities (`extractImagesFromExternalRef`, `extractNonImageRefs`) also filter `cleared:` prefixes
+
+This allows users to clear the field while avoiding the SQLite UNIQUE constraint error.
 
 **Caution**: When modifying code that handles `external_ref`:
 - Never clear it blindly - it may contain important attachment paths or external IDs

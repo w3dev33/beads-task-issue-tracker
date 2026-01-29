@@ -833,10 +833,12 @@ async fn bd_update(id: String, updates: UpdatePayload) -> Result<Option<Issue>, 
         args.push(labels.join(","));
     }
     if let Some(ref ext) = updates.external_ref {
-        // Only send --external-ref if it has a value (not empty)
-        // Empty external_ref causes UNIQUE constraint issues in bd
-        if !ext.is_empty() {
-            args.push("--external-ref".to_string());
+        args.push("--external-ref".to_string());
+        if ext.is_empty() {
+            // Use issue ID as unique sentinel to satisfy UNIQUE constraint
+            // Frontend filters out "cleared:" prefixes for display
+            args.push(format!("cleared:{}", id));
+        } else {
             args.push(ext.clone());
         }
     }
