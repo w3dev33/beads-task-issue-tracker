@@ -2,6 +2,11 @@
 
 All notable changes to Beads Task-Issue Tracker will be documented in this file.
 
+## [1.6.4] - 2026-01-29
+
+### Bug Fixes
+- **EPIC display issues**: Fixed missing EPIC ID in preview, improved children grouping display, and corrected border styling
+
 ## [1.6.3] - 2026-01-29
 
 ### Bug Fixes
