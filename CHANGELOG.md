@@ -2,6 +2,11 @@
 
 All notable changes to Beads Task-Issue Tracker will be documented in this file.
 
+## [1.6.2] - 2026-01-29
+
+### Bug Fixes
+- **External ref persistence**: Clearing the external_ref field now persists correctly using a sentinel value to satisfy the SQLite UNIQUE constraint
+
 ## [1.6.1] - 2026-01-29
 
 ### New Features
