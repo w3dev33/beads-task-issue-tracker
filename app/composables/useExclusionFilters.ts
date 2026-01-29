@@ -66,7 +66,11 @@ export function useExclusionFilters() {
   }
 
   const clearAll = () => {
-    exclusions.value = { ...defaultExclusions }
+    exclusions.value.status = []
+    exclusions.value.priority = []
+    exclusions.value.type = []
+    exclusions.value.labels = []
+    exclusions.value.assignee = []
   }
 
   // Clear project-specific exclusions (labels and assignees)
