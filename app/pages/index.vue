@@ -53,6 +53,7 @@ const {
   issues,
   filteredIssues,
   paginatedIssues,
+  groupedIssues,
   selectedIssue,
   isLoading,
   isUpdating,
@@ -920,6 +921,7 @@ watch(
           <IssueTable
             v-model:selected-ids="selectedIds"
             :issues="paginatedIssues"
+            :grouped-issues="groupedIssues"
             :columns="columns"
             :selected-id="selectedIssue?.id"
             :multi-select-mode="multiSelectMode"
@@ -1247,6 +1249,7 @@ watch(
             <IssueTable
               v-model:selected-ids="selectedIds"
               :issues="paginatedIssues"
+              :grouped-issues="groupedIssues"
               :columns="columns"
               :selected-id="selectedIssue?.id"
               :multi-select-mode="multiSelectMode"

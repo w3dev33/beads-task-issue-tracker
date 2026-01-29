@@ -20,14 +20,14 @@ defineEmits<{
         No issues ready to work on
       </div>
 
-      <div v-else class="space-y-2 pr-4">
+      <div v-else class="space-y-1 pr-4">
         <button
           v-for="issue in issues"
           :key="issue.id"
-          class="w-full text-left p-2 rounded hover:bg-secondary/50 transition-colors"
+          class="w-full text-left p-1.5 rounded hover:bg-secondary/50 transition-colors"
           @click="$emit('select', issue)"
         >
-          <div class="flex items-center gap-1.5 mb-1">
+          <div class="flex items-center gap-1.5 mb-0.5">
             <TypeBadge :type="issue.type" size="sm" />
             <PriorityBadge :priority="issue.priority" size="sm" />
             <span class="text-[10px] text-muted-foreground font-mono">{{ issue.id }}</span>

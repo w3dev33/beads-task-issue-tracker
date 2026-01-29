@@ -157,7 +157,7 @@ const formatEstimate = (minutes: number) => {
         <h4 class="text-[10px] font-medium text-muted-foreground uppercase tracking-wide group-hover:text-foreground transition-colors">Description</h4>
       </button>
       <div v-show="isDescriptionOpen" class="mt-1 pl-4.5">
-        <p class="text-xs whitespace-pre-wrap"><LinkifiedText :text="issue.description" fallback="No description provided." /></p>
+        <div class="text-xs"><LinkifiedText :text="issue.description" fallback="No description provided." /></div>
       </div>
     </div>
 
@@ -389,7 +389,7 @@ const formatEstimate = (minutes: number) => {
         <h4 class="text-[10px] font-medium text-muted-foreground uppercase tracking-wide group-hover:text-foreground transition-colors">Design Notes</h4>
       </button>
       <div v-show="isDesignNotesOpen" class="mt-1 pl-4.5">
-        <p class="text-xs whitespace-pre-wrap"><LinkifiedText :text="issue.designNotes" /></p>
+        <div class="text-xs"><LinkifiedText :text="issue.designNotes" /></div>
       </div>
     </div>
 
@@ -412,7 +412,7 @@ const formatEstimate = (minutes: number) => {
         <h4 class="text-[10px] font-medium text-muted-foreground uppercase tracking-wide group-hover:text-foreground transition-colors">Acceptance Criteria</h4>
       </button>
       <div v-show="isAcceptanceCriteriaOpen" class="mt-1 pl-4.5">
-        <p class="text-xs whitespace-pre-wrap"><LinkifiedText :text="issue.acceptanceCriteria" /></p>
+        <div class="text-xs"><LinkifiedText :text="issue.acceptanceCriteria" /></div>
       </div>
     </div>
 
@@ -435,7 +435,7 @@ const formatEstimate = (minutes: number) => {
         <h4 class="text-[10px] font-medium text-muted-foreground uppercase tracking-wide group-hover:text-foreground transition-colors">Working Notes</h4>
       </button>
       <div v-show="isWorkingNotesOpen" class="mt-1 pl-4.5">
-        <p class="text-xs whitespace-pre-wrap"><LinkifiedText :text="issue.workingNotes" /></p>
+        <div class="text-xs"><LinkifiedText :text="issue.workingNotes" /></div>
       </div>
     </div>
   </div>

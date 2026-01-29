@@ -1,6 +1,7 @@
 <script setup lang="ts">
 const props = defineProps<{
   value: string
+  displayValue?: string
 }>()
 
 const copied = ref(false)
@@ -22,10 +23,10 @@ const copyToClipboard = async (event: Event) => {
 <template>
   <button
     class="flex items-center gap-1 text-[10px] text-muted-foreground font-mono hover:text-foreground transition-colors"
-    title="Copy to clipboard"
+    :title="`Copy ${props.value}`"
     @click="copyToClipboard"
   >
-    {{ value }}
+    {{ displayValue ?? value }}
     <svg
       v-if="!copied"
       class="w-3 h-3"

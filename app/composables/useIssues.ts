@@ -1,6 +1,14 @@
 import type { Issue, CreateIssuePayload, UpdateIssuePayload } from '~/types/issue'
 import { bdList, bdCount, bdShow, bdCreate, bdUpdate, bdClose, bdDelete, bdAddComment, bdPurgeOrphanAttachments, type BdListOptions } from '~/utils/bd-api'
 
+// Interface for hierarchical grouping of epics and their children
+export interface IssueGroup {
+  epic: Issue | null  // null for orphan issues (no parent, not an epic)
+  children: Issue[]   // child issues of the epic
+  childCount: number
+  closedChildCount: number
+}
+
 // Shared state across all components (singleton pattern)
 const issues = ref<Issue[]>([])
 const selectedIssue = ref<Issue | null>(null)
@@ -178,6 +186,31 @@ export function useIssues() {
     chore: 4,
   }
 
+  // Natural sort comparison for IDs (handles multi-digit numbers correctly)
+  // e.g., "40b.2" < "40b.10" instead of "40b.10" < "40b.2"
+  const naturalCompare = (a: string, b: string): number => {
+    const aParts = a.split(/(\d+)/)
+    const bParts = b.split(/(\d+)/)
+
+    for (let i = 0; i < Math.max(aParts.length, bParts.length); i++) {
+      const aPart = aParts[i] || ''
+      const bPart = bParts[i] || ''
+
+      // Check if both parts are numeric
+      const aNum = parseInt(aPart, 10)
+      const bNum = parseInt(bPart, 10)
+
+      if (!isNaN(aNum) && !isNaN(bNum)) {
+        if (aNum !== bNum) return aNum - bNum
+      } else {
+        // String comparison
+        if (aPart < bPart) return -1
+        if (aPart > bPart) return 1
+      }
+    }
+    return 0
+  }
+
   // Computed for sorted issues (default: updatedAt DESC, null = no sort)
   const sortedIssues = computed(() => {
     // If no sort field, return unsorted
@@ -194,6 +227,9 @@ export function useIssues() {
       let bVal: string | number | null = null
 
       switch (field) {
+        case 'id':
+          // Use natural sort for IDs
+          return naturalCompare(a.id.toLowerCase(), b.id.toLowerCase()) * dir
         case 'status':
           aVal = statusOrder[a.status] ?? 99
           bVal = statusOrder[b.status] ?? 99
@@ -232,6 +268,110 @@ export function useIssues() {
   const paginatedIssues = computed(() => {
     const end = currentPage.value * pageSize.value
     return sortedIssues.value.slice(0, end)
+  })
+
+  // Helper to detect parent ID from child ID pattern (e.g., "beads-manager-40b.1" -> "beads-manager-40b")
+  const getParentId = (issueId: string): string | null => {
+    // Child IDs have pattern: {parent-id}.{number}
+    const lastDotIndex = issueId.lastIndexOf('.')
+    if (lastDotIndex === -1) return null
+
+    const suffix = issueId.slice(lastDotIndex + 1)
+    // Check if suffix is a number (child indicator)
+    if (/^\d+$/.test(suffix)) {
+      return issueId.slice(0, lastDotIndex)
+    }
+    return null
+  }
+
+  // Computed for hierarchical grouping of epics and their children
+  const groupedIssues = computed((): IssueGroup[] => {
+    const issueList = paginatedIssues.value
+    const allIssues = issues.value
+    const groups: IssueGroup[] = []
+    const processedIds = new Set<string>()
+
+    // Build maps for quick lookup
+    const filteredIssueMap = new Map<string, Issue>()
+    for (const issue of issueList) {
+      filteredIssueMap.set(issue.id, issue)
+    }
+
+    const allIssueMap = new Map<string, Issue>()
+    for (const issue of allIssues) {
+      allIssueMap.set(issue.id, issue)
+    }
+
+    // Find all children for each epic from the FULL list (for accurate counts)
+    const allEpicChildrenMap = new Map<string, Issue[]>()
+    for (const issue of allIssues) {
+      const parentId = getParentId(issue.id)
+      if (parentId) {
+        const parent = allIssueMap.get(parentId)
+        if (parent && parent.type === 'epic') {
+          if (!allEpicChildrenMap.has(parentId)) {
+            allEpicChildrenMap.set(parentId, [])
+          }
+          allEpicChildrenMap.get(parentId)!.push(issue)
+        }
+      }
+    }
+
+    // Find children that are in the filtered/paginated list (for display)
+    const filteredEpicChildrenMap = new Map<string, Issue[]>()
+    for (const issue of issueList) {
+      const parentId = getParentId(issue.id)
+      if (parentId) {
+        const parent = filteredIssueMap.get(parentId)
+        if (parent && parent.type === 'epic') {
+          if (!filteredEpicChildrenMap.has(parentId)) {
+            filteredEpicChildrenMap.set(parentId, [])
+          }
+          filteredEpicChildrenMap.get(parentId)!.push(issue)
+        }
+      }
+    }
+
+    // Create groups
+    for (const issue of issueList) {
+      if (processedIds.has(issue.id)) continue
+
+      const parentId = getParentId(issue.id)
+      const isChildOfEpic = parentId && filteredIssueMap.get(parentId)?.type === 'epic'
+
+      // Skip children - they will be added with their parent
+      if (isChildOfEpic) {
+        continue
+      }
+
+      // Check if this is an epic
+      if (issue.type === 'epic') {
+        const filteredChildren = filteredEpicChildrenMap.get(issue.id) || []
+        const allChildren = allEpicChildrenMap.get(issue.id) || []
+        const closedCount = allChildren.filter(c => c.status === 'closed').length
+
+        groups.push({
+          epic: issue,
+          children: filteredChildren,
+          childCount: allChildren.length,
+          closedChildCount: closedCount,
+        })
+        processedIds.add(issue.id)
+        filteredChildren.forEach(c => processedIds.add(c.id))
+      }
+      // Regular issue (not an epic, not a child of an epic in the filtered list)
+      else {
+        groups.push({
+          epic: null,
+          children: [issue],
+          childCount: 0,
+          closedChildCount: 0,
+        })
+        processedIds.add(issue.id)
+      }
+    }
+
+    return groups
   })
 
   const totalPages = computed(() =>
@@ -416,6 +556,7 @@ export function useIssues() {
     filteredIssues,
     sortedIssues,
     paginatedIssues,
+    groupedIssues,
     selectedIssue,
     isLoading,
     isUpdating,
