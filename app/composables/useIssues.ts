@@ -168,10 +168,10 @@ export function useIssues() {
       )
     }
 
-    // Apply client-side label filter (AND logic - issue must have ALL selected labels)
+    // Apply client-side label filter (OR logic - issue must have AT LEAST ONE selected label)
     if (filters.value.labels.length > 0) {
       result = result.filter((issue) =>
-        filters.value.labels.every(filterLabel =>
+        filters.value.labels.some(filterLabel =>
           issue.labels?.some(l => l.toLowerCase() === filterLabel.toLowerCase())
         )
       )
