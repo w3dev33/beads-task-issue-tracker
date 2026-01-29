@@ -2,6 +2,14 @@
 
 All notable changes to Beads Task-Issue Tracker will be documented in this file.
 
+## [1.6.1] - 2026-01-29
+
+### New Features
+- **Epic deletion confirmation**: Confirmation dialog when deleting an Epic with options for handling child issues
+
+### Bug Fixes
+- **Sticky table header**: Table header now stays fixed at top when scrolling through issues
+
 ## [1.6.0] - 2026-01-29
 
 ### New Features
