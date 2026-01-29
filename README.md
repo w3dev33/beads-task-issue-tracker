@@ -2,7 +2,7 @@
 
 A lightweight, standalone desktop application for managing [Beads](https://github.com/steveyegge/beads) issues outside of your IDE.
 
-![Beads Task-Issue Tracker](docs/screenshots/app-overview.png)
+![Beads Task-Issue Tracker](docs/screenshots/app-overview-1.6.1.png)
 
 ## Why This App?
 
@@ -20,19 +20,16 @@ This project is a reimplementation of the Beads UI as a native desktop app using
 
 ## Features
 
-Core features from the original VS Code extension:
-- **Dashboard**: Overview of issue counts by status, type, and priority
-- **Issue List**: Filterable, sortable table with quick actions
-- **Issue Details**: Full view with description, comments, and metadata
-- **Create/Edit Issues**: Complete form with all Beads fields
-- **Comments**: Add and view comments on issues
-- **Search**: Filter issues by title, ID, or description
+- **Dashboard**: Visual overview of issues by status, type, and priority
+- **Issue Management**: Create, edit, close, and comment on issues
+- **Epic Hierarchy**: Parent/child relationships with collapsible groups and progress tracking
+- **Advanced Filters**: Multi-select filters by type, status, priority, labels, and assignee
+- **Exclusion Filters**: Hide specific issues from view
+- **Image Attachments**: Attach and preview screenshots directly in issues
+- **Multi-Project Support**: Save favorite projects and switch between them instantly
+- **Search**: Find issues by title, ID, or description
 - **Dark/Light Theme**: Toggle via settings
-
-Additional features:
-- **Multi-Project Favorites**: Save multiple project paths and quickly switch between them — perfect for managing issues across several local repositories
-- **Project Browser**: Navigate your filesystem to find and select Beads projects
-- **Lightweight Sync**: Automatic synchronization with Beads database every 5 seconds, minimizing CPU usage while keeping data up-to-date
+- **Auto-Sync**: Background synchronization with the Beads database
 
 ## My Workflow
 
