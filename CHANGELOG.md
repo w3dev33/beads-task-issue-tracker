@@ -2,6 +2,11 @@
 
 All notable changes to Beads Task-Issue Tracker will be documented in this file.
 
+## [1.6.3] - 2026-01-29
+
+### Bug Fixes
+- **Label filter OR logic**: When filtering by multiple labels, issues now show if they have at least one of the selected labels instead of requiring all labels
+
 ## [1.6.2] - 2026-01-29
 
 ### Bug Fixes
