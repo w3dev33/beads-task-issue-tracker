@@ -274,6 +274,7 @@ pub struct CreatePayload {
     pub acceptance_criteria: Option<String>,
     #[serde(rename = "workingNotes")]
     pub working_notes: Option<String>,
+    pub parent: Option<String>, // Parent epic ID for hierarchical child
     pub cwd: Option<String>,
 }
 
@@ -297,6 +298,7 @@ pub struct UpdatePayload {
     pub acceptance_criteria: Option<String>,
     #[serde(rename = "workingNotes")]
     pub working_notes: Option<String>,
+    pub parent: Option<String>, // Some("") to detach, Some("id") to attach
     pub cwd: Option<String>,
 }
 
@@ -779,6 +781,12 @@ async fn bd_create(payload: CreatePayload) -> Result<Option<Issue>, String> {
         args.push("--notes".to_string());
         args.push(notes.clone());
     }
+    if let Some(ref parent) = payload.parent {
+        if !parent.is_empty() {
+            args.push("--parent".to_string());
+            args.push(parent.clone());
+        }
+    }
 
     let output = execute_bd("create", &args, payload.cwd.as_deref())?;
 
@@ -825,9 +833,12 @@ async fn bd_update(id: String, updates: UpdatePayload) -> Result<Option<Issue>, 
         args.push(labels.join(","));
     }
     if let Some(ref ext) = updates.external_ref {
-        args.push("--external-ref".to_string());
-        // Pass empty string as empty quotes to bd CLI
-        args.push(ext.clone());
+        // Only send --external-ref if it has a value (not empty)
+        // Empty external_ref causes UNIQUE constraint issues in bd
+        if !ext.is_empty() {
+            args.push("--external-ref".to_string());
+            args.push(ext.clone());
+        }
     }
     if let Some(est) = updates.estimate_minutes {
         args.push("--estimate".to_string());
@@ -844,6 +855,10 @@ async fn bd_update(id: String, updates: UpdatePayload) -> Result<Option<Issue>, 
     if let Some(ref notes) = updates.working_notes {
         args.push("--notes".to_string());
         args.push(notes.clone());
+    }
+    if let Some(ref parent) = updates.parent {
+        args.push("--parent".to_string());
+        args.push(parent.clone());
     }
 
     log::info!("[bd_update] Executing: bd update {}", args.join(" "));

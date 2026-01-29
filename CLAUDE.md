@@ -177,6 +177,36 @@ The Rust backend exposes these commands to the frontend:
 
 **Important**: All `bd` CLI calls go through the Rust backend (no Nitro server in production). The wrapper `app/utils/bd-api.ts` handles the Tauri invoke calls.
 
+## Known Issues & Gotchas
+
+### bd CLI: UNIQUE constraint on external_ref
+
+The `bd` CLI has a **UNIQUE constraint** on the `external_ref` field. This causes issues when:
+- Sending `--external-ref ""` (empty string) in update commands
+- Multiple issues would have the same empty external_ref value
+
+**What external_ref is used for:**
+- **Attached images/files**: Paths to images attached to issues (stored in `.beads/attachments/{issue-id}/`). Multiple paths are separated by newlines.
+- **Redmine IDs**: When importing issues from Redmine, the original Redmine bug/issue ID is stored here for traceability.
+- **External references**: Any external system reference (URLs, ticket IDs from other trackers, etc.)
+
+**Solution in code**: In `src-tauri/src/lib.rs`, the `bd_update` function skips sending `--external-ref` when the value is empty:
+```rust
+if let Some(ref ext) = updates.external_ref {
+    if !ext.is_empty() {
+        args.push("--external-ref".to_string());
+        args.push(ext.clone());
+    }
+}
+```
+
+**Impact**: If a bd update command fails silently, check if `--external-ref ""` is being passed. This error can cause the entire update to fail, including other fields like `--parent`.
+
+**Caution**: When modifying code that handles `external_ref`:
+- Never clear it blindly - it may contain important attachment paths or external IDs
+- When detaching images, update the field by removing only the specific path, not the entire content
+- The field uses newline-separated values for multiple references
+
 ## Allowed Paths
 
 The following paths should always be accessible without asking for permission:

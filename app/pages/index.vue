@@ -441,6 +441,7 @@ const handleCancelEdit = () => {
   if (isCreatingNew.value) {
     selectedIssue.value = null
     isRightSidebarOpen.value = false
+    defaultParent.value = undefined
   }
   isEditMode.value = false
   isCreatingNew.value = false
@@ -449,6 +450,8 @@ const handleCancelEdit = () => {
 const handleSaveIssue = async (payload: UpdateIssuePayload) => {
   try {
     if (isCreatingNew.value) {
+      // Use the parent from payload (set in form) or from defaultParent (set via create-child)
+      const parentId = payload.parent || defaultParent.value
       const result = await createIssue({
         title: payload.title || '',
         description: payload.description,
@@ -461,6 +464,7 @@ const handleSaveIssue = async (payload: UpdateIssuePayload) => {
         designNotes: payload.designNotes,
         acceptanceCriteria: payload.acceptanceCriteria,
         workingNotes: payload.workingNotes,
+        parent: parentId || undefined,
       })
       if (result) {
         selectIssue(result)
@@ -468,6 +472,7 @@ const handleSaveIssue = async (payload: UpdateIssuePayload) => {
         await fetchIssue(result.id)
         notifySuccess('Issue created')
       }
+      defaultParent.value = undefined
     } else if (selectedIssue.value) {
       await updateIssue(selectedIssue.value.id, payload)
       // Fetch full issue details to get comments and all fields
@@ -715,6 +720,28 @@ const availableAssignees = computed(() => {
   })
   return Array.from(assigneeSet).sort()
 })
+
+// Available epics for parent selector (only non-closed epics)
+const availableEpics = computed(() => {
+  return issues.value
+    .filter(issue => issue.type === 'epic' && issue.status !== 'closed')
+    .map(issue => ({ id: issue.id, title: issue.title }))
+})
+
+// Default parent for new issues (set when creating child from epic)
+const defaultParent = ref<string | undefined>(undefined)
+
+const handleCreateChild = (parentId: string) => {
+  defaultParent.value = parentId
+  selectIssue(null)
+  isCreatingNew.value = true
+  isEditMode.value = true
+  if (isMobileView.value) {
+    mobilePanel.value = 'details'
+  } else {
+    isRightSidebarOpen.value = true
+  }
+}
 
 const handleRemoveLabelFilter = (label: string) => {
   toggleLabelFilter(label)
@@ -1090,6 +1117,8 @@ watch(
               :issue="isCreatingNew ? null : selectedIssue"
               :is-new="isCreatingNew"
               :is-saving="isUpdating"
+              :available-epics="availableEpics"
+              :default-parent="defaultParent"
               @save="handleSaveIssue"
               @cancel="handleCancelEdit"
             />
@@ -1105,6 +1134,7 @@ watch(
                   @navigate-to-issue="handleNavigateToIssue"
                   @attach-image="handleAttachImage"
                   @detach-image="confirmDetachImage"
+                  @create-child="handleCreateChild"
                 />
                 <CommentSection
                   class="mt-3"
@@ -1377,6 +1407,8 @@ watch(
             :issue="isCreatingNew ? null : selectedIssue"
             :is-new="isCreatingNew"
             :is-saving="isUpdating"
+            :available-epics="availableEpics"
+            :default-parent="defaultParent"
             @save="handleSaveIssue"
             @cancel="handleCancelEdit"
           />
@@ -1392,6 +1424,7 @@ watch(
                 @navigate-to-issue="handleNavigateToIssue"
                 @attach-image="handleAttachImage"
                 @detach-image="confirmDetachImage"
+                @create-child="handleCreateChild"
               />
               <CommentSection
                 class="mt-3"

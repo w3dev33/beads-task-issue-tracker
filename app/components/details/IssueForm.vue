@@ -15,10 +15,17 @@ import {
   SelectValue,
 } from '~/components/ui/select'
 
+interface EpicOption {
+  id: string
+  title: string
+}
+
 const props = defineProps<{
   issue?: Issue | null
   isNew?: boolean
   isSaving?: boolean
+  availableEpics?: EpicOption[]
+  defaultParent?: string
 }>()
 
 const { beadsPath } = useBeadsPath()
@@ -51,6 +58,7 @@ const form = reactive({
   designNotes: props.issue?.designNotes || '',
   acceptanceCriteria: props.issue?.acceptanceCriteria || '',
   workingNotes: props.issue?.workingNotes || '',
+  parent: props.issue?.parent?.id || props.defaultParent || '',
 })
 
 watch(
@@ -69,6 +77,17 @@ watch(
       form.designNotes = newIssue.designNotes || ''
       form.acceptanceCriteria = newIssue.acceptanceCriteria || ''
       form.workingNotes = newIssue.workingNotes || ''
+      form.parent = newIssue.parent?.id || ''
+    }
+  }
+)
+
+// When defaultParent changes (e.g., when creating child from epic), update form
+watch(
+  () => props.defaultParent,
+  (newParent) => {
+    if (props.isNew && newParent) {
+      form.parent = newParent
     }
   }
 )
@@ -109,7 +128,30 @@ const priorityOptions: { value: IssuePriority; label: string }[] = [
   { value: 'p4', label: 'P4 - Minimal' },
 ]
 
+// Special value for "no parent" since SelectItem doesn't allow empty string
+const NO_PARENT_VALUE = '__none__'
+
+// Filter out current issue from available epics (can't be parent of itself)
+const filteredEpics = computed(() => {
+  if (!props.availableEpics) return []
+  if (!props.issue?.id) return props.availableEpics
+  return props.availableEpics.filter(epic => epic.id !== props.issue?.id)
+})
+
+// Convert form.parent for display (empty string -> NO_PARENT_VALUE)
+const parentSelectValue = computed({
+  get: () => form.parent || NO_PARENT_VALUE,
+  set: (val: string) => {
+    form.parent = val === NO_PARENT_VALUE ? '' : val
+  }
+})
+
 const handleSubmit = () => {
+  // Determine parent value:
+  // - Empty string "" means detach (pass empty to bd CLI)
+  // - Non-empty string means attach to that epic
+  const parentValue = form.parent.trim()
+
   const payload: UpdateIssuePayload = {
     title: form.title,
     description: form.description,
@@ -123,6 +165,7 @@ const handleSubmit = () => {
     designNotes: form.designNotes,
     acceptanceCriteria: form.acceptanceCriteria,
     workingNotes: form.workingNotes,
+    parent: parentValue, // Empty string to detach, epic ID to attach
   }
   emit('save', payload)
 }
@@ -235,6 +278,28 @@ const attachImage = async () => {
                 class="text-xs"
               >
                 {{ opt.label }}
+              </SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div v-if="filteredEpics.length > 0 && form.type !== 'epic'" class="flex items-center gap-1.5">
+          <Label for="parent" class="text-[10px] uppercase tracking-wide text-sky-400 whitespace-nowrap">Parent</Label>
+          <Select v-model="parentSelectValue">
+            <SelectTrigger class="h-7 text-xs w-40">
+              <SelectValue placeholder="No parent" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__none__" class="text-xs text-muted-foreground">
+                No parent
+              </SelectItem>
+              <SelectItem
+                v-for="epic in filteredEpics"
+                :key="epic.id"
+                :value="epic.id"
+                class="text-xs"
+              >
+                {{ epic.id }} - {{ epic.title.slice(0, 20) }}{{ epic.title.length > 20 ? '...' : '' }}
               </SelectItem>
             </SelectContent>
           </Select>

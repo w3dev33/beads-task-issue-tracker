@@ -86,6 +86,7 @@ export interface CreateIssuePayload {
   designNotes?: string
   acceptanceCriteria?: string
   workingNotes?: string
+  parent?: string // Parent epic ID for hierarchical child
 }
 
 export interface UpdateIssuePayload {
@@ -101,6 +102,7 @@ export interface UpdateIssuePayload {
   designNotes?: string
   acceptanceCriteria?: string
   workingNotes?: string
+  parent?: string | null // null or empty string to detach, string ID to attach
 }
 
 export interface CollapsibleState {

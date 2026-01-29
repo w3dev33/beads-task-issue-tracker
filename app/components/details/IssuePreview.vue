@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ImageIcon } from 'lucide-vue-next'
+import { ImageIcon, Plus } from 'lucide-vue-next'
 import type { Issue } from '~/types/issue'
 import { Badge } from '~/components/ui/badge'
 import { Button } from '~/components/ui/button'
@@ -51,6 +51,7 @@ const emit = defineEmits<{
   'navigate-to-issue': [id: string]
   'attach-image': [path: string]
   'detach-image': [path: string]
+  'create-child': [parentId: string]
 }>()
 
 // Collapsible section states (all open by default)
@@ -196,41 +197,57 @@ const formatEstimate = (minutes: number) => {
       </div>
     </div>
 
-    <!-- Children Section (only if exists) -->
-    <div v-if="issue.children?.length">
-      <button
-        class="flex items-center gap-1.5 w-full text-left group"
-        @click="isChildrenOpen = !isChildrenOpen"
-      >
-        <svg
-          class="w-3 h-3 text-muted-foreground transition-transform"
-          :class="{ '-rotate-90': !isChildrenOpen }"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
+    <!-- Children Section (for epics, always show; for others, only if has children) -->
+    <div v-if="issue.type === 'epic' || issue.children?.length">
+      <div class="flex items-center justify-between">
+        <button
+          class="flex items-center gap-1.5 text-left group"
+          @click="isChildrenOpen = !isChildrenOpen"
         >
-          <polyline points="6 9 12 15 18 9" />
-        </svg>
-        <h4 class="text-[10px] font-medium text-muted-foreground uppercase tracking-wide group-hover:text-foreground transition-colors">Children</h4>
-        <span class="text-[10px] text-muted-foreground">({{ issue.children.length }})</span>
-      </button>
+          <svg
+            class="w-3 h-3 text-muted-foreground transition-transform"
+            :class="{ '-rotate-90': !isChildrenOpen }"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <polyline points="6 9 12 15 18 9" />
+          </svg>
+          <h4 class="text-[10px] font-medium text-muted-foreground uppercase tracking-wide group-hover:text-foreground transition-colors">Children</h4>
+          <span v-if="issue.children?.length" class="text-[10px] text-muted-foreground">({{ issue.children.length }})</span>
+        </button>
+        <Button
+          v-if="issue.type === 'epic' && !readonly"
+          type="button"
+          variant="outline"
+          size="sm"
+          class="h-5 px-1.5 text-[10px] hover:bg-sky-500/20 hover:border-sky-500 hover:text-sky-400 active:scale-95 active:bg-sky-500/30 transition-all"
+          @click="emit('create-child', issue.id)"
+        >
+          <Plus class="w-3 h-3 mr-1" />
+          Create child
+        </Button>
+      </div>
       <div v-show="isChildrenOpen" class="mt-1 pl-4.5 space-y-0.5">
-        <div
-          v-for="child in issue.children"
-          :key="child.id"
-          class="flex items-center justify-between gap-2 py-1 cursor-pointer hover:bg-muted/50 rounded px-1 -mx-1"
-          @click="emit('navigate-to-issue', child.id)"
-        >
-          <div class="flex items-center gap-2 min-w-0">
-            <span class="text-xs text-sky-400 hover:underline font-mono shrink-0">{{ child.id }}</span>
-            <span class="text-xs truncate">{{ child.title }}</span>
+        <template v-if="issue.children?.length">
+          <div
+            v-for="child in issue.children"
+            :key="child.id"
+            class="flex items-center justify-between gap-2 py-1 cursor-pointer hover:bg-muted/50 rounded px-1 -mx-1"
+            @click="emit('navigate-to-issue', child.id)"
+          >
+            <div class="flex items-center gap-2 min-w-0">
+              <span class="text-xs text-sky-400 hover:underline font-mono shrink-0">{{ child.id }}</span>
+              <span class="text-xs truncate">{{ child.title }}</span>
+            </div>
+            <div class="flex items-center gap-1 shrink-0">
+              <StatusBadge :status="child.status" size="sm" />
+              <PriorityBadge :priority="child.priority" size="sm" />
+            </div>
           </div>
-          <div class="flex items-center gap-1 shrink-0">
-            <StatusBadge :status="child.status" size="sm" />
-            <PriorityBadge :priority="child.priority" size="sm" />
-          </div>
-        </div>
+        </template>
+        <p v-else class="text-xs text-muted-foreground">No children yet</p>
       </div>
     </div>
 
