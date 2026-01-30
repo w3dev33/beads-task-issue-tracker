@@ -2,7 +2,7 @@
 
 A lightweight, standalone desktop application for managing [Beads](https://github.com/steveyegge/beads) issues outside of your IDE.
 
-![Beads Task-Issue Tracker](docs/screenshots/app-overview-1.6.1.png)
+![Beads Task-Issue Tracker](docs/screenshots/app-overview-1.6.4.png)
 
 ## Why This App?
 
