@@ -52,7 +52,7 @@ Beyond just viewing issues, this app is part of a broader development workflow p
 
    ```bash
    # Quick install (check the repo for the latest method)
-   curl -fsSL https://beads.dev/install.sh | sh
+   curl -fsSL https://raw.githubusercontent.com/steveyegge/beads/main/scripts/install.sh | bash
    ```
 
 2. **Initialize Beads in your project**
