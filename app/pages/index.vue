@@ -65,6 +65,7 @@ const {
   selectedIssue,
   isLoading,
   isUpdating,
+  error: issueError,
   // Pagination
   hasMore,
   loadMore,
@@ -725,16 +726,30 @@ const handleDeleteIssue = async () => {
 
 const confirmDelete = async () => {
   isDeleting.value = true
+  let hasError = false
   try {
     if (multiSelectMode.value && selectedIds.value.length > 0) {
+      const successfullyDeleted: string[] = []
       for (const id of selectedIds.value) {
-        await deleteIssue(id)
+        const success = await deleteIssue(id)
+        if (!success) {
+          hasError = true
+          notifyError('Failed to delete issue', issueError.value || `Could not delete ${id}`)
+        } else {
+          successfullyDeleted.push(id)
+        }
       }
-      selectedIds.value = []
+      // Only remove successfully deleted items from selection
+      selectedIds.value = selectedIds.value.filter(id => !successfullyDeleted.includes(id))
     } else if (selectedIssue.value) {
-      await deleteIssue(selectedIssue.value.id)
-      isEditMode.value = false
-      isCreatingNew.value = false
+      const success = await deleteIssue(selectedIssue.value.id)
+      if (!success) {
+        hasError = true
+        notifyError('Failed to delete issue', issueError.value || 'Could not delete the issue')
+      } else {
+        isEditMode.value = false
+        isCreatingNew.value = false
+      }
     }
     await fetchStats(issues.value)
   } finally {
@@ -746,6 +761,7 @@ const confirmDelete = async () => {
 const confirmEpicDelete = async (mode: 'delete-all' | 'detach') => {
   if (!epicToDelete.value) return
   isDeletingEpic.value = true
+  let hasError = false
 
   try {
     if (mode === 'detach') {
@@ -756,20 +772,28 @@ const confirmEpicDelete = async (mode: 'delete-all' | 'detach') => {
     } else {
       // Delete all children first
       for (const child of epicChildren.value) {
-        await deleteIssue(child.id)
+        const success = await deleteIssue(child.id)
+        if (!success) {
+          hasError = true
+          notifyError('Failed to delete child issue', issueError.value || `Could not delete ${child.id}`)
+        }
       }
     }
     // Then delete the epic
-    await deleteIssue(epicToDelete.value.id)
+    const epicSuccess = await deleteIssue(epicToDelete.value.id)
+    if (!epicSuccess) {
+      hasError = true
+      notifyError('Failed to delete issue', issueError.value || `Could not delete ${epicToDelete.value.id}`)
+    }
 
-    // Clear selection if deleted epic was selected
-    if (selectedIssue.value?.id === epicToDelete.value.id) {
+    // Clear selection if deleted epic was selected (only if successful)
+    if (epicSuccess && selectedIssue.value?.id === epicToDelete.value.id) {
       isEditMode.value = false
       isCreatingNew.value = false
     }
 
-    // Remove the epic ID from selectedIds if in multi-select mode
-    if (multiSelectMode.value) {
+    // Remove the epic ID from selectedIds if in multi-select mode (only if successful)
+    if (epicSuccess && multiSelectMode.value) {
       selectedIds.value = selectedIds.value.filter(id => id !== epicToDelete.value?.id)
     }
 
@@ -791,10 +815,18 @@ const confirmEpicDelete = async (mode: 'delete-all' | 'detach') => {
         return // Keep dialog open for next epic
       } else {
         // No more epics with children, delete remaining issues
+        const successfullyDeleted: string[] = []
         for (const id of remainingDeleteIds.value) {
-          await deleteIssue(id)
+          const success = await deleteIssue(id)
+          if (!success) {
+            hasError = true
+            notifyError('Failed to delete issue', issueError.value || `Could not delete ${id}`)
+          } else {
+            successfullyDeleted.push(id)
+          }
         }
-        selectedIds.value = []
+        // Only clear successfully deleted items from selection
+        selectedIds.value = selectedIds.value.filter(id => !successfullyDeleted.includes(id))
       }
     }
 
