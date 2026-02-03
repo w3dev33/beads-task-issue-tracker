@@ -43,6 +43,33 @@ const expandEpic = (epicId: string) => {
   expandedEpics.value[epicId] = true
 }
 
+/**
+ * Deduplicate issues by ID, keeping the most recently updated version.
+ * Handles edge cases where an issue appears in both open and closed lists
+ * (e.g., when reopened externally and sync/caches are out of sync).
+ */
+function deduplicateIssues(issues: Issue[]): Issue[] {
+  const issueMap = new Map<string, Issue>()
+
+  for (const issue of issues) {
+    const existing = issueMap.get(issue.id)
+
+    if (!existing) {
+      issueMap.set(issue.id, issue)
+    } else {
+      // Keep the one with the most recent updatedAt
+      const existingDate = new Date(existing.updatedAt).getTime()
+      const currentDate = new Date(issue.updatedAt).getTime()
+
+      if (currentDate > existingDate) {
+        issueMap.set(issue.id, issue)
+      }
+    }
+  }
+
+  return Array.from(issueMap.values())
+}
+
 export function useIssues() {
   const { filters } = useFilters()
   const { beadsPath } = useBeadsPath()
@@ -68,7 +95,8 @@ export function useIssues() {
         bdList({ path, status: ['closed'] }),
       ])
 
-      const newIssues = [...(openIssues || []), ...(closedIssues || [])]
+      const mergedIssues = [...(openIssues || []), ...(closedIssues || [])]
+      const newIssues = deduplicateIssues(mergedIssues)
 
       // Only update if data actually changed (compare by serialization)
       const currentSignature = JSON.stringify(issues.value.map(i => i.id + i.updatedAt))
