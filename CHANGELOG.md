@@ -2,6 +2,17 @@
 
 All notable changes to Beads Task-Issue Tracker will be documented in this file.
 
+## [1.6.5] - 2026-02-03
+
+### Bug Fixes
+- **Permanent issue deletion**: Issues now use `--force --hard` flags for permanent deletion, preventing deleted issues from reappearing after sync
+- **Delete error notification**: Show error notification when issue deletion fails
+- **Filter dropdown behavior**: Exclusion dropdown now properly closes other filter dropdowns
+- **Duplicate issues**: Fixed deduplication when merging open/closed issue lists
+
+### Improvements
+- **Documentation**: Updated CLAUDE.md with dev server instance management instructions
+
 ## [1.6.4] - 2026-01-29
 
 ### Bug Fixes
