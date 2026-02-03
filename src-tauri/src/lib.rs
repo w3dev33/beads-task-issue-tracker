@@ -737,6 +737,7 @@ async fn bd_show(id: String, options: CwdOptions) -> Result<Option<Issue>, Strin
 
 #[tauri::command]
 async fn bd_create(payload: CreatePayload) -> Result<Option<Issue>, String> {
+    log_info!("[bd_create] Creating issue: {:?}", payload.title);
     let mut args: Vec<String> = vec![payload.title.clone()];
 
     if let Some(ref desc) = payload.description {
@@ -942,7 +943,11 @@ async fn bd_close(id: String, options: CwdOptions) -> Result<serde_json::Value, 
 
 #[tauri::command]
 async fn bd_delete(id: String, options: CwdOptions) -> Result<serde_json::Value, String> {
-    execute_bd("delete", &[id.clone(), "--force".to_string()], options.cwd.as_deref())?;
+    log::info!("[bd_delete] Deleting issue: {} with --force --hard", id);
+    execute_bd("delete", &[id.clone(), "--force".to_string(), "--hard".to_string()], options.cwd.as_deref())?;
+
+    // Sync after delete to push deletion to remote and prevent resurrection
+    sync_bd_database(options.cwd.as_deref());
 
     // Clean up attachments folder for this issue
     let project_path = options.cwd.as_deref().unwrap_or(".");

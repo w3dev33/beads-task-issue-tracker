@@ -167,6 +167,18 @@ pnpm tauri:dev    # Development with hot reload (runs Nuxt + Tauri)
 pnpm tauri:build  # Build production app (DMG on macOS, MSI on Windows)
 ```
 
+**CRITICAL - Before Starting Dev Server**:
+Always kill any existing dev server instances of **this application** before starting a new one. Zombie dev processes can cause duplicate issues, phantom data, and unpredictable behavior.
+
+```bash
+# Kill existing beads-issue-tracker dev instances first
+pkill -f "beads-issue-tracker" 2>/dev/null
+# Then start fresh
+pnpm tauri:dev
+```
+
+This prevents issues caused by multiple dev instances sharing the same `.beads` database.
+
 ### Tauri Commands Available
 
 The Rust backend exposes these commands to the frontend:
@@ -216,11 +228,20 @@ This allows users to clear the field while avoiding the SQLite UNIQUE constraint
 - When detaching images, update the field by removing only the specific path, not the entire content
 - The field uses newline-separated values for multiple references
 
-## Allowed Paths
+## Allowed Paths (NO PERMISSION REQUIRED)
 
-The following paths should always be accessible without asking for permission:
-- `.claude/` - Session stats, plans, and other Claude-related files
-- `.beads/` - Issue tracker files
+**CRITICAL**: The following paths have PERMANENT permission granted. Claude Code must NEVER ask for permission to read, write, or execute commands in these directories:
+
+- `.claude/` - Session stats, plans, issue tracking stats, and other Claude-related files
+- `.beads/` - Issue tracker files managed by bd CLI
+
+This includes ALL operations:
+- Reading files (`cp`, `cat`, file reads)
+- Writing files (creating, editing, copying)
+- Running `bd` commands that interact with `.beads/`
+- Any bash command targeting these directories
+
+**Do not prompt the user for permission for these paths - permission is already granted.**
 
 ## Plan Mode
 
