@@ -24,6 +24,7 @@ import { Button } from '~/components/ui/button'
 defineProps<{
   availableLabels: string[]
   availableAssignees: string[]
+  open?: boolean
 }>()
 
 const { exclusions, toggleStatus, togglePriority, toggleType, toggleLabel, toggleAssignee, clearAll, activeCount } = useExclusionFilters()
@@ -79,7 +80,7 @@ const isAssigneeExcluded = (assignee: string) => exclusions.value.assignee.inclu
 
 <template>
   <Tooltip>
-    <DropdownMenu>
+    <DropdownMenu :open="open" :modal="false">
       <TooltipTrigger as-child>
         <DropdownMenuTrigger as-child>
           <Button variant="outline" size="icon" class="h-8 w-8 relative">

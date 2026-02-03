@@ -46,7 +46,7 @@ defineEmits<{
 }>()
 
 // Track which filter dropdown is currently open (exclusive group)
-type FilterType = 'type' | 'label' | 'status' | 'priority' | 'assignee' | null
+type FilterType = 'type' | 'label' | 'status' | 'priority' | 'assignee' | 'exclusion' | null
 const activeFilter = ref<FilterType>(null)
 
 // Ref for the filter buttons container
@@ -162,10 +162,13 @@ const handleFilterClick = (filter: FilterType) => {
           />
         </div>
 
-        <ExclusionFilterDropdown
-          :available-labels="availableLabels"
-          :available-assignees="availableAssignees"
-        />
+        <div @pointerdown.capture="handleFilterClick('exclusion')">
+          <ExclusionFilterDropdown
+            :available-labels="availableLabels"
+            :available-assignees="availableAssignees"
+            :open="activeFilter === 'exclusion'"
+          />
+        </div>
       </div>
 
     <Button
