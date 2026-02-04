@@ -2,6 +2,16 @@
 
 All notable changes to Beads Task-Issue Tracker will be documented in this file.
 
+## [1.7.0] - 2026-02-04
+
+### New Features
+- **Per-project settings isolation**: Filters, column configuration, expanded epics, and collapsible section states are now stored per project using localStorage namespacing with djb2 hash
+- **Multi-image navigation**: Preview modal now supports navigating between multiple attached images
+
+### Improvements
+- **Image thumbnails**: Reduced thumbnail size to 180px for better layout
+- **Preview sections**: 11 collapsible sections in issue preview now persist state per project
+
 ## [1.6.5] - 2026-02-03
 
 ### Bug Fixes
