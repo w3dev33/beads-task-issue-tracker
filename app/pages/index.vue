@@ -1793,6 +1793,12 @@ watch(
       v-model:open="imagePreview.isOpen.value"
       :image-src="imagePreview.imageSrc.value"
       :image-alt="imagePreview.imageAlt.value"
+      :has-multiple-images="imagePreview.hasMultipleImages.value"
+      :can-go-next="imagePreview.canGoNext.value"
+      :can-go-prev="imagePreview.canGoPrev.value"
+      :image-counter="imagePreview.imageCounter.value"
+      @next="imagePreview.goNext"
+      @prev="imagePreview.goPrev"
     />
   </div>
 </template>

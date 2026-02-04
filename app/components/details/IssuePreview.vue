@@ -16,13 +16,23 @@ const props = defineProps<{
 }>()
 
 const { beadsPath } = useBeadsPath()
-const { openImage } = useImagePreview()
+const { openGallery } = useImagePreview()
 
 // Extract images from externalRef
 const attachedImages = computed(() => extractImagesFromExternalRef(props.issue.externalRef))
 
 // Extract non-image external references (URLs, IDs)
 const nonImageRefs = computed(() => extractNonImageRefs(props.issue.externalRef))
+
+// Prepare images with full paths for gallery (exclude URLs)
+const preparedImages = computed(() =>
+  attachedImages.value
+    .filter(img => !isUrl(img.src))
+    .map(img => ({
+      path: img.src.startsWith('/') ? img.src : `${beadsPath.value}/.beads/${img.src}`,
+      alt: img.alt,
+    })),
+)
 
 const handleImageClick = async (src: string, alt: string) => {
   // For URLs, open in browser
@@ -31,9 +41,10 @@ const handleImageClick = async (src: string, alt: string) => {
     await open(src)
     return
   }
-  // For local paths, open in preview modal
+  // For local paths, open in gallery
   const fullPath = src.startsWith('/') ? src : `${beadsPath.value}/.beads/${src}`
-  openImage(fullPath, alt)
+  const clickedIndex = preparedImages.value.findIndex(img => img.path === fullPath)
+  openGallery(preparedImages.value, clickedIndex >= 0 ? clickedIndex : 0)
 }
 
 const attachImage = async () => {
