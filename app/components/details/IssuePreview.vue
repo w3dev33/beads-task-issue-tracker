@@ -94,18 +94,60 @@ const sortedChildren = computed(() => {
   )
 })
 
-// Collapsible section states (all open by default)
-const isAttachmentsOpen = ref(true)
-const isDescriptionOpen = ref(true)
-const isParentOpen = ref(true)
-const isChildrenOpen = ref(true)
-const isDetailsOpen = ref(true)
-const isDependenciesOpen = ref(true)
-const isExternalRefOpen = ref(true)
-const isEstimateOpen = ref(true)
-const isDesignNotesOpen = ref(true)
-const isAcceptanceCriteriaOpen = ref(true)
-const isWorkingNotesOpen = ref(true)
+// Collapsible section states (persisted per project, all open by default)
+interface PreviewCollapsedState {
+  attachments: boolean
+  description: boolean
+  parent: boolean
+  children: boolean
+  details: boolean
+  dependencies: boolean
+  externalRef: boolean
+  estimate: boolean
+  designNotes: boolean
+  acceptanceCriteria: boolean
+  workingNotes: boolean
+}
+
+const defaultCollapsedState: PreviewCollapsedState = {
+  attachments: true,
+  description: true,
+  parent: true,
+  children: true,
+  details: true,
+  dependencies: true,
+  externalRef: true,
+  estimate: true,
+  designNotes: true,
+  acceptanceCriteria: true,
+  workingNotes: true,
+}
+
+const previewSections = useProjectStorage<PreviewCollapsedState>('previewSections', defaultCollapsedState)
+
+// Toggle functions for each section
+const toggleSection = (section: keyof PreviewCollapsedState) => {
+  const newValue = {
+    ...previewSections.value,
+    [section]: !previewSections.value[section],
+  }
+  previewSections.value = newValue
+  // Explicitly save since watcher doesn't trigger reliably
+  saveProjectValue('previewSections', newValue)
+}
+
+// Direct getters for template (no computed writable - better reactivity)
+const isAttachmentsOpen = computed(() => previewSections.value.attachments)
+const isDescriptionOpen = computed(() => previewSections.value.description)
+const isParentOpen = computed(() => previewSections.value.parent)
+const isChildrenOpen = computed(() => previewSections.value.children)
+const isDetailsOpen = computed(() => previewSections.value.details)
+const isDependenciesOpen = computed(() => previewSections.value.dependencies)
+const isExternalRefOpen = computed(() => previewSections.value.externalRef)
+const isEstimateOpen = computed(() => previewSections.value.estimate)
+const isDesignNotesOpen = computed(() => previewSections.value.designNotes)
+const isAcceptanceCriteriaOpen = computed(() => previewSections.value.acceptanceCriteria)
+const isWorkingNotesOpen = computed(() => previewSections.value.workingNotes)
 
 const formatDate = (dateStr: string) => {
   if (!dateStr) return '-'
@@ -134,7 +176,7 @@ const formatEstimate = (minutes: number) => {
       <div class="flex items-center justify-between">
         <button
           class="flex items-center gap-1.5 text-left group"
-          @click="isAttachmentsOpen = !isAttachmentsOpen"
+          @click="toggleSection('attachments')"
         >
           <svg
             class="w-3 h-3 text-muted-foreground transition-transform"
@@ -183,7 +225,7 @@ const formatEstimate = (minutes: number) => {
     <div>
       <button
         class="flex items-center gap-1.5 w-full text-left group"
-        @click="isDescriptionOpen = !isDescriptionOpen"
+        @click="toggleSection('description')"
       >
         <svg
           class="w-3 h-3 text-muted-foreground transition-transform"
@@ -206,7 +248,7 @@ const formatEstimate = (minutes: number) => {
     <div v-if="issue.parent">
       <button
         class="flex items-center gap-1.5 w-full text-left group"
-        @click="isParentOpen = !isParentOpen"
+        @click="toggleSection('parent')"
       >
         <svg
           class="w-3 h-3 text-muted-foreground transition-transform"
@@ -242,7 +284,7 @@ const formatEstimate = (minutes: number) => {
       <div class="flex items-center justify-between">
         <button
           class="flex items-center gap-1.5 text-left group"
-          @click="isChildrenOpen = !isChildrenOpen"
+          @click="toggleSection('children')"
         >
           <svg
             class="w-3 h-3 text-muted-foreground transition-transform"
@@ -295,7 +337,7 @@ const formatEstimate = (minutes: number) => {
     <div v-if="nonImageRefs.length > 0">
       <button
         class="flex items-center gap-1.5 w-full text-left group"
-        @click="isExternalRefOpen = !isExternalRefOpen"
+        @click="toggleSection('externalRef')"
       >
         <svg
           class="w-3 h-3 text-muted-foreground transition-transform"
@@ -323,7 +365,7 @@ const formatEstimate = (minutes: number) => {
     <div>
       <button
         class="flex items-center gap-1.5 w-full text-left group"
-        @click="isDetailsOpen = !isDetailsOpen"
+        @click="toggleSection('details')"
       >
         <svg
           class="w-3 h-3 text-muted-foreground transition-transform"
@@ -369,7 +411,7 @@ const formatEstimate = (minutes: number) => {
     <div v-if="issue.blockedBy?.length || issue.blocks?.length">
       <button
         class="flex items-center gap-1.5 w-full text-left group"
-        @click="isDependenciesOpen = !isDependenciesOpen"
+        @click="toggleSection('dependencies')"
       >
         <svg
           class="w-3 h-3 text-muted-foreground transition-transform"
@@ -408,7 +450,7 @@ const formatEstimate = (minutes: number) => {
     <div v-if="issue.estimateMinutes">
       <button
         class="flex items-center gap-1.5 w-full text-left group"
-        @click="isEstimateOpen = !isEstimateOpen"
+        @click="toggleSection('estimate')"
       >
         <svg
           class="w-3 h-3 text-muted-foreground transition-transform"
@@ -431,7 +473,7 @@ const formatEstimate = (minutes: number) => {
     <div v-if="issue.designNotes">
       <button
         class="flex items-center gap-1.5 w-full text-left group"
-        @click="isDesignNotesOpen = !isDesignNotesOpen"
+        @click="toggleSection('designNotes')"
       >
         <svg
           class="w-3 h-3 text-muted-foreground transition-transform"
@@ -454,7 +496,7 @@ const formatEstimate = (minutes: number) => {
     <div v-if="issue.acceptanceCriteria">
       <button
         class="flex items-center gap-1.5 w-full text-left group"
-        @click="isAcceptanceCriteriaOpen = !isAcceptanceCriteriaOpen"
+        @click="toggleSection('acceptanceCriteria')"
       >
         <svg
           class="w-3 h-3 text-muted-foreground transition-transform"
@@ -477,7 +519,7 @@ const formatEstimate = (minutes: number) => {
     <div v-if="issue.workingNotes">
       <button
         class="flex items-center gap-1.5 w-full text-left group"
-        @click="isWorkingNotesOpen = !isWorkingNotesOpen"
+        @click="toggleSection('workingNotes')"
       >
         <svg
           class="w-3 h-3 text-muted-foreground transition-transform"

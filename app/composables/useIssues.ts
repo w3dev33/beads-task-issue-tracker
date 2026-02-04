@@ -1,6 +1,6 @@
 import type { Issue, CreateIssuePayload, UpdateIssuePayload } from '~/types/issue'
 import { bdList, bdCount, bdShow, bdCreate, bdUpdate, bdClose, bdDelete, bdAddComment, bdPurgeOrphanAttachments, type BdListOptions } from '~/utils/bd-api'
-import { useLocalStorage } from '@vueuse/core'
+import { useProjectStorage } from '~/composables/useProjectStorage'
 
 // Interface for hierarchical grouping of epics and their children
 export interface IssueGroup {
@@ -27,8 +27,8 @@ const currentPage = ref(1)
 const sortField = ref<string | null>('updatedAt')
 const sortDirection = ref<'asc' | 'desc'>('desc')
 
-// Epic expand/collapse state (persisted) - default to expanded (true)
-const expandedEpics = useLocalStorage<Record<string, boolean>>('beads:expandedEpics', {})
+// Epic expand/collapse state (persisted per project) - default to expanded (true)
+const expandedEpics = useProjectStorage<Record<string, boolean>>('expandedEpics', {})
 
 const isEpicExpanded = (epicId: string) => {
   // Default to expanded (true) if not explicitly set to false

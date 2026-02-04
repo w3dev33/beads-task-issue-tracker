@@ -1,4 +1,5 @@
 import type { IssueStatus, IssueType, IssuePriority } from '~/types/issue'
+import { useProjectStorage } from '~/composables/useProjectStorage'
 
 export interface ExclusionFilters {
   status: IssueStatus[]
@@ -17,7 +18,7 @@ const defaultExclusions: ExclusionFilters = {
 }
 
 export function useExclusionFilters() {
-  const exclusions = useLocalStorage<ExclusionFilters>('beads:exclusionFilters', defaultExclusions)
+  const exclusions = useProjectStorage<ExclusionFilters>('exclusionFilters', defaultExclusions)
 
   const toggleStatus = (status: IssueStatus) => {
     const index = exclusions.value.status.indexOf(status)
@@ -73,13 +74,6 @@ export function useExclusionFilters() {
     exclusions.value.assignee = []
   }
 
-  // Clear project-specific exclusions (labels and assignees)
-  // Called when switching projects
-  const clearProjectSpecific = () => {
-    exclusions.value.labels = []
-    exclusions.value.assignee = []
-  }
-
   const activeCount = computed(() => {
     return (
       exclusions.value.status.length +
@@ -100,7 +94,6 @@ export function useExclusionFilters() {
     toggleLabel,
     toggleAssignee,
     clearAll,
-    clearProjectSpecific,
     activeCount,
     hasActiveExclusions,
   }

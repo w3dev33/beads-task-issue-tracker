@@ -1,4 +1,5 @@
 import type { FilterState, IssueStatus, IssueType, IssuePriority } from '~/types/issue'
+import { useProjectStorage } from '~/composables/useProjectStorage'
 
 const defaultFilters: FilterState = {
   status: [],
@@ -10,7 +11,7 @@ const defaultFilters: FilterState = {
 }
 
 export function useFilters() {
-  const filters = useLocalStorage<FilterState>('beads:filters', defaultFilters)
+  const filters = useProjectStorage<FilterState>('filters', defaultFilters)
 
   // Clear search, labels and assignee on init (should not persist across page loads)
   if (import.meta.client) {

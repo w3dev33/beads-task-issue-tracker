@@ -1,32 +1,63 @@
 import type { CollapsibleState } from '~/types/issue'
+import { useProjectStorage } from '~/composables/useProjectStorage'
 
-const defaultState: CollapsibleState = {
-  dashboard: true,
+// Per-project collapsed state (issues and details panels)
+interface ProjectCollapsibleState {
+  issues: boolean
+  details: boolean
+}
+
+const defaultProjectState: ProjectCollapsibleState = {
   issues: true,
   details: true,
 }
 
 export function useCollapsible() {
-  const state = useLocalStorage<CollapsibleState>('beads:collapsed', defaultState)
+  // Dashboard collapsed state is global (user preference)
+  const dashboardState = useLocalStorage<boolean>('beads:collapsed:dashboard', true)
+
+  // Issues and details collapsed states are per-project
+  const projectState = useProjectStorage<ProjectCollapsibleState>('collapsed', defaultProjectState)
+
+  // Combined state for backwards compatibility
+  const state = computed<CollapsibleState>(() => ({
+    dashboard: dashboardState.value,
+    issues: projectState.value.issues,
+    details: projectState.value.details,
+  }))
 
   const toggle = (section: keyof CollapsibleState) => {
-    state.value[section] = !state.value[section]
+    if (section === 'dashboard') {
+      dashboardState.value = !dashboardState.value
+    } else {
+      projectState.value[section] = !projectState.value[section]
+    }
   }
 
   const expand = (section: keyof CollapsibleState) => {
-    state.value[section] = true
+    if (section === 'dashboard') {
+      dashboardState.value = true
+    } else {
+      projectState.value[section] = true
+    }
   }
 
   const collapse = (section: keyof CollapsibleState) => {
-    state.value[section] = false
+    if (section === 'dashboard') {
+      dashboardState.value = false
+    } else {
+      projectState.value[section] = false
+    }
   }
 
   const expandAll = () => {
-    state.value = { dashboard: true, issues: true, details: true }
+    dashboardState.value = true
+    projectState.value = { issues: true, details: true }
   }
 
   const collapseAll = () => {
-    state.value = { dashboard: false, issues: false, details: false }
+    dashboardState.value = false
+    projectState.value = { issues: false, details: false }
   }
 
   return {

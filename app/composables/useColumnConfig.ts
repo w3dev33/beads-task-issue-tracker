@@ -1,4 +1,5 @@
 import type { ColumnConfig } from '~/types/issue'
+import { useProjectStorage } from '~/composables/useProjectStorage'
 
 const defaultColumns: ColumnConfig[] = [
   { id: 'id', label: 'ID', visible: true, sortable: true },
@@ -13,7 +14,7 @@ const defaultColumns: ColumnConfig[] = [
 ]
 
 export function useColumnConfig() {
-  const columns = useLocalStorage<ColumnConfig[]>('beads:columns', defaultColumns)
+  const columns = useProjectStorage<ColumnConfig[]>('columns', defaultColumns)
 
   // Sync sortable property from defaults (in case it changed)
   const defaultSortableMap = new Map(defaultColumns.map(c => [c.id, c.sortable]))

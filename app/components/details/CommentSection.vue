@@ -11,8 +11,15 @@ const props = defineProps<{
   readonly?: boolean
 }>()
 
-// Collapsible state (open by default)
-const isCommentsOpen = ref(true)
+// Collapsible state (persisted per project, open by default)
+const commentsSectionState = useProjectStorage<{ open: boolean }>('commentsSection', { open: true })
+const isCommentsOpen = computed(() => commentsSectionState.value.open)
+const toggleComments = () => {
+  const newValue = { open: !commentsSectionState.value.open }
+  commentsSectionState.value = newValue
+  // Explicitly save since watcher doesn't trigger reliably
+  saveProjectValue('commentsSection', newValue)
+}
 
 // Sort comments by date descending (most recent first)
 const sortedComments = computed(() => {
@@ -60,7 +67,7 @@ const handleSubmit = () => {
   <div class="space-y-3">
     <button
       class="flex items-center gap-1.5 w-full text-left group"
-      @click="isCommentsOpen = !isCommentsOpen"
+      @click="toggleComments"
     >
       <svg
         class="w-3 h-3 text-muted-foreground transition-transform"

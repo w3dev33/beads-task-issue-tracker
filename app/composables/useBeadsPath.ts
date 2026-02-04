@@ -1,4 +1,5 @@
 import { fsExists } from '~/utils/bd-api'
+import { clearProjectStorageCache } from '~/composables/useProjectStorage'
 
 const DEFAULT_PATH = '.'
 
@@ -57,8 +58,15 @@ export function useBeadsPath() {
   )
 
   const setPath = (path: string) => {
-    beadsPath.value = path || DEFAULT_PATH
+    const newPath = path || DEFAULT_PATH
+    // Update path in localStorage FIRST (before reloading project storage)
+    beadsPath.value = newPath
     hasStoredPath.value = true
+    if (import.meta.client) {
+      localStorage.setItem('beads:path', JSON.stringify(newPath))
+    }
+    // Now reload project storage with the new path
+    clearProjectStorageCache()
   }
 
   const resetPath = () => {

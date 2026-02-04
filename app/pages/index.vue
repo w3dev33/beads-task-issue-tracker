@@ -98,8 +98,8 @@ const isRightSidebarOpen = useLocalStorage('beads:rightSidebar', true)
 if (import.meta.client && !selectedIssue.value) {
   isRightSidebarOpen.value = false
 }
-const isChartsCollapsed = useLocalStorage('beads:chartsCollapsed', true)
-const isReadyCollapsed = useLocalStorage('beads:readyCollapsed', true)
+const isChartsCollapsed = useProjectStorage('chartsCollapsed', true)
+const isReadyCollapsed = useProjectStorage('readyCollapsed', true)
 const leftSidebarWidth = useLocalStorage('beads:leftSidebarWidth', 360)
 const rightSidebarWidth = useLocalStorage('beads:rightSidebarWidth', 484)
 
@@ -388,9 +388,7 @@ const handlePathChange = async () => {
   selectIssue(null)
   isEditMode.value = false
   isCreatingNew.value = false
-  // Clear project-specific exclusion filters (labels and assignees)
-  const { clearProjectSpecific } = useExclusionFilters()
-  clearProjectSpecific()
+  // Per-project storage is automatically isolated via useProjectStorage
   await fetchIssues()
   await fetchStats(issues.value)
 }
