@@ -87,7 +87,7 @@ const {
   clearIssues,
 } = useIssues()
 const { stats, readyIssues, fetchStats, clearStats } = useDashboard()
-const { check: checkForUpdates } = useUpdateChecker()
+const { check: checkForUpdates, startPeriodicCheck, stopPeriodicCheck } = useUpdateChecker()
 const { showDebugPanel } = useAppMenu()
 
 // Sidebar states (persisted)
@@ -297,8 +297,9 @@ onMounted(async () => {
     // Start polling for changes
     startPolling()
 
-    // Check for updates after initial load
+    // Check for updates after initial load + start periodic check (hourly)
     checkForUpdates()
+    startPeriodicCheck()
   }
   // Only fetch data if not in onboarding mode
   if (!showOnboarding.value) {
@@ -311,6 +312,7 @@ onUnmounted(() => {
     window.removeEventListener('resize', checkViewport)
     document.removeEventListener('visibilitychange', handleVisibilityChange)
     stopPolling()
+    stopPeriodicCheck()
   }
 })
 

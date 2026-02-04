@@ -7,6 +7,9 @@ const updateInfo = ref<UpdateInfo | null>(null)
 const isChecking = ref(false)
 const error = ref<string | null>(null)
 
+// Internal state for periodic check interval
+let checkInterval: ReturnType<typeof setInterval> | null = null
+
 export function useUpdateChecker() {
   const check = async () => {
     if (isChecking.value) return
@@ -24,6 +27,22 @@ export function useUpdateChecker() {
     }
   }
 
+  const startPeriodicCheck = (intervalMs: number = 3600000) => {
+    // Don't start if already running
+    if (checkInterval) return
+
+    checkInterval = setInterval(() => {
+      check()
+    }, intervalMs)
+  }
+
+  const stopPeriodicCheck = () => {
+    if (checkInterval) {
+      clearInterval(checkInterval)
+      checkInterval = null
+    }
+  }
+
   const openReleasesPage = async () => {
     const url = updateInfo.value?.releaseUrl || 'https://github.com/w3dev33/beads-task-issue-tracker/releases'
     await openUrl(url)
@@ -34,6 +53,8 @@ export function useUpdateChecker() {
     isChecking,
     error,
     check,
+    startPeriodicCheck,
+    stopPeriodicCheck,
     openReleasesPage,
   }
 }
