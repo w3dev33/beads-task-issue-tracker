@@ -95,12 +95,12 @@ const handleImageError = () => {
     </button>
 
     <!-- Loading state -->
-    <div v-if="isLoading" class="w-[250px] h-[150px] bg-muted rounded-lg flex items-center justify-center">
+    <div v-if="isLoading" class="w-[180px] h-[108px] bg-muted rounded-lg flex items-center justify-center">
       <span class="text-sm text-muted-foreground">Loading...</span>
     </div>
 
     <!-- Error state -->
-    <div v-else-if="hasError" class="w-[250px] h-[150px] bg-destructive/10 rounded-lg flex items-center justify-center">
+    <div v-else-if="hasError" class="w-[180px] h-[108px] bg-destructive/10 rounded-lg flex items-center justify-center">
       <span class="text-sm text-destructive">Error loading image</span>
     </div>
 
@@ -109,7 +109,7 @@ const handleImageError = () => {
       v-else
       :src="imageDataUrl!"
       :alt="alt"
-      class="w-[250px] h-auto rounded-lg border-2 border-border hover:border-primary transition-colors"
+      class="w-[180px] h-auto rounded-lg border-2 border-border hover:border-primary transition-colors"
       @error="handleImageError"
     />
   </div>
