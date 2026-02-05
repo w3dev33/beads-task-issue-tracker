@@ -2,6 +2,15 @@
 
 All notable changes to Beads Task-Issue Tracker will be documented in this file.
 
+## [1.8.0] - 2026-02-06
+
+### New Features
+- **Label multiselect component**: Replace comma-separated labels input with a multiselect featuring colored badges, search/filter, and create new labels on the fly
+- **Periodic update check**: App now checks for updates hourly in the background
+
+### Bug Fixes
+- **Database migration repair**: Detect and repair bd 0.49.4 schema migration errors with user-controlled repair dialog for affected projects
+
 ## [1.7.0] - 2026-02-04
 
 ### New Features
