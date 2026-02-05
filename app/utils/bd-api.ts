@@ -14,6 +14,32 @@ function isTauri(): boolean {
   return typeof window !== 'undefined' && (!!window.__TAURI__ || !!window.__TAURI_INTERNALS__)
 }
 
+// Check if error is a schema migration error (bd 0.49.4 bug)
+export function isSchemaMigrationError(error: unknown): boolean {
+  if (error instanceof Error) {
+    return error.message.includes('SCHEMA_MIGRATION_ERROR') || error.message.includes('no such column: spec_id')
+  }
+  if (typeof error === 'string') {
+    return error.includes('SCHEMA_MIGRATION_ERROR') || error.includes('no such column: spec_id')
+  }
+  return false
+}
+
+// Repair database result
+export interface RepairResult {
+  success: boolean
+  message: string
+  backupPath?: string
+}
+
+// Repair database (for schema migration issues)
+export async function bdRepairDatabase(path?: string): Promise<RepairResult> {
+  if (!isTauri()) {
+    throw new Error('Database repair is only available in the desktop app')
+  }
+  return invoke<RepairResult>('bd_repair_database', { cwd: path })
+}
+
 // ============================================================================
 // BD API Functions - Use Tauri invoke in app, fetch in web
 // ============================================================================

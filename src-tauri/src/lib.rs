@@ -502,6 +502,13 @@ fn execute_bd(command: &str, args: &[String], cwd: Option<&str>) -> Result<Strin
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         log_error!("[bd] Command failed | status: {} | stderr: {}", output.status, stderr);
+
+        // Detect schema migration failure (bd 0.49.4 migration bug)
+        if stderr.contains("no such column: spec_id") {
+            log_error!("[bd] Schema migration failure detected - database needs repair");
+            return Err("SCHEMA_MIGRATION_ERROR: Database schema is incompatible. Please use the repair function to fix this issue.".to_string());
+        }
+
         if !stderr.is_empty() {
             return Err(stderr.to_string());
         }
@@ -581,6 +588,91 @@ async fn bd_sync(cwd: Option<String>) -> Result<(), String> {
 
     log_info!("[bd_sync] Sync completed successfully");
     Ok(())
+}
+
+#[derive(Debug, serde::Serialize)]
+struct RepairResult {
+    success: bool,
+    message: String,
+    backup_path: Option<String>,
+}
+
+#[tauri::command]
+async fn bd_repair_database(cwd: Option<String>) -> Result<RepairResult, String> {
+    let working_dir = cwd
+        .or_else(|| env::var("BEADS_PATH").ok())
+        .unwrap_or_else(|| env::current_dir().unwrap().to_string_lossy().to_string());
+
+    log_info!("[bd_repair] Starting database repair for: {}", working_dir);
+
+    let beads_dir = std::path::Path::new(&working_dir).join(".beads");
+    let db_path = beads_dir.join("beads.db");
+    let jsonl_path = beads_dir.join("issues.jsonl");
+    let backup_path = beads_dir.join("beads.db.backup");
+
+    // Check if .beads directory exists
+    if !beads_dir.exists() {
+        return Err("No .beads directory found in this project".to_string());
+    }
+
+    // Check if database exists
+    if !db_path.exists() {
+        return Ok(RepairResult {
+            success: true,
+            message: "No database to repair - it will be created on next operation".to_string(),
+            backup_path: None,
+        });
+    }
+
+    // Check if issues.jsonl exists and has content
+    let jsonl_size = std::fs::metadata(&jsonl_path)
+        .map(|m| m.len())
+        .unwrap_or(0);
+
+    if !jsonl_path.exists() || jsonl_size == 0 {
+        return Err("Cannot repair: issues.jsonl is missing or empty. Your data would be lost.".to_string());
+    }
+
+    // Create backup of current database
+    if let Err(e) = std::fs::copy(&db_path, &backup_path) {
+        log_error!("[bd_repair] Failed to create backup: {}", e);
+        return Err(format!("Failed to create backup: {}", e));
+    }
+    log_info!("[bd_repair] Backup created at: {:?}", backup_path);
+
+    // Remove database files
+    std::fs::remove_file(&db_path).ok();
+    std::fs::remove_file(beads_dir.join("beads.db-shm")).ok();
+    std::fs::remove_file(beads_dir.join("beads.db-wal")).ok();
+    log_info!("[bd_repair] Removed old database files");
+
+    // Test that bd can now work (it will recreate the database)
+    let test_output = std::process::Command::new("bd")
+        .args(["list", "--limit=1", "--no-daemon", "--json"])
+        .current_dir(&working_dir)
+        .env("PATH", get_extended_path())
+        .env("BEADS_PATH", &working_dir)
+        .output();
+
+    match test_output {
+        Ok(output) if output.status.success() => {
+            log_info!("[bd_repair] Repair successful - database recreated");
+            Ok(RepairResult {
+                success: true,
+                message: "Database repaired successfully. Your issues have been restored from the backup file.".to_string(),
+                backup_path: Some(backup_path.to_string_lossy().to_string()),
+            })
+        }
+        Ok(output) => {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            log_error!("[bd_repair] Repair verification failed: {}", stderr);
+            Err(format!("Repair failed during verification: {}", stderr))
+        }
+        Err(e) => {
+            log_error!("[bd_repair] Failed to verify repair: {}", e);
+            Err(format!("Failed to verify repair: {}", e))
+        }
+    }
 }
 
 #[tauri::command]
@@ -1683,6 +1775,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             bd_sync,
+            bd_repair_database,
             bd_list,
             bd_count,
             bd_ready,

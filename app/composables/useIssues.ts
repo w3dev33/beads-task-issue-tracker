@@ -73,6 +73,7 @@ function deduplicateIssues(issues: Issue[]): Issue[] {
 export function useIssues() {
   const { filters } = useFilters()
   const { beadsPath } = useBeadsPath()
+  const { checkError: checkRepairError } = useRepairDatabase()
 
   // Helper to get the current path (for IPC or web)
   const getPath = () => beadsPath.value && beadsPath.value !== '.' ? beadsPath.value : undefined
@@ -122,7 +123,12 @@ export function useIssues() {
       }, '')
       lastKnownUpdated.value = maxUpdated || null
     } catch (e) {
-      error.value = e instanceof Error ? e.message : 'Failed to fetch issues'
+      // Check if this is a schema migration error that needs repair
+      if (checkRepairError(e)) {
+        error.value = 'Database needs repair due to a schema migration issue.'
+      } else {
+        error.value = e instanceof Error ? e.message : 'Failed to fetch issues'
+      }
     } finally {
       if (!silent) {
         isLoading.value = false
