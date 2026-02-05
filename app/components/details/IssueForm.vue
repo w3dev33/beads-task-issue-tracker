@@ -14,6 +14,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '~/components/ui/select'
+import { LabelMultiSelect } from '~/components/ui/label-multiselect'
 
 interface EpicOption {
   id: string
@@ -25,6 +26,7 @@ const props = defineProps<{
   isNew?: boolean
   isSaving?: boolean
   availableEpics?: EpicOption[]
+  availableLabels?: string[]
   defaultParent?: string
 }>()
 
@@ -52,7 +54,7 @@ const form = reactive({
   status: props.issue?.status || 'open',
   priority: props.issue?.priority || 'p3',
   assignee: props.issue?.assignee || '',
-  labels: props.issue?.labels?.join(', ') || '',
+  labels: props.issue?.labels || [] as string[],
   externalRef: cleanExternalRef(props.issue?.externalRef),
   estimateMinutes: props.issue?.estimateMinutes as number | undefined,
   designNotes: props.issue?.designNotes || '',
@@ -71,7 +73,7 @@ watch(
       form.status = newIssue.status
       form.priority = newIssue.priority
       form.assignee = newIssue.assignee || ''
-      form.labels = newIssue.labels?.join(', ') || ''
+      form.labels = newIssue.labels || []
       form.externalRef = cleanExternalRef(newIssue.externalRef)
       form.estimateMinutes = newIssue.estimateMinutes
       form.designNotes = newIssue.designNotes || ''
@@ -159,7 +161,7 @@ const handleSubmit = () => {
     status: form.status as IssueStatus,
     priority: form.priority as IssuePriority,
     assignee: form.assignee,
-    labels: form.labels ? form.labels.split(',').map((l) => l.trim()).filter(Boolean) : [],
+    labels: form.labels,
     externalRef: form.externalRef,
     estimateMinutes: form.estimateMinutes || undefined,
     designNotes: form.designNotes,
@@ -344,11 +346,9 @@ const attachImage = async () => {
 
         <div class="space-y-1">
           <Label for="labels" class="text-[10px] uppercase tracking-wide text-sky-400">Labels</Label>
-          <Input
-            id="labels"
+          <LabelMultiSelect
             v-model="form.labels"
-            placeholder="Comma-separated labels"
-            class="h-8 text-xs"
+            :available-labels="availableLabels || []"
           />
         </div>
 
