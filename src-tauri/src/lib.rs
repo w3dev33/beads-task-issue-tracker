@@ -1329,6 +1329,15 @@ async fn get_log_path_string() -> String {
 }
 
 #[tauri::command]
+async fn log_frontend(level: String, message: String) {
+    match level.as_str() {
+        "error" => log::error!("[frontend] {}", message),
+        "warn" => log::warn!("[frontend] {}", message),
+        _ => log::info!("[frontend] {}", message),
+    }
+}
+
+#[tauri::command]
 async fn get_bd_version() -> String {
     match Command::new("bd")
         .arg("--version")
@@ -1790,6 +1799,7 @@ pub fn run() {
             export_logs,
             read_logs,
             get_log_path_string,
+            log_frontend,
             get_bd_version,
             bd_update,
             bd_close,

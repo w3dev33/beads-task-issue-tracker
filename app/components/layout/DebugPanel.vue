@@ -89,6 +89,9 @@ const colorizedLogs = computed(() => {
   escaped = escaped.replace(/\[sync\]/g, '<span class="text-green-400">[sync]</span>')
   escaped = escaped.replace(/\[startup\]/g, '<span class="text-purple-400">[startup]</span>')
   escaped = escaped.replace(/\[debug\]/g, '<span class="text-amber-400">[debug]</span>')
+  escaped = escaped.replace(/\[frontend\]/g, '<span class="text-orange-400 font-semibold">[frontend]</span>')
+  escaped = escaped.replace(/\[unhandled\]/g, '<span class="text-red-400 font-semibold">[unhandled]</span>')
+  escaped = escaped.replace(/\[unhandled-rejection\]/g, '<span class="text-red-400 font-semibold">[unhandled-rejection]</span>')
 
   return escaped
 })

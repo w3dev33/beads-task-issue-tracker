@@ -282,6 +282,12 @@ export async function getLogPath(): Promise<string> {
   return ''
 }
 
+export async function logFrontend(level: 'error' | 'warn' | 'info', message: string): Promise<void> {
+  if (isTauri()) {
+    return invoke<void>('log_frontend', { level, message })
+  }
+}
+
 export async function getBdVersion(): Promise<string> {
   if (isTauri()) {
     return invoke<string>('get_bd_version')

@@ -57,7 +57,7 @@ export function useRepairDatabase() {
     repairProgress.value = { current: 0, total: favoritePaths.length, currentPath: '' }
 
     for (let i = 0; i < favoritePaths.length; i++) {
-      const path = favoritePaths[i]
+      const path = favoritePaths[i]!
       repairProgress.value = { current: i + 1, total: favoritePaths.length, currentPath: path }
 
       try {

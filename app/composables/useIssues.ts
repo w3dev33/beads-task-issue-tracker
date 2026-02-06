@@ -70,10 +70,21 @@ function deduplicateIssues(issues: Issue[]): Issue[] {
   return Array.from(issueMap.values())
 }
 
+/**
+ * Separate composable for epic expand/collapse state.
+ * Use this instead of useIssues() in components that only need
+ * epic expand/collapse functionality (e.g., IssueTable.vue).
+ * This avoids creating duplicate computed properties and watchers.
+ */
+export function useEpicExpand() {
+  return { isEpicExpanded, toggleEpicExpand, expandEpic }
+}
+
 export function useIssues() {
   const { filters } = useFilters()
   const { beadsPath } = useBeadsPath()
   const { checkError: checkRepairError } = useRepairDatabase()
+  const { exclusions } = useExclusionFilters()
 
   // Helper to get the current path (for IPC or web)
   const getPath = () => beadsPath.value && beadsPath.value !== '.' ? beadsPath.value : undefined
@@ -153,7 +164,6 @@ export function useIssues() {
 
   const filteredIssues = computed(() => {
     let result = issues.value
-    const { exclusions } = useExclusionFilters()
 
     // Check if search is active - if so, bypass all other filters
     // Search takes priority and searches ALL issues including closed
@@ -331,7 +341,8 @@ export function useIssues() {
 
       if (aVal < bVal) return -1 * dir
       if (aVal > bVal) return 1 * dir
-      return 0
+      // Stable sort: use ID as tiebreaker to prevent DOM thrashing
+      return naturalCompare(a.id.toLowerCase(), b.id.toLowerCase())
     })
 
     return sorted
@@ -370,50 +381,35 @@ export function useIssues() {
     const groups: IssueGroup[] = []
     const processedIds = new Set<string>()
 
-    // Build map for all issues (for accurate child counts)
-    const allIssueMap = new Map<string, Issue>()
-    for (const issue of allIssues) {
-      allIssueMap.set(issue.id, issue)
-    }
-
-    // Identify all EPIC IDs in the full list
+    // Pass 1: Identify all epic IDs (from full list) and visible epic IDs (from paginated list)
     const allEpicIds = new Set<string>()
     for (const issue of allIssues) {
-      if (issue.type === 'epic') {
-        allEpicIds.add(issue.id)
-      }
+      if (issue.type === 'epic') allEpicIds.add(issue.id)
     }
 
-    // Identify visible EPIC IDs (in paginated list)
     const visibleEpicIds = new Set<string>()
     for (const issue of issueList) {
-      if (issue.type === 'epic') {
-        visibleEpicIds.add(issue.id)
-      }
+      if (issue.type === 'epic') visibleEpicIds.add(issue.id)
     }
 
-    // Find all children for each epic from the FULL list (for accurate counts)
+    // Pass 2: Build children maps (needs epic IDs from pass 1)
     const allEpicChildrenMap = new Map<string, Issue[]>()
     for (const issue of allIssues) {
       const parentId = getParentIdFromIssue(issue)
       if (parentId && allEpicIds.has(parentId)) {
-        if (!allEpicChildrenMap.has(parentId)) {
-          allEpicChildrenMap.set(parentId, [])
-        }
-        allEpicChildrenMap.get(parentId)!.push(issue)
+        let children = allEpicChildrenMap.get(parentId)
+        if (!children) { children = []; allEpicChildrenMap.set(parentId, children) }
+        children.push(issue)
       }
     }
 
-    // Find children that are in the filtered/paginated list (for display)
-    // Use visibleEpicIds for reliable parent detection
     const filteredEpicChildrenMap = new Map<string, Issue[]>()
     for (const issue of issueList) {
       const parentId = getParentIdFromIssue(issue)
       if (parentId && visibleEpicIds.has(parentId)) {
-        if (!filteredEpicChildrenMap.has(parentId)) {
-          filteredEpicChildrenMap.set(parentId, [])
-        }
-        filteredEpicChildrenMap.get(parentId)!.push(issue)
+        let children = filteredEpicChildrenMap.get(parentId)
+        if (!children) { children = []; filteredEpicChildrenMap.set(parentId, children) }
+        children.push(issue)
       }
     }
 

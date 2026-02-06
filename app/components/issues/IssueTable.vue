@@ -127,6 +127,11 @@ const naturalCompare = (a: string, b: string): number => {
 }
 
 const sortedIssues = computed(() => {
+  // When external sort is provided, data is already sorted by the composable
+  if (props.externalSortColumn !== undefined) {
+    return props.issues
+  }
+
   if (!sortColumn.value) return props.issues
 
   const col = sortColumn.value
@@ -173,8 +178,9 @@ const sortedIssues = computed(() => {
   })
 })
 
-// Epic expand/collapse state (from composable, shared with index.vue)
-const { isEpicExpanded, toggleEpicExpand } = useIssues()
+// Epic expand/collapse state (from dedicated composable, avoids creating
+// duplicate computed properties and watchers from full useIssues())
+const { isEpicExpanded, toggleEpicExpand } = useEpicExpand()
 
 const isExpanded = (epicId: string) => isEpicExpanded(epicId)
 
@@ -230,10 +236,18 @@ const commonPrefix = computed(() => {
   let prefix = ids[0] || ''
   for (const id of ids) {
     while (prefix && !id.startsWith(prefix)) {
-      // Remove last character (but keep up to last hyphen)
+      // Trim prefix to the previous hyphen boundary
       const lastHyphen = prefix.lastIndexOf('-')
       if (lastHyphen > 0) {
-        prefix = prefix.slice(0, lastHyphen + 1)
+        const newPrefix = prefix.slice(0, lastHyphen + 1)
+        if (newPrefix === prefix) {
+          // prefix ends with '-': trimming keeps the same string → would loop forever.
+          // Remove the trailing hyphen to make progress.
+          prefix = prefix.slice(0, lastHyphen)
+          if (!prefix) break
+        } else {
+          prefix = newPrefix
+        }
       } else {
         prefix = ''
         break

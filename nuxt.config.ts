@@ -1,6 +1,8 @@
 import tailwindcss from '@tailwindcss/vite'
 import pkg from './package.json'
 
+const isDevMode = process.env.NODE_ENV !== 'production'
+
 export default defineNuxtConfig({
   runtimeConfig: {
     public: {
@@ -37,6 +39,20 @@ export default defineNuxtConfig({
 
   vite: {
     plugins: [tailwindcss()],
+    build: {
+      sourcemap: isDevMode,
+      target: 'es2020',
+      minify: 'terser',
+      terserOptions: {
+        compress: {
+          drop_console: false,
+          pure_funcs: ['console.log', 'console.debug', 'console.info', 'console.warn'],
+        },
+        format: {
+          comments: false,
+        },
+      },
+    },
   },
 
   css: ['~/assets/css/tailwind.css'],

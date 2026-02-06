@@ -72,6 +72,9 @@ importers:
       tailwindcss:
         specifier: ^4.1.18
         version: 4.1.18
+      terser:
+        specifier: ^5.46.0
+        version: 5.46.0
       tw-animate-css:
         specifier: ^1.4.0
         version: 1.4.0

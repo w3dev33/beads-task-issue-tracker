@@ -945,15 +945,15 @@ const handleKpiClick = (kpi: KpiFilter) => {
 }
 
 // Watch filters to refetch issues (only when no active search)
+// Serialize values to avoid false triggers from deep watch when only search changes
 watch(
-  () => [filters.value.status, filters.value.type, filters.value.priority],
+  () => JSON.stringify([filters.value.status, filters.value.type, filters.value.priority]),
   () => {
     // Don't refetch if search is active (search ignores filters)
     if (!filters.value.search?.trim()) {
       fetchIssues()
     }
-  },
-  { deep: true }
+  }
 )
 </script>
 
