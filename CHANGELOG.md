@@ -2,6 +2,11 @@
 
 All notable changes to Beads Task-Issue Tracker will be documented in this file.
 
+## [1.8.2] - 2026-02-06
+
+### Bug Fixes
+- **Epic children grouping**: Re-parented issues (moved under an epic via `bd update --parent`) now correctly appear grouped under their epic in the table view, not as standalone issues
+
 ## [1.8.0] - 2026-02-06
 
 ### New Features
