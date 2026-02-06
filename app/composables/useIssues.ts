@@ -110,6 +110,32 @@ export function useIssues() {
       const mergedIssues = [...(openIssues || []), ...(closedIssues || [])]
       const newIssues = deduplicateIssues(mergedIssues)
 
+      // Enrich with parent-child relationships
+      // bd list doesn't return parent field, but bd show returns children for epics
+      const epicIds = newIssues.filter(i => i.type === 'epic').map(i => i.id)
+      if (epicIds.length > 0) {
+        const issueMap = new Map(newIssues.map(i => [i.id, i]))
+
+        const epicDetails = await Promise.all(
+          epicIds.map(id => bdShow(id, path).catch(() => null))
+        )
+
+        for (const epicDetail of epicDetails) {
+          if (!epicDetail?.children) continue
+          for (const child of epicDetail.children) {
+            const issue = issueMap.get(child.id)
+            if (issue && !issue.parent) {
+              issue.parent = {
+                id: epicDetail.id,
+                title: epicDetail.title,
+                status: epicDetail.status as any,
+                priority: epicDetail.priority as any,
+              }
+            }
+          }
+        }
+      }
+
       // Only update if data actually changed (compare by serialization)
       const currentSignature = JSON.stringify(issues.value.map(i => i.id + i.updatedAt))
       const newSignature = JSON.stringify(newIssues.map(i => i.id + i.updatedAt))
