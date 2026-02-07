@@ -1,5 +1,14 @@
 import { fsExists } from '~/utils/bd-api'
 import { getFolderName } from '~/utils/path'
+import { useNotification } from '~/composables/useNotification'
+
+// Retry once after 500ms to handle transient startup failures (Tauri backend not ready)
+async function fsExistsWithRetry(path: string): Promise<boolean> {
+  const exists = await fsExists(path)
+  if (exists) return true
+  await new Promise(r => setTimeout(r, 500))
+  return fsExists(path)
+}
 
 export interface Favorite {
   path: string
@@ -26,13 +35,22 @@ function initFromStorage() {
           Promise.all(
             parsedFavorites.map(async (fav) => ({
               ...fav,
-              exists: await fsExists(fav.path),
+              exists: await fsExistsWithRetry(fav.path),
             }))
           ).then((results) => {
             const validFavorites = results.filter((f) => f.exists)
             const invalidCount = results.length - validFavorites.length
 
             if (invalidCount > 0) {
+              const invalidNames = results
+                .filter(f => !f.exists)
+                .map(f => f.name)
+                .join(', ')
+              const { warning } = useNotification()
+              warning(
+                `${invalidCount} favori${invalidCount > 1 ? 's' : ''} supprimé${invalidCount > 1 ? 's' : ''}`,
+                `Chemin${invalidCount > 1 ? 's' : ''} inaccessible${invalidCount > 1 ? 's' : ''} : ${invalidNames}`
+              )
               // Remove invalid favorites
               favorites.value = validFavorites.map(({ exists, ...fav }) => fav)
               localStorage.setItem('beads:favorites', JSON.stringify(favorites.value))
