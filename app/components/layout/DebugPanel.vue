@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Button } from '~/components/ui/button'
-import { readLogs, clearLogs, exportLogs as exportLogsApi, getLogPath, getBdVersion, getVerboseLogging, setVerboseLogging } from '~/utils/bd-api'
+import { readLogs, clearLogs, exportLogs as exportLogsApi, getLogPath, getBdVersion, getLoggingEnabled, setLoggingEnabled, getVerboseLogging, setVerboseLogging } from '~/utils/bd-api'
 
 const { isSyncing: isForceSyncing, forceSync, syncMessage, lastSyncSuccess } = useSyncStatus()
 
@@ -87,6 +87,8 @@ const colorizedLogs = computed(() => {
   escaped = escaped.replace(/\[bd_sync\]/g, '<span class="text-cyan-400">[bd_sync]</span>')
   escaped = escaped.replace(/\[bd\]/g, '<span class="text-blue-400">[bd]</span>')
   escaped = escaped.replace(/\[sync\]/g, '<span class="text-green-400">[sync]</span>')
+  escaped = escaped.replace(/\[bd_check_changed\]/g, '<span class="text-green-400">[bd_check_changed]</span>')
+  escaped = escaped.replace(/\[bd_poll_data\]/g, '<span class="text-cyan-400">[bd_poll_data]</span>')
   escaped = escaped.replace(/\[startup\]/g, '<span class="text-purple-400">[startup]</span>')
   escaped = escaped.replace(/\[debug\]/g, '<span class="text-amber-400">[debug]</span>')
   escaped = escaped.replace(/\[frontend\]/g, '<span class="text-orange-400 font-semibold">[frontend]</span>')
@@ -168,11 +170,14 @@ const close = () => {
 }
 
 // Start/stop auto-refresh when panel opens/closes
+// Also enable backend logging when panel is open (LOGGING_ENABLED flag)
 watch(() => props.isOpen, async (isOpen) => {
   if (isOpen) {
     bdVersion.value = await getBdVersion()
     logPath.value = await getLogPath()
     isVerbose.value = await getVerboseLogging()
+    // Enable backend logging so log_info!/log_debug! macros produce output
+    await setLoggingEnabled(true)
     if (isAutoRefresh.value) {
       startAutoRefresh()
     } else {
@@ -180,6 +185,8 @@ watch(() => props.isOpen, async (isOpen) => {
     }
   } else {
     stopAutoRefresh()
+    // Disable backend logging to save resources when panel is closed
+    await setLoggingEnabled(false)
   }
 }, { immediate: true })
 

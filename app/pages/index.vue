@@ -274,6 +274,10 @@ const pollForChanges = async () => {
     if (readyData) {
       updateFromPollData(issues.value, readyData)
     }
+
+    // Snapshot mtime AFTER all operations (including epic bd_show calls in fetchPollData)
+    // so the next check ignores changes caused by our own poll cycle
+    await bdCheckChanged(path)
   } catch {
     // Ignore polling errors
   } finally {

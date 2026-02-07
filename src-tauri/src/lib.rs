@@ -756,6 +756,26 @@ async fn bd_poll_data(cwd: Option<String>) -> Result<PollData, String> {
     log_info!("[bd_poll_data] Batched poll done: {} open, {} closed, {} ready",
         raw_open.len(), raw_closed.len(), raw_ready.len());
 
+    // Update mtime AFTER our commands ran, so the next bd_check_changed
+    // only detects EXTERNAL changes (not our own poll's side effects)
+    {
+        let working_dir = cwd_ref
+            .map(String::from)
+            .or_else(|| env::var("BEADS_PATH").ok())
+            .unwrap_or_else(|| env::current_dir().unwrap().to_string_lossy().to_string());
+        let beads_dir = std::path::Path::new(&working_dir).join(".beads");
+        let db_path = beads_dir.join("beads.db");
+        let jsonl_path = beads_dir.join("issues.jsonl");
+
+        if let Ok(mtime) = fs::metadata(&db_path)
+            .and_then(|m| m.modified())
+            .or_else(|_| fs::metadata(&jsonl_path).and_then(|m| m.modified()))
+        {
+            let mut last = LAST_KNOWN_MTIME.lock().unwrap();
+            *last = Some(mtime);
+        }
+    }
+
     Ok(PollData {
         open_issues: raw_open.into_iter().map(transform_issue).collect(),
         closed_issues: raw_closed.into_iter().map(transform_issue).collect(),
