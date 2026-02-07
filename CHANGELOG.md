@@ -2,6 +2,19 @@
 
 All notable changes to Beads Task-Issue Tracker will be documented in this file.
 
+## [1.9.0] - 2026-02-07
+
+### New Features
+- **Markdown file preview**: View attached `.md` files in a full-screen dialog with rich rendering (headers, tables, code blocks, blockquotes)
+- **Inline markdown editing**: Edit markdown files directly in the preview dialog using contentEditable, with save confirmation
+- **Markdown attachments**: Attach `.md`/`.markdown` files to issues alongside images, displayed as clickable links in the attachments section
+- **Markdown gallery navigation**: Browse multiple markdown attachments with arrow navigation (same UX as image gallery)
+
+### Improvements
+- **Diagonal gradient badges**: All badge types now use diagonal gradient styling
+- **GitHub footer link**: Added GitHub icon in footer and repository link in update dialog
+- **Favorites auto-cleanup**: Users are notified when invalid favorite paths are automatically removed at startup
+
 ## [1.8.2] - 2026-02-06
 
 ### Bug Fixes
