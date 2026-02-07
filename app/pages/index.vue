@@ -78,6 +78,7 @@ const {
   expandEpic,
   // Actions
   fetchIssues,
+  fetchPollData,
   fetchIssue,
   createIssue,
   updateIssue,
@@ -88,7 +89,7 @@ const {
   checkForChanges,
   clearIssues,
 } = useIssues()
-const { stats, readyIssues, fetchStats, clearStats } = useDashboard()
+const { stats, readyIssues, fetchStats, updateFromPollData, clearStats } = useDashboard()
 const { check: checkForUpdates, startPeriodicCheck, stopPeriodicCheck } = useUpdateChecker()
 const { showDebugPanel } = useAppMenu()
 const { needsRepair, affectedProject, isRepairing, repairError, repairProgress, repair: repairDatabase, repairAll, dismiss: dismissRepair } = useRepairDatabase()
@@ -241,24 +242,38 @@ const checkViewport = () => {
 // Sync status composable (for auto-sync indicator and error dialog)
 const { showErrorDialog: showSyncErrorDialog, lastSyncError, closeErrorDialog: closeSyncErrorDialog } = useSyncStatus()
 
-// Polling for external changes (replaces file watcher for lower CPU usage)
-const POLLING_INTERVAL = 5000 // 5 seconds
-let pollingInterval: ReturnType<typeof setInterval> | null = null
-let isPollingPaused = false
+// Polling for external changes — optimized with 4 layers:
+// 1. Sync cooldown (Rust backend skips redundant syncs within 10s)
+// 2. Filesystem mtime check (zero bd processes if nothing changed)
+// 3. Batched poll command (1 IPC call instead of 3 when changes detected)
+// 4. Adaptive intervals (5s active, 30s blurred, 60s idle, paused when hidden)
 const isSyncing = ref(false)
 
-// Fetch latest data on each poll
 const pollForChanges = async () => {
   // Don't poll if no active project
-  if (isPollingPaused || isLoading.value || isUpdating.value || showOnboarding.value || !beadsPath.value || favorites.value.length === 0) {
+  if (isLoading.value || isUpdating.value || showOnboarding.value || !beadsPath.value || favorites.value.length === 0) {
     return
   }
 
   try {
     isSyncing.value = true
-    // Fetch issues first, then compute stats from them (reduces API calls from 6 to 3)
-    await fetchIssues(!!filters.value.search?.trim(), true)
-    await fetchStats(issues.value)
+
+    // Layer 2: Check filesystem mtime first — zero process spawns if nothing changed
+    const path = beadsPath.value && beadsPath.value !== '.' ? beadsPath.value : undefined
+    const changed = await bdCheckChanged(path)
+
+    if (!changed) {
+      // Nothing changed on disk — skip entire poll cycle
+      return
+    }
+
+    // Layer 3: Changes detected — use batched command (1 IPC instead of 3)
+    const readyData = await fetchPollData()
+
+    // Update dashboard from pre-fetched data (no extra API call)
+    if (readyData) {
+      updateFromPollData(issues.value, readyData)
+    }
   } catch {
     // Ignore polling errors
   } finally {
@@ -266,38 +281,15 @@ const pollForChanges = async () => {
   }
 }
 
-// Start polling
-const startPolling = () => {
-  if (pollingInterval) return
-  pollingInterval = setInterval(pollForChanges, POLLING_INTERVAL)
-}
-
-// Stop polling
-const stopPolling = () => {
-  if (pollingInterval) {
-    clearInterval(pollingInterval)
-    pollingInterval = null
-  }
-}
-
-// Handle visibility change - pause polling when app is hidden
-const handleVisibilityChange = () => {
-  if (document.hidden) {
-    isPollingPaused = true
-  } else {
-    isPollingPaused = false
-    // Immediately check for changes when app becomes visible
-    pollForChanges()
-  }
-}
+// Layer 4: Adaptive polling — replaces fixed setInterval + visibilitychange
+const { start: startPolling, stop: stopPolling } = useAdaptivePolling(pollForChanges)
 
 onMounted(async () => {
   checkViewport()
   if (import.meta.client) {
     window.addEventListener('resize', checkViewport)
-    document.addEventListener('visibilitychange', handleVisibilityChange)
 
-    // Start polling for changes
+    // Start adaptive polling (handles visibility, focus, idle internally)
     startPolling()
 
     // Check for updates after initial load + start periodic check (hourly)
@@ -313,7 +305,6 @@ onMounted(async () => {
 onUnmounted(() => {
   if (import.meta.client) {
     window.removeEventListener('resize', checkViewport)
-    document.removeEventListener('visibilitychange', handleVisibilityChange)
     stopPolling()
     stopPeriodicCheck()
   }

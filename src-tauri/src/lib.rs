@@ -5,10 +5,19 @@ use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Mutex;
+use std::time::Instant;
 
 // Global flags for logging
 static LOGGING_ENABLED: AtomicBool = AtomicBool::new(false);
 static VERBOSE_LOGGING: AtomicBool = AtomicBool::new(false);
+
+// Sync cooldown: skip redundant syncs within 10 seconds
+static LAST_SYNC_TIME: Mutex<Option<Instant>> = Mutex::new(None);
+const SYNC_COOLDOWN_SECS: u64 = 10;
+
+// Filesystem mtime tracking for change detection
+static LAST_KNOWN_MTIME: Mutex<Option<std::time::SystemTime>> = Mutex::new(None);
 
 // Conditional logging macros
 macro_rules! log_info {
@@ -542,7 +551,19 @@ fn execute_bd(command: &str, args: &[String], cwd: Option<&str>) -> Result<Strin
 
 /// Sync the beads database before read operations to ensure data is up-to-date
 /// Uses bidirectional sync to preserve local changes while getting remote updates
+/// Has a cooldown to avoid redundant syncs within the same poll cycle
 fn sync_bd_database(cwd: Option<&str>) {
+    // Check cooldown — skip if synced recently
+    {
+        let last = LAST_SYNC_TIME.lock().unwrap();
+        if let Some(t) = *last {
+            if t.elapsed().as_secs() < SYNC_COOLDOWN_SECS {
+                log_info!("[sync] Skipping — cooldown active ({:.1}s ago)", t.elapsed().as_secs_f32());
+                return;
+            }
+        }
+    }
+
     let working_dir = cwd
         .map(String::from)
         .or_else(|| env::var("BEADS_PATH").ok())
@@ -560,6 +581,9 @@ fn sync_bd_database(cwd: Option<&str>) {
     {
         Ok(output) if output.status.success() => {
             log_info!("[sync] Sync completed successfully");
+            // Update cooldown timestamp
+            let mut last = LAST_SYNC_TIME.lock().unwrap();
+            *last = Some(Instant::now());
         }
         Ok(output) => {
             log_warn!(
@@ -600,6 +624,9 @@ async fn bd_sync(cwd: Option<String>) -> Result<(), String> {
     }
 
     log_info!("[bd_sync] Sync completed successfully");
+    // Reset cooldown so subsequent reads pick up the fresh sync
+    let mut last = LAST_SYNC_TIME.lock().unwrap();
+    *last = Some(Instant::now());
     Ok(())
 }
 
@@ -684,6 +711,100 @@ async fn bd_repair_database(cwd: Option<String>) -> Result<RepairResult, String>
         Err(e) => {
             log_error!("[bd_repair] Failed to verify repair: {}", e);
             Err(format!("Failed to verify repair: {}", e))
+        }
+    }
+}
+
+// ============================================================================
+// Batched Poll Data
+// ============================================================================
+
+/// All data needed for a single poll cycle, fetched in one IPC call.
+#[derive(Debug, Serialize)]
+pub struct PollData {
+    #[serde(rename = "openIssues")]
+    pub open_issues: Vec<Issue>,
+    #[serde(rename = "closedIssues")]
+    pub closed_issues: Vec<Issue>,
+    #[serde(rename = "readyIssues")]
+    pub ready_issues: Vec<Issue>,
+}
+
+/// Batched poll: sync once, then fetch open + closed + ready issues in sequence.
+/// Replaces 3 separate IPC calls (bd_list + bd_list(closed) + bd_ready) with one.
+#[tauri::command]
+async fn bd_poll_data(cwd: Option<String>) -> Result<PollData, String> {
+    log_info!("[bd_poll_data] Batched poll starting");
+
+    let cwd_ref = cwd.as_deref();
+
+    // Single sync for the entire poll cycle
+    sync_bd_database(cwd_ref);
+
+    // Fetch open issues (no --status flag = non-closed)
+    let open_output = execute_bd("list", &["--limit=0".to_string()], cwd_ref)?;
+    let raw_open = parse_issues_tolerant(&open_output, "bd_poll_data_open")?;
+
+    // Fetch closed issues
+    let closed_output = execute_bd("list", &["--status=closed".to_string(), "--limit=0".to_string()], cwd_ref)?;
+    let raw_closed = parse_issues_tolerant(&closed_output, "bd_poll_data_closed")?;
+
+    // Fetch ready issues
+    let ready_output = execute_bd("ready", &[], cwd_ref)?;
+    let raw_ready = parse_issues_tolerant(&ready_output, "bd_poll_data_ready")?;
+
+    log_info!("[bd_poll_data] Batched poll done: {} open, {} closed, {} ready",
+        raw_open.len(), raw_closed.len(), raw_ready.len());
+
+    Ok(PollData {
+        open_issues: raw_open.into_iter().map(transform_issue).collect(),
+        closed_issues: raw_closed.into_iter().map(transform_issue).collect(),
+        ready_issues: raw_ready.into_iter().map(transform_issue).collect(),
+    })
+}
+
+/// Check if the beads database has changed since last check (via filesystem mtime).
+/// Returns true if changes detected or if this is the first check.
+/// This is extremely cheap — just 1-2 stat() calls, no bd process spawns.
+#[tauri::command]
+async fn bd_check_changed(cwd: Option<String>) -> Result<bool, String> {
+    let working_dir = cwd
+        .or_else(|| env::var("BEADS_PATH").ok())
+        .unwrap_or_else(|| env::current_dir().unwrap().to_string_lossy().to_string());
+
+    let beads_dir = std::path::Path::new(&working_dir).join(".beads");
+
+    // Check mtime of beads.db (primary) and issues.jsonl (fallback)
+    let db_path = beads_dir.join("beads.db");
+    let jsonl_path = beads_dir.join("issues.jsonl");
+
+    let current_mtime = fs::metadata(&db_path)
+        .and_then(|m| m.modified())
+        .or_else(|_| fs::metadata(&jsonl_path).and_then(|m| m.modified()))
+        .ok();
+
+    let mut last = LAST_KNOWN_MTIME.lock().unwrap();
+
+    match (current_mtime, *last) {
+        (Some(current), Some(previous)) => {
+            if current != previous {
+                log_info!("[bd_check_changed] mtime changed — data may have been modified");
+                *last = Some(current);
+                Ok(true)
+            } else {
+                log_debug!("[bd_check_changed] mtime unchanged — no changes");
+                Ok(false)
+            }
+        }
+        (Some(current), None) => {
+            // First check — store mtime, report changed so initial load happens
+            *last = Some(current);
+            Ok(true)
+        }
+        (None, _) => {
+            // No database file found
+            log_warn!("[bd_check_changed] No beads database found in {}", working_dir);
+            Ok(true) // Report changed to let caller handle missing db
         }
     }
 }
@@ -1849,6 +1970,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             bd_sync,
             bd_repair_database,
+            bd_check_changed,
+            bd_poll_data,
             bd_list,
             bd_count,
             bd_ready,

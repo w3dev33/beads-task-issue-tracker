@@ -103,6 +103,16 @@ export function useDashboard() {
     }
   }
 
+  /**
+   * Update dashboard from pre-fetched poll data (no API calls needed).
+   * Used by the batched polling system to avoid separate bdReady call.
+   */
+  const updateFromPollData = (issues: Issue[], readyData: Issue[]) => {
+    stats.value = computeStatsFromIssues(issues)
+    readyIssues.value = readyData || []
+    stats.value.ready = readyIssues.value.length
+  }
+
   // Clear all stats data (used when removing last favorite)
   const clearStats = () => {
     stats.value = null
@@ -117,6 +127,7 @@ export function useDashboard() {
     error,
     fetchStats,
     computeStatsFromIssues,
+    updateFromPollData,
     clearStats,
   }
 }

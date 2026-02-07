@@ -1,5 +1,5 @@
 import type { Issue, CreateIssuePayload, UpdateIssuePayload } from '~/types/issue'
-import { bdList, bdCount, bdShow, bdCreate, bdUpdate, bdClose, bdDelete, bdAddComment, bdPurgeOrphanAttachments, type BdListOptions } from '~/utils/bd-api'
+import { bdList, bdCount, bdShow, bdCreate, bdUpdate, bdClose, bdDelete, bdAddComment, bdPurgeOrphanAttachments, bdPollData, type BdListOptions, type PollData } from '~/utils/bd-api'
 import { useProjectStorage } from '~/composables/useProjectStorage'
 
 // Interface for hierarchical grouping of epics and their children
@@ -170,6 +170,80 @@ export function useIssues() {
       if (!silent) {
         isLoading.value = false
       }
+    }
+  }
+
+  /**
+   * Fetch all poll data in a single batched IPC call.
+   * Used by the polling system for lower overhead (1 IPC instead of 3).
+   * Returns the ready issues for dashboard use.
+   */
+  const fetchPollData = async (): Promise<Issue[] | null> => {
+    error.value = null
+
+    try {
+      const path = getPath()
+      const data = await bdPollData(path)
+
+      const mergedIssues = [...(data.openIssues || []), ...(data.closedIssues || [])]
+      const newIssues = deduplicateIssues(mergedIssues)
+
+      // Enrich with parent-child relationships (same as fetchIssues)
+      const epicIds = newIssues.filter(i => i.type === 'epic').map(i => i.id)
+      if (epicIds.length > 0) {
+        const issueMap = new Map(newIssues.map(i => [i.id, i]))
+
+        const epicDetails = await Promise.all(
+          epicIds.map(id => bdShow(id, path).catch(() => null))
+        )
+
+        for (const epicDetail of epicDetails) {
+          if (!epicDetail?.children) continue
+          for (const child of epicDetail.children) {
+            const issue = issueMap.get(child.id)
+            if (issue && !issue.parent) {
+              issue.parent = {
+                id: epicDetail.id,
+                title: epicDetail.title,
+                status: epicDetail.status as any,
+                priority: epicDetail.priority as any,
+              }
+            }
+          }
+        }
+      }
+
+      // Only update if data actually changed
+      const currentSignature = JSON.stringify(issues.value.map(i => i.id + i.updatedAt))
+      const newSignature = JSON.stringify(newIssues.map(i => i.id + i.updatedAt))
+
+      if (currentSignature !== newSignature) {
+        issues.value = newIssues
+
+        // Sync selectedIssue with updated data
+        if (selectedIssue.value) {
+          const updatedSelected = newIssues.find(i => i.id === selectedIssue.value!.id)
+          if (updatedSelected && updatedSelected.status !== selectedIssue.value.status) {
+            selectedIssue.value = updatedSelected
+          }
+        }
+      }
+
+      // Update polling state
+      lastKnownCount.value = newIssues.length
+      const maxUpdated = newIssues.reduce((max, issue) => {
+        return issue.updatedAt > max ? issue.updatedAt : max
+      }, '')
+      lastKnownUpdated.value = maxUpdated || null
+
+      return data.readyIssues || []
+    } catch (e) {
+      if (checkRepairError(e)) {
+        error.value = 'Database needs repair due to a schema migration issue.'
+      } else {
+        error.value = e instanceof Error ? e.message : 'Failed to fetch poll data'
+      }
+      return null
     }
   }
 
@@ -692,6 +766,7 @@ export function useIssues() {
     expandEpic,
     // Actions
     fetchIssues,
+    fetchPollData,
     fetchIssue,
     createIssue,
     updateIssue,

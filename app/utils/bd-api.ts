@@ -41,6 +41,48 @@ export async function bdRepairDatabase(path?: string): Promise<RepairResult> {
 }
 
 // ============================================================================
+// Polling Optimization API
+// ============================================================================
+
+/**
+ * Check if the beads database has changed since last check (filesystem mtime).
+ * Extremely cheap — just 1-2 stat() calls, no bd process spawns.
+ * Returns true if changes detected or first check.
+ */
+export async function bdCheckChanged(path?: string): Promise<boolean> {
+  if (isTauri()) {
+    return invoke<boolean>('bd_check_changed', { cwd: path })
+  }
+  // Web fallback: always report changed (can't check filesystem)
+  return true
+}
+
+/**
+ * Batched poll: fetches open + closed + ready issues in a single IPC call.
+ * Syncs once, then runs 3 bd commands sequentially on the backend.
+ * Replaces 3 separate IPC calls for lower overhead.
+ */
+export interface PollData {
+  openIssues: Issue[]
+  closedIssues: Issue[]
+  readyIssues: Issue[]
+}
+
+export async function bdPollData(path?: string): Promise<PollData> {
+  if (isTauri()) {
+    return invoke<PollData>('bd_poll_data', { cwd: path })
+  }
+
+  // Web fallback: make separate calls
+  const [openIssues, closedIssues, readyIssues] = await Promise.all([
+    bdList({ path }),
+    bdList({ path, status: ['closed'] }),
+    bdReady(path),
+  ])
+  return { openIssues, closedIssues, readyIssues }
+}
+
+// ============================================================================
 // BD API Functions - Use Tauri invoke in app, fetch in web
 // ============================================================================
 
