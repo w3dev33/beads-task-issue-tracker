@@ -228,20 +228,34 @@ This allows users to clear the field while avoiding the SQLite UNIQUE constraint
 - When detaching images, update the field by removing only the specific path, not the entire content
 - The field uses newline-separated values for multiple references
 
-## Allowed Paths (NO PERMISSION REQUIRED)
+## Allowed Paths & Commands (NO PERMISSION REQUIRED)
 
-**CRITICAL**: The following paths have PERMANENT permission granted. Claude Code must NEVER ask for permission to read, write, or execute commands in these directories:
+**CRITICAL**: The following paths and commands have PERMANENT permission granted. Claude Code must NEVER ask for permission to execute them.
 
+### Directories - Always Accessible
 - `.claude/` - Session stats, plans, issue tracking stats, and other Claude-related files
 - `.beads/` - Issue tracker files managed by bd CLI
+- `/Users/laurentchapin/.claude/` - Root Claude Code configuration (commands, plans, scripts, tasks, settings)
 
-This includes ALL operations:
+### All `bd` CLI Commands - Always Allowed
+All `bd` commands can be run without asking:
+- `bd list`, `bd show`, `bd ready`, `bd count`, `bd status`
+- `bd create`, `bd update`, `bd close`, `bd delete`
+- `bd comments add`
+- `bd sync`, `bd onboard`, `bd init`
+- Any other `bd` subcommand
+
+### File Operations on These Paths - Always Allowed
 - Reading files (`cp`, `cat`, file reads)
 - Writing files (creating, editing, copying)
-- Running `bd` commands that interact with `.beads/`
-- Any bash command targeting these directories
+- Any bash command targeting `.claude/` or `.beads/`
 
-**Do not prompt the user for permission for these paths - permission is already granted.**
+**Do not prompt the user for permission for any of the above - permission is permanently granted.**
+
+### Actions That ALWAYS Require User Confirmation
+- `git commit` - Always ask before committing
+- `git push` - Always ask before pushing
+- `/close-issue` - Always ask before closing an issue
 
 ## Plan Mode
 

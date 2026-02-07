@@ -472,6 +472,19 @@ fn get_extended_path() -> String {
     all_paths.join(":")
 }
 
+/// Creates a Command with platform-specific flags.
+/// On Windows, sets CREATE_NO_WINDOW to prevent console popups.
+fn new_command(program: &str) -> Command {
+    #[allow(unused_mut)]
+    let mut cmd = Command::new(program);
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+    }
+    cmd
+}
+
 fn execute_bd(command: &str, args: &[String], cwd: Option<&str>) -> Result<String, String> {
     let working_dir = cwd
         .map(String::from)
@@ -488,7 +501,7 @@ fn execute_bd(command: &str, args: &[String], cwd: Option<&str>) -> Result<Strin
 
     log_info!("[bd] bd {} | cwd: {}", full_args.join(" "), working_dir);
 
-    let output = Command::new("bd")
+    let output = new_command("bd")
         .args(&full_args)
         .current_dir(&working_dir)
         .env("PATH", get_extended_path())
@@ -538,7 +551,7 @@ fn sync_bd_database(cwd: Option<&str>) {
     log_info!("[sync] Starting bidirectional sync for: {}", working_dir);
 
     // Run bd sync (bidirectional - exports local changes AND imports remote changes)
-    match Command::new("bd")
+    match new_command("bd")
         .args(["sync", "--no-daemon"])
         .current_dir(&working_dir)
         .env("PATH", get_extended_path())
@@ -572,7 +585,7 @@ async fn bd_sync(cwd: Option<String>) -> Result<(), String> {
 
     log_info!("[bd_sync] Manual sync requested for: {}", working_dir);
 
-    let output = Command::new("bd")
+    let output = new_command("bd")
         .args(["sync", "--no-daemon"])
         .current_dir(&working_dir)
         .env("PATH", get_extended_path())
@@ -647,7 +660,7 @@ async fn bd_repair_database(cwd: Option<String>) -> Result<RepairResult, String>
     log_info!("[bd_repair] Removed old database files");
 
     // Test that bd can now work (it will recreate the database)
-    let test_output = std::process::Command::new("bd")
+    let test_output = new_command("bd")
         .args(["list", "--limit=1", "--no-daemon", "--json"])
         .current_dir(&working_dir)
         .env("PATH", get_extended_path())
@@ -805,7 +818,7 @@ async fn bd_show(id: String, options: CwdOptions) -> Result<Option<Issue>, Strin
     // Sync database before reading to ensure data is up-to-date
     sync_bd_database(options.cwd.as_deref());
 
-    let output = execute_bd("show", &[id.clone()], options.cwd.as_deref())?;
+    let output = execute_bd("show", std::slice::from_ref(&id), options.cwd.as_deref())?;
 
     // bd show can return either a single object or an array
     let result: serde_json::Value = serde_json::from_str(&output)
@@ -817,8 +830,7 @@ async fn bd_show(id: String, options: CwdOptions) -> Result<Option<Issue>, Strin
     let raw_issue: Option<BdRawIssue> = if result.is_array() {
         result.as_array()
             .and_then(|arr| arr.first())
-            .map(|v| serde_json::from_value(v.clone()).ok())
-            .flatten()
+            .and_then(|v| serde_json::from_value(v.clone()).ok())
     } else {
         serde_json::from_value(result).ok()
     };
@@ -966,7 +978,7 @@ async fn bd_update(id: String, updates: UpdatePayload) -> Result<Option<Issue>, 
     if trimmed_output.is_empty() {
         log::info!("[bd_update] Empty response from bd, fetching issue {} to get updated data", id);
         // Fetch the updated issue directly
-        let show_output = execute_bd("show", &[id.clone()], updates.cwd.as_deref())?;
+        let show_output = execute_bd("show", std::slice::from_ref(&id), updates.cwd.as_deref())?;
         let show_result: serde_json::Value = serde_json::from_str(&show_output)
             .map_err(|e| {
                 log::error!("[bd_update] Failed to parse show JSON: {}", e);
@@ -976,8 +988,7 @@ async fn bd_update(id: String, updates: UpdatePayload) -> Result<Option<Issue>, 
         let raw_issue: Option<BdRawIssue> = if show_result.is_array() {
             show_result.as_array()
                 .and_then(|arr| arr.first())
-                .map(|v| serde_json::from_value(v.clone()).ok())
-                .flatten()
+                .and_then(|v| serde_json::from_value(v.clone()).ok())
         } else {
             serde_json::from_value(show_result).ok()
         };
@@ -996,8 +1007,7 @@ async fn bd_update(id: String, updates: UpdatePayload) -> Result<Option<Issue>, 
         log::info!("[bd_update] Result is array");
         result.as_array()
             .and_then(|arr| arr.first())
-            .map(|v| serde_json::from_value(v.clone()).ok())
-            .flatten()
+            .and_then(|v| serde_json::from_value(v.clone()).ok())
     } else {
         log::info!("[bd_update] Result is object");
         serde_json::from_value(result.clone()).map_err(|e| {
@@ -1019,7 +1029,7 @@ async fn bd_update(id: String, updates: UpdatePayload) -> Result<Option<Issue>, 
 async fn bd_close(id: String, options: CwdOptions) -> Result<serde_json::Value, String> {
     log_info!("[bd_close] Closing issue: {} with cwd: {:?}", id, options.cwd);
 
-    let output = execute_bd("close", &[id.clone()], options.cwd.as_deref())?;
+    let output = execute_bd("close", std::slice::from_ref(&id), options.cwd.as_deref())?;
 
     log_info!("[bd_close] Raw output: {}", output.chars().take(500).collect::<String>());
 
@@ -1339,7 +1349,7 @@ async fn log_frontend(level: String, message: String) {
 
 #[tauri::command]
 async fn get_bd_version() -> String {
-    match Command::new("bd")
+    match new_command("bd")
         .arg("--version")
         .env("PATH", get_extended_path())
         .output()
@@ -1380,7 +1390,7 @@ async fn open_image_file(path: String) -> Result<(), String> {
 
     #[cfg(target_os = "windows")]
     {
-        Command::new("cmd")
+        new_command("cmd")
             .args(["/C", "start", "", &path])
             .spawn()
             .map_err(|e| format!("Failed to open file: {}", e))?;
@@ -1447,7 +1457,7 @@ async fn read_image_file(path: String) -> Result<ImageData, String> {
 fn base64_encode(data: &[u8]) -> String {
     const ALPHABET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
-    let mut result = String::with_capacity((data.len() + 2) / 3 * 4);
+    let mut result = String::with_capacity(data.len().div_ceil(3) * 4);
 
     for chunk in data.chunks(3) {
         let mut buf = [0u8; 3];
@@ -1763,7 +1773,7 @@ pub fn run() {
             log::info!("[startup] Extended PATH: {}", get_extended_path());
 
             // Check if bd is accessible
-            match Command::new("bd")
+            match new_command("bd")
                 .arg("--version")
                 .env("PATH", get_extended_path())
                 .output()
