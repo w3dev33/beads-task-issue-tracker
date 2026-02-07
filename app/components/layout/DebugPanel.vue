@@ -21,6 +21,15 @@ const isVerbose = ref(false)
 let refreshInterval: ReturnType<typeof setInterval> | null = null
 
 const logContainerRef = ref<HTMLDivElement | null>(null)
+const isUserAtBottom = ref(true)
+
+const SCROLL_THRESHOLD = 30 // px from bottom to consider "at bottom"
+
+const onScroll = () => {
+  if (!logContainerRef.value) return
+  const el = logContainerRef.value
+  isUserAtBottom.value = el.scrollHeight - el.scrollTop - el.clientHeight < SCROLL_THRESHOLD
+}
 
 // Resizable panel
 const panelHeight = ref(250)
@@ -61,6 +70,7 @@ const stopResize = () => {
 const scrollToBottom = () => {
   if (logContainerRef.value) {
     logContainerRef.value.scrollTop = logContainerRef.value.scrollHeight
+    isUserAtBottom.value = true
   }
 }
 
@@ -101,9 +111,11 @@ const colorizedLogs = computed(() => {
 const fetchLogs = async () => {
   try {
     logs.value = await readLogs(300) // Last 300 lines
-    nextTick(() => {
-      scrollToBottom()
-    })
+    if (isUserAtBottom.value) {
+      nextTick(() => {
+        scrollToBottom()
+      })
+    }
   } catch (e) {
     console.error('Failed to fetch logs:', e)
   }
@@ -312,7 +324,7 @@ onUnmounted(() => {
     </div>
 
     <!-- Log content -->
-    <div ref="logContainerRef" class="flex-1 overflow-auto bg-muted/10">
+    <div ref="logContainerRef" class="flex-1 overflow-auto bg-muted/10" @scroll="onScroll">
       <pre v-if="logs" class="p-3 text-[11px] font-mono whitespace-pre-wrap break-all leading-relaxed" v-html="colorizedLogs"></pre>
       <pre v-else class="p-3 text-[11px] font-mono text-muted-foreground">No logs yet...</pre>
     </div>
