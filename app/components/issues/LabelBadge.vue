@@ -30,7 +30,7 @@ const getColorFromLabel = (label: string) => {
   ]
 
   const index = Math.abs(hash) % colors.length
-  return colors[index]
+  return colors[index] ?? '#7e22ce'
 }
 
 const bgColor = computed(() => getColorFromLabel(props.label))

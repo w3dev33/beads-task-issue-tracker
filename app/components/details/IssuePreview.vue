@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ImageIcon, Plus } from 'lucide-vue-next'
+import { ImageIcon, FileText, Plus, X } from 'lucide-vue-next'
 import type { Issue } from '~/types/issue'
 import { Badge } from '~/components/ui/badge'
 import { Button } from '~/components/ui/button'
@@ -8,7 +8,7 @@ import LabelBadge from '~/components/issues/LabelBadge.vue'
 import StatusBadge from '~/components/issues/StatusBadge.vue'
 import PriorityBadge from '~/components/issues/PriorityBadge.vue'
 import ImageThumbnail from '~/components/ui/image-preview/ImageThumbnail.vue'
-import { extractImagesFromExternalRef, extractNonImageRefs, isUrl } from '~/utils/markdown'
+import { extractImagesFromExternalRef, extractMarkdownFromExternalRef, extractNonImageRefs, isUrl } from '~/utils/markdown'
 
 const props = defineProps<{
   issue: Issue
@@ -17,9 +17,16 @@ const props = defineProps<{
 
 const { beadsPath } = useBeadsPath()
 const { openGallery } = useImagePreview()
+const { openMarkdownGallery } = useMarkdownPreview()
 
 // Extract images from externalRef
 const attachedImages = computed(() => extractImagesFromExternalRef(props.issue.externalRef))
+
+// Extract markdown files from externalRef
+const attachedMarkdown = computed(() => extractMarkdownFromExternalRef(props.issue.externalRef))
+
+// Total attachment count (images + markdown)
+const totalAttachments = computed(() => attachedImages.value.length + attachedMarkdown.value.length)
 
 // Extract non-image external references (URLs, IDs)
 const nonImageRefs = computed(() => extractNonImageRefs(props.issue.externalRef))
@@ -47,11 +54,28 @@ const handleImageClick = async (src: string, alt: string) => {
   openGallery(preparedImages.value, clickedIndex >= 0 ? clickedIndex : 0)
 }
 
-const attachImage = async () => {
+// Prepare markdown files with full paths for gallery
+const preparedMarkdown = computed(() =>
+  attachedMarkdown.value.map(md => ({
+    path: md.src.startsWith('/') ? md.src : `${beadsPath.value}/.beads/${md.src}`,
+    alt: md.alt,
+  })),
+)
+
+const handleMarkdownClick = (src: string) => {
+  const fullPath = src.startsWith('/') ? src : `${beadsPath.value}/.beads/${src}`
+  const clickedIndex = preparedMarkdown.value.findIndex(md => md.path === fullPath)
+  openMarkdownGallery(preparedMarkdown.value, clickedIndex >= 0 ? clickedIndex : 0)
+}
+
+const attachFile = async () => {
   const { open } = await import('@tauri-apps/plugin-dialog')
   const selected = await open({
     multiple: false,
-    filters: [{ name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp'] }],
+    filters: [
+      { name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp'] },
+      { name: 'Markdown', extensions: ['md', 'markdown'] },
+    ],
   })
   if (selected) {
     emit('attach-image', selected)
@@ -190,7 +214,7 @@ const formatEstimate = (minutes: number) => {
           </svg>
           <h4 class="text-[10px] font-medium text-muted-foreground uppercase tracking-wide group-hover:text-foreground transition-colors">
             Attachments
-            <span v-if="attachedImages.length > 0" class="text-muted-foreground">({{ attachedImages.length }})</span>
+            <span v-if="totalAttachments > 0" class="text-muted-foreground">({{ totalAttachments }})</span>
           </h4>
         </button>
         <Button
@@ -199,23 +223,50 @@ const formatEstimate = (minutes: number) => {
           variant="outline"
           size="sm"
           class="h-5 px-1.5 text-[10px] hover:bg-sky-500/20 hover:border-sky-500 hover:text-sky-400 active:scale-95 active:bg-sky-500/30 transition-all"
-          @click="attachImage"
+          @click="attachFile"
         >
           <ImageIcon class="w-3 h-3 mr-1" />
           Attach
         </Button>
       </div>
       <div v-show="isAttachmentsOpen" class="mt-2 pl-4.5">
-        <div v-if="attachedImages.length > 0" class="flex flex-wrap gap-4">
-          <ImageThumbnail
-            v-for="img in attachedImages"
-            :key="img.src"
-            :src="img.src"
-            :alt="img.alt"
-            :show-remove="!readonly"
-            @click="handleImageClick(img.src, img.alt)"
-            @remove="emit('detach-image', img.src)"
-          />
+        <div v-if="totalAttachments > 0" class="space-y-3">
+          <!-- Image thumbnails -->
+          <div v-if="attachedImages.length > 0" class="flex flex-wrap gap-4">
+            <ImageThumbnail
+              v-for="img in attachedImages"
+              :key="img.src"
+              :src="img.src"
+              :alt="img.alt"
+              :show-remove="!readonly"
+              @click="handleImageClick(img.src, img.alt)"
+              @remove="emit('detach-image', img.src)"
+            />
+          </div>
+          <!-- Markdown file list -->
+          <div v-if="attachedMarkdown.length > 0" class="space-y-1">
+            <div
+              v-for="md in attachedMarkdown"
+              :key="md.src"
+              class="flex items-center gap-2 group/md"
+            >
+              <button
+                class="flex items-center gap-1.5 text-xs text-sky-400 hover:text-sky-300 hover:underline transition-colors min-w-0"
+                @click="handleMarkdownClick(md.src)"
+              >
+                <FileText class="w-3.5 h-3.5 shrink-0" />
+                <span class="truncate">{{ md.alt }}</span>
+              </button>
+              <button
+                v-if="!readonly"
+                type="button"
+                class="opacity-0 group-hover/md:opacity-100 text-destructive hover:text-destructive/80 transition-all shrink-0"
+                @click="emit('detach-image', md.src)"
+              >
+                <X class="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
         </div>
         <p v-else class="text-xs text-muted-foreground">No attachments</p>
       </div>

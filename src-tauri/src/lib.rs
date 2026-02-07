@@ -1643,27 +1643,27 @@ async fn purge_orphan_attachments(project_path: String) -> Result<PurgeResult, S
 }
 
 #[tauri::command]
-async fn copy_image_to_attachments(
+async fn copy_file_to_attachments(
     project_path: String,
     source_path: String,
     issue_id: String,
 ) -> Result<String, String> {
     log::info!(
-        "[copy_image_to_attachments] project: {}, source: {}, issue: {}",
+        "[copy_file_to_attachments] project: {}, source: {}, issue: {}",
         project_path,
         source_path,
         issue_id
     );
 
-    // Validate image extension
-    let allowed_extensions = ["png", "jpg", "jpeg", "gif", "webp", "bmp", "svg", "ico", "tiff", "tif"];
+    // Validate file extension (images + markdown)
+    let allowed_extensions = ["png", "jpg", "jpeg", "gif", "webp", "bmp", "svg", "ico", "tiff", "tif", "md", "markdown"];
     let source_lower = source_path.to_lowercase();
-    let is_image = allowed_extensions
+    let is_allowed = allowed_extensions
         .iter()
         .any(|ext| source_lower.ends_with(&format!(".{}", ext)));
 
-    if !is_image {
-        return Err("Only image files are allowed".to_string());
+    if !is_allowed {
+        return Err("Only image and markdown files are allowed".to_string());
     }
 
     // Verify source file exists
@@ -1733,9 +1733,63 @@ async fn copy_image_to_attachments(
     fs::copy(&source, &dest_path).map_err(|e| format!("Failed to copy file: {}", e))?;
 
     let result_path = dest_path.to_string_lossy().to_string();
-    log::info!("[copy_image_to_attachments] Copied to: {}", result_path);
+    log::info!("[copy_file_to_attachments] Copied to: {}", result_path);
 
     Ok(result_path)
+}
+
+#[derive(Debug, Serialize)]
+pub struct TextData {
+    pub content: String,
+}
+
+#[tauri::command]
+async fn read_text_file(path: String) -> Result<TextData, String> {
+    log_info!("[read_text_file] Reading: {}", path);
+
+    // Security: Only allow markdown file extensions
+    let path_lower = path.to_lowercase();
+    let is_markdown = path_lower.ends_with(".md") || path_lower.ends_with(".markdown");
+
+    if !is_markdown {
+        return Err("Only markdown files are allowed".to_string());
+    }
+
+    // Verify file exists
+    if !std::path::Path::new(&path).exists() {
+        return Err(format!("File not found: {}", path));
+    }
+
+    // Read file as UTF-8
+    let content = fs::read_to_string(&path)
+        .map_err(|e| format!("Failed to read file: {}", e))?;
+
+    Ok(TextData { content })
+}
+
+#[tauri::command]
+async fn write_text_file(path: String, content: String) -> Result<(), String> {
+    log_info!("[write_text_file] Writing: {}", path);
+
+    // Security: Only allow markdown file extensions
+    let path_lower = path.to_lowercase();
+    let is_markdown = path_lower.ends_with(".md") || path_lower.ends_with(".markdown");
+
+    if !is_markdown {
+        return Err("Only markdown files are allowed".to_string());
+    }
+
+    // Verify file exists (no creation of new files)
+    if !std::path::Path::new(&path).exists() {
+        return Err(format!("File not found: {}", path));
+    }
+
+    // Write content to file
+    fs::write(&path, &content)
+        .map_err(|e| format!("Failed to write file: {}", e))?;
+
+    log_info!("[write_text_file] Written {} bytes to {}", content.len(), path);
+    Ok(())
 }
 
 // ============================================================================
@@ -1820,7 +1874,9 @@ pub fn run() {
             check_for_updates,
             open_image_file,
             read_image_file,
-            copy_image_to_attachments,
+            copy_file_to_attachments,
+            read_text_file,
+            write_text_file,
             delete_attachment_file,
             cleanup_empty_attachment_folder,
             purge_orphan_attachments,

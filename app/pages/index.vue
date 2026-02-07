@@ -49,10 +49,12 @@ import {
   TooltipTrigger,
 } from '~/components/ui/tooltip'
 import ImagePreviewDialog from '~/components/ui/image-preview/ImagePreviewDialog.vue'
+import MarkdownPreviewDialog from '~/components/ui/markdown-preview/MarkdownPreviewDialog.vue'
 
 // Composables
 const { filters, toggleStatus, toggleType, togglePriority, toggleAssignee, clearFilters, setStatusFilter, setSearch, toggleLabelFilter } = useFilters()
 const imagePreview = useImagePreview()
+const markdownPreview = useMarkdownPreview()
 const { columns, toggleColumn, setColumns, resetColumns } = useColumnConfig()
 const { beadsPath, hasStoredPath } = useBeadsPath()
 const { notify, success: notifySuccess, error: notifyError } = useNotification()
@@ -607,14 +609,14 @@ const handleAttachImage = async (path: string) => {
   })
 
   if (isDuplicate) {
-    notify('Image already attached', selectedFilename)
+    notify('File already attached', selectedFilename)
     return
   }
 
   try {
-    // Copy the image to .beads/attachments/{issue-id}/
+    // Copy the file to .beads/attachments/{issue-id}/
     const { invoke } = await import('@tauri-apps/api/core')
-    const copiedPath = await invoke<string>('copy_image_to_attachments', {
+    const copiedPath = await invoke<string>('copy_file_to_attachments', {
       projectPath: beadsPath.value,
       sourcePath: path,
       issueId: selectedIssue.value.id,
@@ -624,7 +626,7 @@ const handleAttachImage = async (path: string) => {
     const newRef = currentRef ? `${currentRef}\n${copiedPath}` : copiedPath
     await updateIssue(selectedIssue.value.id, { externalRef: newRef })
   } catch (error) {
-    console.error('Failed to copy image:', error)
+    console.error('Failed to copy file:', error)
     // Fallback: use original path if copy fails
     const newRef = currentRef ? `${currentRef}\n${path}` : path
     await updateIssue(selectedIssue.value.id, { externalRef: newRef })
@@ -1766,10 +1768,10 @@ watch(
       </template>
     </ConfirmDialog>
 
-    <!-- Detach Image Confirmation Dialog -->
+    <!-- Detach Attachment Confirmation Dialog -->
     <ConfirmDialog
       v-model:open="isDetachDialogOpen"
-      title="Detach image"
+      title="Detach attachment"
       confirm-text="Detach"
       cancel-text="Cancel"
       variant="destructive"
@@ -1778,7 +1780,7 @@ watch(
     >
       <template #description>
         <p class="text-sm text-muted-foreground">
-          Are you sure you want to detach this image?
+          Are you sure you want to detach this attachment?
         </p>
         <p class="mt-2 text-xs text-muted-foreground font-mono break-all">
           {{ detachImagePath }}
@@ -1884,6 +1886,39 @@ watch(
       :image-counter="imagePreview.imageCounter.value"
       @next="imagePreview.goNext"
       @prev="imagePreview.goPrev"
+    />
+
+    <!-- Markdown Preview Dialog -->
+    <MarkdownPreviewDialog
+      v-model:open="markdownPreview.isOpen.value"
+      :markdown-content="markdownPreview.markdownContent.value"
+      :markdown-title="markdownPreview.markdownTitle.value"
+      :is-loading="markdownPreview.isLoading.value"
+      :has-multiple-files="markdownPreview.hasMultipleFiles.value"
+      :can-go-next="markdownPreview.canGoNext.value"
+      :can-go-prev="markdownPreview.canGoPrev.value"
+      :file-counter="markdownPreview.fileCounter.value"
+      :is-edit-mode="markdownPreview.isEditMode.value"
+      :edited-content="markdownPreview.editedContent.value"
+      :is-saving="markdownPreview.isSaving.value"
+      @next="markdownPreview.goNext"
+      @prev="markdownPreview.goPrev"
+      @toggle-edit="markdownPreview.toggleEdit"
+      @save="markdownPreview.requestSave"
+      @cancel-edit="markdownPreview.cancelEdit"
+      @update:edited-content="markdownPreview.editedContent.value = $event"
+    />
+
+    <!-- Markdown Save Confirmation -->
+    <ConfirmDialog
+      v-model:open="markdownPreview.showSaveConfirm.value"
+      title="Save changes"
+      description="Save the changes to this markdown file?"
+      confirm-text="Save"
+      cancel-text="Cancel"
+      :is-loading="markdownPreview.isSaving.value"
+      @confirm="markdownPreview.confirmSave"
+      @cancel="markdownPreview.cancelSave"
     />
   </div>
 </template>

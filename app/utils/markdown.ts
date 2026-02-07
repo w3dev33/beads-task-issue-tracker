@@ -59,6 +59,11 @@ export function extractImagesFromMarkdown(text: string): { src: string; alt: str
 const IMAGE_EXTENSIONS = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.svg', '.ico', '.tiff', '.tif']
 
 /**
+ * Markdown file extensions supported for attachment preview
+ */
+const MARKDOWN_EXTENSIONS = ['.md', '.markdown']
+
+/**
  * Check if a path or URL is an image based on extension
  * Supports both local paths and URLs (http/https)
  */
@@ -67,6 +72,15 @@ export function isImagePath(path: string): boolean {
   // Remove query string and hash for URL checking
   const cleanPath = (path.split('?')[0] ?? '').split('#')[0]?.toLowerCase() ?? ''
   return IMAGE_EXTENSIONS.some(ext => cleanPath.endsWith(ext))
+}
+
+/**
+ * Check if a path is a markdown file based on extension
+ */
+export function isMarkdownPath(path: string): boolean {
+  if (!path) return false
+  const cleanPath = (path.split('?')[0] ?? '').split('#')[0]?.toLowerCase() ?? ''
+  return MARKDOWN_EXTENSIONS.some(ext => cleanPath.endsWith(ext))
 }
 
 /**
@@ -97,8 +111,25 @@ export function extractImagesFromExternalRef(externalRef: string | undefined): {
 }
 
 /**
- * Extract non-image references from externalRef field
- * Returns array of URLs/IDs that are not image paths
+ * Extract markdown file paths from externalRef field
+ * Returns array of { src, alt } objects for markdown paths only
+ */
+export function extractMarkdownFromExternalRef(externalRef: string | undefined): { src: string; alt: string }[] {
+  if (!externalRef) return []
+
+  return externalRef
+    .split('\n')
+    .map(line => line.trim())
+    .filter(line => line && !line.startsWith('cleared:') && isMarkdownPath(line))
+    .map(path => ({
+      src: path,
+      alt: path.split('/').pop() || 'Markdown',
+    }))
+}
+
+/**
+ * Extract non-image, non-markdown references from externalRef field
+ * Returns array of URLs/IDs that are not image or markdown paths
  */
 export function extractNonImageRefs(externalRef: string | undefined): string[] {
   if (!externalRef) return []
@@ -106,8 +137,8 @@ export function extractNonImageRefs(externalRef: string | undefined): string[] {
   return externalRef
     .split('\n')
     .map(line => line.trim())
-    // Filter out cleared placeholders and image paths
-    .filter(line => line && !line.startsWith('cleared:') && !isImagePath(line))
+    // Filter out cleared placeholders, image paths, and markdown paths
+    .filter(line => line && !line.startsWith('cleared:') && !isImagePath(line) && !isMarkdownPath(line))
 }
 
 // Configure DOMPurify to allow our custom attributes
@@ -136,6 +167,12 @@ const purifyConfig = {
     'h5',
     'h6',
     'hr',
+    'table',
+    'thead',
+    'tbody',
+    'tr',
+    'th',
+    'td',
   ],
   ALLOWED_ATTR: ['href', 'target', 'rel', 'data-external-link'],
 }

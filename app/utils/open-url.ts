@@ -90,6 +90,42 @@ export async function openImageFile(filePath: string): Promise<void> {
   }
 }
 
+export interface TextData {
+  content: string
+}
+
+export async function readTextFile(filePath: string): Promise<TextData | null> {
+  if (!isTauri()) {
+    console.warn('readTextFile is only available in Tauri mode')
+    return null
+  }
+
+  try {
+    const { invoke } = await import('@tauri-apps/api/core')
+    const result = await invoke<{ content: string }>('read_text_file', { path: filePath })
+    return { content: result.content }
+  } catch (error) {
+    console.error('Failed to read text file:', error)
+    return null
+  }
+}
+
+export async function writeTextFile(filePath: string, content: string): Promise<boolean> {
+  if (!isTauri()) {
+    console.warn('writeTextFile is only available in Tauri mode')
+    return false
+  }
+
+  try {
+    const { invoke } = await import('@tauri-apps/api/core')
+    await invoke('write_text_file', { path: filePath, content })
+    return true
+  } catch (error) {
+    console.error('Failed to write text file:', error)
+    return false
+  }
+}
+
 export interface ImageData {
   base64: string
   mimeType: string

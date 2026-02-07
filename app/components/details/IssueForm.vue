@@ -172,13 +172,16 @@ const handleSubmit = () => {
   emit('save', payload)
 }
 
-const attachImage = async () => {
+const attachFile = async () => {
   const { open } = await import('@tauri-apps/plugin-dialog')
   const { invoke } = await import('@tauri-apps/api/core')
 
   const selected = await open({
     multiple: false,
-    filters: [{ name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp'] }],
+    filters: [
+      { name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp'] },
+      { name: 'Markdown', extensions: ['md', 'markdown'] },
+    ],
   })
 
   if (selected) {
@@ -191,14 +194,14 @@ const attachImage = async () => {
     })
 
     if (isDuplicate) {
-      notify('Image already attached', selectedFilename)
+      notify('File already attached', selectedFilename)
       return
     }
 
     try {
-      // Copy the image to .beads/attachments/{issue-id}/
+      // Copy the file to .beads/attachments/{issue-id}/
       const issueId = props.issue?.id || `new-${Date.now()}`
-      const copiedPath = await invoke<string>('copy_image_to_attachments', {
+      const copiedPath = await invoke<string>('copy_file_to_attachments', {
         projectPath: beadsPath.value,
         sourcePath: selected,
         issueId,
@@ -211,7 +214,7 @@ const attachImage = async () => {
         form.externalRef = copiedPath
       }
     } catch (error) {
-      console.error('Failed to copy image:', error)
+      console.error('Failed to copy file:', error)
       // Fallback: use original path if copy fails
       if (form.externalRef) {
         form.externalRef += `\n${selected}`
@@ -360,7 +363,7 @@ const attachImage = async () => {
               variant="outline"
               size="sm"
               class="h-5 px-1.5 text-[10px] hover:bg-sky-500/20 hover:border-sky-500 hover:text-sky-400 active:scale-95 active:bg-sky-500/30 transition-all"
-              @click="attachImage"
+              @click="attachFile"
             >
               <ImageIcon class="w-3 h-3 mr-1" />
               Attach

@@ -325,3 +325,120 @@ body {
 .markdown-content hr {
   @apply my-2 border-muted;
 }
+
+/* Markdown reader styles — full document viewer (MarkdownPreviewDialog) */
+/* Inspired by GitHub/Obsidian rendering: generous spacing, colored headers, clear hierarchy */
+
+.markdown-reader {
+  @apply text-base leading-7 text-foreground;
+}
+
+.markdown-reader a {
+  color: #60a5fa;
+  @apply hover:underline cursor-pointer;
+}
+
+.markdown-reader p {
+  @apply my-3 first:mt-0 last:mb-0;
+}
+
+.markdown-reader ul,
+.markdown-reader ol {
+  @apply my-3 pl-6;
+}
+
+.markdown-reader li {
+  @apply my-1.5;
+}
+
+.markdown-reader ul {
+  @apply list-disc;
+}
+
+.markdown-reader ol {
+  @apply list-decimal;
+}
+
+.markdown-reader code {
+  @apply bg-muted px-1.5 py-0.5 rounded font-mono text-[0.85em];
+}
+
+.markdown-reader pre {
+  @apply bg-muted p-4 rounded-lg my-4 overflow-x-auto text-sm leading-7;
+}
+
+.markdown-reader pre code {
+  @apply bg-transparent p-0;
+}
+
+.markdown-reader blockquote {
+  @apply border-l-3 border-sky-500/40 pl-4 my-4 italic text-muted-foreground;
+}
+
+.markdown-reader strong,
+.markdown-reader b {
+  @apply font-semibold;
+}
+
+.markdown-reader em,
+.markdown-reader i {
+  @apply italic;
+}
+
+.markdown-reader h1,
+.markdown-reader h2,
+.markdown-reader h3,
+.markdown-reader h4,
+.markdown-reader h5,
+.markdown-reader h6 {
+  @apply font-bold leading-tight first:mt-0;
+}
+
+.markdown-reader h1 {
+  @apply text-2xl mt-8 mb-4 pb-2 border-b border-border;
+  color: #93b4e0;
+}
+
+.markdown-reader h2 {
+  @apply text-xl mt-7 mb-3 pb-1.5 border-b border-border/50;
+  color: #7da8c9;
+}
+
+.markdown-reader h3 {
+  @apply text-lg mt-6 mb-2;
+  color: #7db89e;
+}
+
+.markdown-reader h4 {
+  @apply text-base mt-5 mb-2;
+  color: #a599c4;
+}
+
+.markdown-reader h5 {
+  @apply text-sm mt-4 mb-1.5;
+  color: #b0a0b8;
+}
+
+.markdown-reader h6 {
+  @apply text-sm mt-4 mb-1.5 text-muted-foreground;
+}
+
+.markdown-reader hr {
+  @apply my-6 border-border;
+}
+
+.markdown-reader table {
+  @apply w-full my-4 border-collapse text-sm;
+}
+
+.markdown-reader th {
+  @apply text-left font-semibold px-3 py-2 border border-border bg-muted/50;
+}
+
+.markdown-reader td {
+  @apply px-3 py-2 border border-border;
+}
+
+.markdown-reader tr:hover td {
+  @apply bg-muted/30;
+}
