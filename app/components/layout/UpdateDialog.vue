@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { GithubIcon } from 'lucide-vue-next'
 import {
   Dialog,
   DialogContent,
@@ -8,6 +9,7 @@ import {
   DialogTitle,
 } from '~/components/ui/dialog'
 import { Button } from '~/components/ui/button'
+import { openUrl } from '~/utils/open-url'
 
 const open = defineModel<boolean>('open', { default: false })
 
@@ -23,6 +25,10 @@ watch(open, async (isOpen) => {
 const handleDownload = () => {
   openReleasesPage()
   open.value = false
+}
+
+const openGitHubRepo = () => {
+  openUrl('https://github.com/w3dev33/beads-task-issue-tracker')
 }
 </script>
 
@@ -90,19 +96,28 @@ const handleDownload = () => {
           </div>
         </DialogDescription>
       </DialogHeader>
-      <DialogFooter>
-        <Button
-          v-if="updateInfo?.hasUpdate && !isChecking"
-          @click="handleDownload"
+      <DialogFooter class="flex items-center justify-between sm:justify-between">
+        <button
+          @click="openGitHubRepo"
+          class="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
         >
-          Download
-        </Button>
-        <Button
-          variant="outline"
-          @click="open = false"
-        >
-          {{ updateInfo?.hasUpdate ? 'Later' : 'Close' }}
-        </Button>
+          <GithubIcon class="w-3.5 h-3.5" />
+          <span>GitHub</span>
+        </button>
+        <div class="flex items-center gap-2">
+          <Button
+            v-if="updateInfo?.hasUpdate && !isChecking"
+            @click="handleDownload"
+          >
+            Download
+          </Button>
+          <Button
+            variant="outline"
+            @click="open = false"
+          >
+            {{ updateInfo?.hasUpdate ? 'Later' : 'Close' }}
+          </Button>
+        </div>
       </DialogFooter>
     </DialogContent>
   </Dialog>

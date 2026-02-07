@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { GithubIcon } from 'lucide-vue-next'
+
 const { updateInfo } = useUpdateChecker()
 const { showUpdateDialog } = useAppMenu()
 
@@ -16,6 +18,7 @@ const handleClick = () => {
     class="inline-flex items-center gap-1.5 text-muted-foreground/70 hover:text-muted-foreground transition-colors cursor-pointer whitespace-nowrap"
     @click="handleClick"
   >
+    <GithubIcon class="w-3.5 h-3.5" />
     <span>v{{ currentVersion }}</span>
 
     <!-- Update available badge -->
