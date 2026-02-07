@@ -8,11 +8,11 @@ const props = defineProps<{
 }>()
 
 const typeConfig: Record<IssueType, { label: string; class: string }> = {
-  bug: { label: 'BUG', class: 'bg-type-bug text-white' },
-  task: { label: 'TASK', class: 'bg-type-task text-white' },
-  feature: { label: 'FEATURE', class: 'bg-type-feature text-white' },
-  epic: { label: 'EPIC', class: 'bg-type-epic text-white' },
-  chore: { label: 'CHORE', class: 'bg-type-chore text-white' },
+  bug: { label: 'BUG', class: 'badge-gradient bg-type-bug-gradient text-white' },
+  task: { label: 'TASK', class: 'badge-gradient bg-type-task-gradient text-white' },
+  feature: { label: 'FEATURE', class: 'badge-gradient bg-type-feature-gradient text-white' },
+  epic: { label: 'EPIC', class: 'badge-gradient bg-type-epic-gradient text-white' },
+  chore: { label: 'CHORE', class: 'badge-gradient bg-type-chore-gradient text-white' },
 }
 
 const config = computed(() => typeConfig[props.type] || typeConfig.task)

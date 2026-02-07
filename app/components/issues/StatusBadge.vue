@@ -8,10 +8,10 @@ const props = defineProps<{
 }>()
 
 const statusConfig: Record<IssueStatus, { label: string; class: string }> = {
-  open: { label: 'OPEN', class: 'bg-status-open text-white' },
-  in_progress: { label: 'IN PROGRESS', class: 'bg-status-in-progress text-white' },
-  blocked: { label: 'BLOCKED', class: 'bg-status-blocked text-white' },
-  closed: { label: 'CLOSED', class: 'bg-status-closed text-white' },
+  open: { label: 'OPEN', class: 'badge-gradient bg-status-open-gradient text-white' },
+  in_progress: { label: 'IN PROGRESS', class: 'badge-gradient bg-status-in-progress-gradient text-white' },
+  blocked: { label: 'BLOCKED', class: 'badge-gradient bg-status-blocked-gradient text-white' },
+  closed: { label: 'CLOSED', class: 'badge-gradient bg-status-closed-gradient text-white' },
 }
 
 const config = computed(() => statusConfig[props.status] || statusConfig.open)

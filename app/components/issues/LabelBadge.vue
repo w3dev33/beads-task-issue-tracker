@@ -35,18 +35,33 @@ const getColorFromLabel = (label: string) => {
 
 const bgColor = computed(() => getColorFromLabel(props.label))
 
+// Darken a hex color by mixing with black
+const darkenColor = (hex: string, factor = 0.45) => {
+  const r = parseInt(hex.slice(1, 3), 16)
+  const g = parseInt(hex.slice(3, 5), 16)
+  const b = parseInt(hex.slice(5, 7), 16)
+  const dr = Math.round(r * (1 - factor))
+  const dg = Math.round(g * (1 - factor))
+  const db = Math.round(b * (1 - factor))
+  return `#${dr.toString(16).padStart(2, '0')}${dg.toString(16).padStart(2, '0')}${db.toString(16).padStart(2, '0')}`
+}
+
+const gradientStyle = computed(() => ({
+  background: `linear-gradient(135deg, ${bgColor.value}, ${darkenColor(bgColor.value)})`,
+}))
+
 const sizeClasses = computed(() => {
   return props.size === 'sm'
     ? 'text-[10px] px-1.5 py-0.5'
-    : 'text-xs px-2 py-0.5'
+    : 'text-xs'
 })
 </script>
 
 <template>
   <span
-    class="inline-flex items-center rounded font-medium whitespace-nowrap text-white"
+    class="badge-gradient inline-flex items-center rounded font-medium whitespace-nowrap text-white"
     :class="sizeClasses"
-    :style="{ backgroundColor: bgColor }"
+    :style="gradientStyle"
   >
     {{ label }}
   </span>

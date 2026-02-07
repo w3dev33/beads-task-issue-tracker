@@ -50,7 +50,7 @@
   --color-type-bug: #ef4444;
   --color-type-task: #3b82f6;
   --color-type-feature: #8b5cf6;
-  --color-type-epic: #f97316;
+  --color-type-epic: #166534;
   --color-type-chore: #6b7280;
 
   /* Priority colors */
@@ -59,6 +59,71 @@
   --color-priority-p2: #f59e0b;
   --color-priority-p3: #22c55e;
   --color-priority-p4: #6b7280;
+}
+
+/* Gradient badge shared padding */
+.badge-gradient {
+  padding: 0.188rem 0.5rem !important;
+  border: none !important;
+}
+
+/* Type gradients */
+.bg-type-bug-gradient {
+  background: linear-gradient(135deg, #ef4444, #7f1d1d);
+}
+
+.bg-type-task-gradient {
+  background: linear-gradient(135deg, #3b82f6, #1e3a5f);
+}
+
+.bg-type-feature-gradient {
+  background: linear-gradient(135deg, #8b5cf6, #3b0764);
+}
+
+.bg-type-epic-gradient {
+  background: linear-gradient(135deg, #16a34a, #052e16);
+}
+
+.bg-type-chore-gradient {
+  background: linear-gradient(135deg, #6b7280, #1f2937);
+}
+
+/* Status gradients */
+.bg-status-open-gradient {
+  background: linear-gradient(135deg, #15803d, #052e16);
+}
+
+.bg-status-in-progress-gradient {
+  background: linear-gradient(135deg, #3b82f6, #1e3a5f);
+}
+
+.bg-status-blocked-gradient {
+  background: linear-gradient(135deg, #ef4444, #7f1d1d);
+}
+
+.bg-status-closed-gradient {
+  background: linear-gradient(135deg, #6b7280, #1f2937);
+}
+
+/* Priority gradients */
+.bg-priority-p0-gradient {
+  background: linear-gradient(135deg, #ef4444, #7f1d1d);
+}
+
+.bg-priority-p1-gradient {
+  background: linear-gradient(135deg, #ef4444, #7f1d1d);
+}
+
+.bg-priority-p2-gradient {
+  background: linear-gradient(135deg, #f59e0b, #78350f);
+}
+
+.bg-priority-p3-gradient {
+  background: linear-gradient(135deg, #22c55e, #14532d);
+}
+
+.bg-priority-p4-gradient {
+  background: linear-gradient(135deg, #6b7280, #1f2937);
 }
 
 /* Base radius */
