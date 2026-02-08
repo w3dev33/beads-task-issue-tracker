@@ -20,16 +20,38 @@ This project is a reimplementation of the Beads UI as a native desktop app using
 
 ## Features
 
+### Core
 - **Dashboard**: Visual overview of issues by status, type, and priority
 - **Issue Management**: Create, edit, close, and comment on issues
 - **Epic Hierarchy**: Parent/child relationships with collapsible groups and progress tracking
-- **Advanced Filters**: Multi-select filters by type, status, priority, labels, and assignee
-- **Exclusion Filters**: Hide specific issues from view
-- **Image Attachments**: Attach and preview screenshots directly in issues
 - **Multi-Project Support**: Save favorite projects and switch between them instantly
-- **Search**: Find issues by title, ID, or description
-- **Dark/Light Theme**: Toggle via settings
 - **Auto-Sync**: Background synchronization with the Beads database
+
+### Attachments
+- **Image Attachments**: Attach and preview screenshots directly in issues (thumbnail gallery)
+- **Markdown Attachments**: Attach `.md` files with full preview, inline editing, and save workflow
+- **Markdown Search**: Find text within markdown previews with match highlighting and navigation (`Cmd/Ctrl+F`)
+- **Gallery Navigation**: Browse multiple attached files with arrow keys or buttons
+
+### Filtering & Display
+- **Advanced Filters**: Multi-select filters by type, status, priority, labels, and assignee
+- **Exclusion Filters**: Hide specific issues by criteria (inverse filtering)
+- **Search**: Find issues by title, ID, or description
+- **Column Customization**: Show/hide and configure table columns per project
+- **Smart Short IDs**: Common prefix is automatically detected and hidden for readability
+- **Collapsible Sections**: All preview sections (description, attachments, dependencies, etc.) are independently collapsible with persistent state
+
+### Bulk & Productivity
+- **Multi-Select**: Toggle multi-select mode to select issues individually or all at once
+- **Bulk Delete**: Delete multiple selected issues in one operation
+- **Sortable Columns**: Click any column header to sort (ascending, descending, or clear)
+- **Zoom Controls**: Adjust UI scale from 75% to 150% (Alt+Click to reset)
+
+### Settings & Tools
+- **Dark/Light Theme**: Toggle via settings
+- **Debug Panel**: Live log viewer with auto-refresh, accessible via `Cmd/Ctrl+Shift+L`
+- **Database Repair**: Automatic detection and repair of schema migration issues
+- **Keyboard Shortcuts**: `Cmd/Ctrl+F` (search in markdown), `Cmd/Ctrl+Shift+L` (debug logs), arrow keys (gallery navigation)
 
 ## My Workflow
 
