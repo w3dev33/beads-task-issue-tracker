@@ -442,3 +442,34 @@ body {
 .markdown-reader tr:hover td {
   @apply bg-muted/30;
 }
+
+/* Search highlights in markdown modal */
+mark.search-highlight {
+  background-color: rgba(250, 204, 21, 0.4);
+  color: inherit;
+  border-radius: 2px;
+  padding: 0 1px;
+}
+
+mark.search-highlight-current {
+  background-color: rgba(249, 115, 22, 0.6);
+  color: inherit;
+  outline: 2px solid rgb(249, 115, 22);
+  outline-offset: 0px;
+  border-radius: 2px;
+}
+
+/* Search bar slide transition */
+.search-slide-enter-active,
+.search-slide-leave-active {
+  transition: all 0.15s ease-out;
+  overflow: hidden;
+}
+.search-slide-enter-from,
+.search-slide-leave-to {
+  opacity: 0;
+  max-height: 0;
+  margin-bottom: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+}
