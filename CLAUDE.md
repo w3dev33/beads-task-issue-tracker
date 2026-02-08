@@ -189,6 +189,10 @@ The Rust backend exposes these commands to the frontend:
 
 **Important**: All `bd` CLI calls go through the Rust backend (no Nitro server in production). The wrapper `app/utils/bd-api.ts` handles the Tauri invoke calls.
 
+## Attachment Management
+
+The application implements its own attachment system on top of `bd`, which has no native file attachment support. We repurposed the `--external-ref` field to store file paths alongside regular external references. See **[docs/attachments.md](docs/attachments.md)** for the full workflow documentation.
+
 ## Known Issues & Gotchas
 
 ### bd CLI: UNIQUE constraint on external_ref

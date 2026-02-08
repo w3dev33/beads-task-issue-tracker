@@ -40,6 +40,19 @@ Beyond just viewing issues, this app is part of a broader development workflow p
 - **External bug sync**: Custom commands can import bugs from external systems (Jira, Redmine, etc.) into Beads
 - **Daily planning**: Quickly review and prioritize tasks for the day without switching contexts
 
+## How Attachments Work
+
+The `bd` CLI has no built-in attachment support. This app implements its own attachment system by repurposing the `--external-ref` field — originally designed for storing a single external reference (like `gh-9` or `jira-ABC`) — to hold file paths.
+
+When you attach a file to an issue:
+1. The file is copied into `.beads/attachments/{issue-id}/`
+2. Its absolute path is stored in the issue's `external_ref` field via `bd update --external-ref`
+3. The app parses each line of `external_ref` and categorizes it by extension (image, markdown, or external reference)
+
+This means the attachment storage lives inside the `.beads` directory and gets versioned alongside your issues.
+
+> **For developers**: If you want to script attachment creation (e.g., automatically attach files when creating issues), see the detailed technical documentation in **[docs/attachments.md](docs/attachments.md)**.
+
 ## Prerequisites
 
 > **Important**: This app requires the Beads CLI to be installed on your system. It acts as a graphical interface for the `bd` command-line tool.
