@@ -773,6 +773,7 @@ const confirmDelete = async () => {
         isCreatingNew.value = false
       }
     }
+    await fetchIssues()
     await fetchStats(issues.value)
   } finally {
     isDeleting.value = false
@@ -852,6 +853,7 @@ const confirmEpicDelete = async (mode: 'delete-all' | 'detach') => {
       }
     }
 
+    await fetchIssues()
     await fetchStats(issues.value)
   } finally {
     isDeletingEpic.value = false
