@@ -312,6 +312,10 @@ const getEpicBorderColors = (epicId: string): { left: string; right: string } =>
   }
   return epicBorderColors[Math.abs(hash) % epicBorderColors.length]!
 }
+
+function getIssueField(issue: Issue, field: string): string {
+  return String((issue as unknown as Record<string, unknown>)[field] ?? '-')
+}
 </script>
 
 <template>
@@ -504,7 +508,7 @@ const getEpicBorderColors = (epicId: string): { left: string; right: string } =>
                   </template>
 
                   <template v-else>
-                    <span class="text-xs">{{ (group.epic as unknown as Record<string, unknown>)[col.id] || '-' }}</span>
+                    <span class="text-xs">{{ getIssueField(group.epic, col.id) }}</span>
                   </template>
                 </TableCell>
               </TableRow>
@@ -592,7 +596,7 @@ const getEpicBorderColors = (epicId: string): { left: string; right: string } =>
                     </template>
 
                     <template v-else>
-                      <span class="text-xs">{{ (child as unknown as Record<string, unknown>)[col.id] || '-' }}</span>
+                      <span class="text-xs">{{ getIssueField(child, col.id) }}</span>
                     </template>
                   </TableCell>
                 </TableRow>
@@ -678,7 +682,7 @@ const getEpicBorderColors = (epicId: string): { left: string; right: string } =>
                   </template>
 
                   <template v-else>
-                    <span class="text-xs">{{ (issue as unknown as Record<string, unknown>)[col.id] || '-' }}</span>
+                    <span class="text-xs">{{ getIssueField(issue, col.id) }}</span>
                   </template>
                 </TableCell>
               </TableRow>
@@ -765,7 +769,7 @@ const getEpicBorderColors = (epicId: string): { left: string; right: string } =>
               </template>
 
               <template v-else>
-                <span class="text-xs">{{ (issue as unknown as Record<string, unknown>)[col.id] || '-' }}</span>
+                <span class="text-xs">{{ getIssueField(issue, col.id) }}</span>
               </template>
             </TableCell>
           </TableRow>

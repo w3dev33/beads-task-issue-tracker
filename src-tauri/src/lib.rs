@@ -322,7 +322,7 @@ fn priority_to_string(priority: i32) -> String {
 
 fn priority_to_number(priority: &str) -> String {
     if let Some(caps) = priority.strip_prefix('p') {
-        if caps.len() == 1 && caps.chars().next().unwrap().is_ascii_digit() {
+        if caps.len() == 1 && caps.chars().next().unwrap_or('x').is_ascii_digit() {
             return caps.to_string();
         }
     }
@@ -498,7 +498,11 @@ fn execute_bd(command: &str, args: &[String], cwd: Option<&str>) -> Result<Strin
     let working_dir = cwd
         .map(String::from)
         .or_else(|| env::var("BEADS_PATH").ok())
-        .unwrap_or_else(|| env::current_dir().unwrap().to_string_lossy().to_string());
+        .unwrap_or_else(|| {
+            env::current_dir()
+                .map(|p| p.to_string_lossy().to_string())
+                .unwrap_or_else(|_| ".".to_string())
+        });
 
     // Split command by spaces to handle subcommands like "comments add"
     let mut full_args: Vec<&str> = command.split_whitespace().collect();
@@ -567,7 +571,11 @@ fn sync_bd_database(cwd: Option<&str>) {
     let working_dir = cwd
         .map(String::from)
         .or_else(|| env::var("BEADS_PATH").ok())
-        .unwrap_or_else(|| env::current_dir().unwrap().to_string_lossy().to_string());
+        .unwrap_or_else(|| {
+            env::current_dir()
+                .map(|p| p.to_string_lossy().to_string())
+                .unwrap_or_else(|_| ".".to_string())
+        });
 
     log_info!("[sync] Starting bidirectional sync for: {}", working_dir);
 
@@ -605,7 +613,11 @@ fn sync_bd_database(cwd: Option<&str>) {
 async fn bd_sync(cwd: Option<String>) -> Result<(), String> {
     let working_dir = cwd
         .or_else(|| env::var("BEADS_PATH").ok())
-        .unwrap_or_else(|| env::current_dir().unwrap().to_string_lossy().to_string());
+        .unwrap_or_else(|| {
+            env::current_dir()
+                .map(|p| p.to_string_lossy().to_string())
+                .unwrap_or_else(|_| ".".to_string())
+        });
 
     log_info!("[bd_sync] Manual sync requested for: {}", working_dir);
 
@@ -641,7 +653,11 @@ struct RepairResult {
 async fn bd_repair_database(cwd: Option<String>) -> Result<RepairResult, String> {
     let working_dir = cwd
         .or_else(|| env::var("BEADS_PATH").ok())
-        .unwrap_or_else(|| env::current_dir().unwrap().to_string_lossy().to_string());
+        .unwrap_or_else(|| {
+            env::current_dir()
+                .map(|p| p.to_string_lossy().to_string())
+                .unwrap_or_else(|_| ".".to_string())
+        });
 
     log_info!("[bd_repair] Starting database repair for: {}", working_dir);
 
@@ -762,7 +778,11 @@ async fn bd_poll_data(cwd: Option<String>) -> Result<PollData, String> {
         let working_dir = cwd_ref
             .map(String::from)
             .or_else(|| env::var("BEADS_PATH").ok())
-            .unwrap_or_else(|| env::current_dir().unwrap().to_string_lossy().to_string());
+            .unwrap_or_else(|| {
+            env::current_dir()
+                .map(|p| p.to_string_lossy().to_string())
+                .unwrap_or_else(|_| ".".to_string())
+        });
         let beads_dir = std::path::Path::new(&working_dir).join(".beads");
 
         if let Some(mtime) = get_beads_mtime(&beads_dir) {
@@ -798,7 +818,11 @@ fn get_beads_mtime(beads_dir: &std::path::Path) -> Option<std::time::SystemTime>
 async fn bd_check_changed(cwd: Option<String>) -> Result<bool, String> {
     let working_dir = cwd
         .or_else(|| env::var("BEADS_PATH").ok())
-        .unwrap_or_else(|| env::current_dir().unwrap().to_string_lossy().to_string());
+        .unwrap_or_else(|| {
+            env::current_dir()
+                .map(|p| p.to_string_lossy().to_string())
+                .unwrap_or_else(|_| ".".to_string())
+        });
 
     let beads_dir = std::path::Path::new(&working_dir).join(".beads");
     let current_mtime = get_beads_mtime(&beads_dir);
@@ -1520,6 +1544,15 @@ async fn open_image_file(path: String) -> Result<(), String> {
         return Err(format!("File not found: {}", path));
     }
 
+    // Security: Canonicalize to resolve symlinks/.. and verify inside .beads/attachments/
+    let canonical = std::path::Path::new(&path).canonicalize()
+        .map_err(|e| format!("Failed to resolve path: {}", e))?;
+    let canonical_str = canonical.to_string_lossy();
+    if !canonical_str.contains("/.beads/attachments/") {
+        log_warn!("[open_image_file] Refusing to open file outside attachments: {} (resolved: {})", path, canonical_str);
+        return Err("Can only open files inside .beads/attachments/".to_string());
+    }
+
     // Use platform-specific command to open file with default application
     #[cfg(target_os = "macos")]
     {
@@ -1588,6 +1621,15 @@ async fn read_image_file(path: String) -> Result<ImageData, String> {
         return Err(format!("File not found: {}", path));
     }
 
+    // Security: Canonicalize to resolve symlinks/.. and verify inside .beads/attachments/
+    let canonical = std::path::Path::new(&path).canonicalize()
+        .map_err(|e| format!("Failed to resolve path: {}", e))?;
+    let canonical_str = canonical.to_string_lossy();
+    if !canonical_str.contains("/.beads/attachments/") {
+        log_warn!("[read_image_file] Refusing to read file outside attachments: {} (resolved: {})", path, canonical_str);
+        return Err("Can only read files inside .beads/attachments/".to_string());
+    }
+
     // Read file and encode as base64
     let data = fs::read(&path).map_err(|e| format!("Failed to read file: {}", e))?;
     let base64 = base64_encode(&data);
@@ -1631,17 +1673,19 @@ async fn delete_attachment_file(file_path: String) -> Result<bool, String> {
 
     let path = PathBuf::from(&file_path);
 
-    // Security: Only allow deleting files inside .beads/attachments/
-    let path_str = path.to_string_lossy();
-    if !path_str.contains(".beads/attachments/") {
-        log::warn!("[delete_attachment_file] Refusing to delete file outside attachments: {}", file_path);
-        return Err("Can only delete files inside .beads/attachments/".to_string());
-    }
-
-    // Check if file exists
+    // Check if file exists before canonicalize (canonicalize requires the path to exist)
     if !path.exists() {
         log::info!("[delete_attachment_file] File does not exist: {}", file_path);
         return Ok(false);
+    }
+
+    // Security: Canonicalize to resolve symlinks/.. and verify inside .beads/attachments/
+    let canonical = path.canonicalize()
+        .map_err(|e| format!("Failed to resolve path: {}", e))?;
+    let canonical_str = canonical.to_string_lossy();
+    if !canonical_str.contains("/.beads/attachments/") {
+        log::warn!("[delete_attachment_file] Refusing to delete file outside attachments: {} (resolved: {})", file_path, canonical_str);
+        return Err("Can only delete files inside .beads/attachments/".to_string());
     }
 
     // Delete the file
@@ -1901,6 +1945,15 @@ async fn read_text_file(path: String) -> Result<TextData, String> {
         return Err(format!("File not found: {}", path));
     }
 
+    // Security: Canonicalize to resolve symlinks/.. and verify inside .beads/attachments/
+    let canonical = std::path::Path::new(&path).canonicalize()
+        .map_err(|e| format!("Failed to resolve path: {}", e))?;
+    let canonical_str = canonical.to_string_lossy();
+    if !canonical_str.contains("/.beads/attachments/") {
+        log_warn!("[read_text_file] Refusing to read file outside attachments: {} (resolved: {})", path, canonical_str);
+        return Err("Can only read files inside .beads/attachments/".to_string());
+    }
+
     // Read file as UTF-8
     let content = fs::read_to_string(&path)
         .map_err(|e| format!("Failed to read file: {}", e))?;
@@ -1923,6 +1976,15 @@ async fn write_text_file(path: String, content: String) -> Result<(), String> {
     // Verify file exists (no creation of new files)
     if !std::path::Path::new(&path).exists() {
         return Err(format!("File not found: {}", path));
+    }
+
+    // Security: Canonicalize to resolve symlinks/.. and verify inside .beads/attachments/
+    let canonical = std::path::Path::new(&path).canonicalize()
+        .map_err(|e| format!("Failed to resolve path: {}", e))?;
+    let canonical_str = canonical.to_string_lossy();
+    if !canonical_str.contains("/.beads/attachments/") {
+        log_warn!("[write_text_file] Refusing to write file outside attachments: {} (resolved: {})", path, canonical_str);
+        return Err("Can only write files inside .beads/attachments/".to_string());
     }
 
     // Write content to file

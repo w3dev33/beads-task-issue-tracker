@@ -128,8 +128,8 @@ export function useIssues() {
               issue.parent = {
                 id: epicDetail.id,
                 title: epicDetail.title,
-                status: epicDetail.status as any,
-                priority: epicDetail.priority as any,
+                status: epicDetail.status,
+                priority: epicDetail.priority,
               }
             }
           }
@@ -205,8 +205,8 @@ export function useIssues() {
               issue.parent = {
                 id: epicDetail.id,
                 title: epicDetail.title,
-                status: epicDetail.status as any,
-                priority: epicDetail.priority as any,
+                status: epicDetail.status,
+                priority: epicDetail.priority,
               }
             }
           }
