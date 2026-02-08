@@ -764,13 +764,8 @@ async fn bd_poll_data(cwd: Option<String>) -> Result<PollData, String> {
             .or_else(|| env::var("BEADS_PATH").ok())
             .unwrap_or_else(|| env::current_dir().unwrap().to_string_lossy().to_string());
         let beads_dir = std::path::Path::new(&working_dir).join(".beads");
-        let db_path = beads_dir.join("beads.db");
-        let jsonl_path = beads_dir.join("issues.jsonl");
 
-        if let Ok(mtime) = fs::metadata(&db_path)
-            .and_then(|m| m.modified())
-            .or_else(|_| fs::metadata(&jsonl_path).and_then(|m| m.modified()))
-        {
+        if let Some(mtime) = get_beads_mtime(&beads_dir) {
             let mut last = LAST_KNOWN_MTIME.lock().unwrap();
             *last = Some(mtime);
         }
@@ -783,9 +778,22 @@ async fn bd_poll_data(cwd: Option<String>) -> Result<PollData, String> {
     })
 }
 
+/// Get the latest mtime across all beads database files (db, WAL, jsonl).
+/// SQLite WAL mode writes to beads.db-wal, so the main .db file mtime may not change.
+fn get_beads_mtime(beads_dir: &std::path::Path) -> Option<std::time::SystemTime> {
+    let paths = [
+        beads_dir.join("beads.db"),
+        beads_dir.join("beads.db-wal"),
+        beads_dir.join("issues.jsonl"),
+    ];
+    paths.iter()
+        .filter_map(|p| fs::metadata(p).and_then(|m| m.modified()).ok())
+        .max()
+}
+
 /// Check if the beads database has changed since last check (via filesystem mtime).
 /// Returns true if changes detected or if this is the first check.
-/// This is extremely cheap — just 1-2 stat() calls, no bd process spawns.
+/// This is extremely cheap — just a few stat() calls, no bd process spawns.
 #[tauri::command]
 async fn bd_check_changed(cwd: Option<String>) -> Result<bool, String> {
     let working_dir = cwd
@@ -793,15 +801,7 @@ async fn bd_check_changed(cwd: Option<String>) -> Result<bool, String> {
         .unwrap_or_else(|| env::current_dir().unwrap().to_string_lossy().to_string());
 
     let beads_dir = std::path::Path::new(&working_dir).join(".beads");
-
-    // Check mtime of beads.db (primary) and issues.jsonl (fallback)
-    let db_path = beads_dir.join("beads.db");
-    let jsonl_path = beads_dir.join("issues.jsonl");
-
-    let current_mtime = fs::metadata(&db_path)
-        .and_then(|m| m.modified())
-        .or_else(|_| fs::metadata(&jsonl_path).and_then(|m| m.modified()))
-        .ok();
+    let current_mtime = get_beads_mtime(&beads_dir);
 
     let mut last = LAST_KNOWN_MTIME.lock().unwrap();
 
