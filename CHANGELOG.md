@@ -2,6 +2,16 @@
 
 All notable changes to Beads Task-Issue Tracker will be documented in this file.
 
+## [1.10.0] - 2026-02-08
+
+### Improvements
+- **Reduced CPU/disk usage**: 4-layer polling optimization — sync cooldown, filesystem mtime check, batched poll command, and adaptive polling intervals. Most poll cycles now spawn zero bd processes
+- **Debug Panel smart scroll**: Log view no longer jumps to bottom on auto-refresh when scrolled up, allowing inspection of older entries
+
+### Bug Fixes
+- **Debug Panel logging**: Backend logging is now automatically enabled when the Debug Panel is open (was silently disabled)
+- **mtime guard accuracy**: Fixed mtime check always reporting "changed" by snapshotting after all poll-triggered db operations complete
+
 ## [1.9.0] - 2026-02-07
 
 ### New Features
