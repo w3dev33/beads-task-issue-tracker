@@ -2,6 +2,12 @@
 
 All notable changes to Beads Task-Issue Tracker will be documented in this file.
 
+## [1.10.1] - 2026-02-08
+
+### Improvements
+- **Debug panel toggle**: Replaced sync indicator with a debug panel toggle button in the footer for quicker access
+- **Attachment documentation**: Added `docs/attachments.md` explaining how the app repurposes `bd`'s `--external-ref` field to implement file attachments, with scripting examples
+
 ## [1.10.0] - 2026-02-08
 
 ### Improvements
