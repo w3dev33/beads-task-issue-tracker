@@ -5,7 +5,7 @@ use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Mutex;
+use std::sync::{LazyLock, Mutex};
 use std::time::Instant;
 
 // Global flags for logging
@@ -16,8 +16,9 @@ static VERBOSE_LOGGING: AtomicBool = AtomicBool::new(false);
 static LAST_SYNC_TIME: Mutex<Option<Instant>> = Mutex::new(None);
 const SYNC_COOLDOWN_SECS: u64 = 10;
 
-// Filesystem mtime tracking for change detection
-static LAST_KNOWN_MTIME: Mutex<Option<std::time::SystemTime>> = Mutex::new(None);
+// Filesystem mtime tracking for change detection (per-project)
+static LAST_KNOWN_MTIME: LazyLock<Mutex<HashMap<String, std::time::SystemTime>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
 
 // Conditional logging macros
 macro_rules! log_info {
@@ -786,8 +787,8 @@ async fn bd_poll_data(cwd: Option<String>) -> Result<PollData, String> {
         let beads_dir = std::path::Path::new(&working_dir).join(".beads");
 
         if let Some(mtime) = get_beads_mtime(&beads_dir) {
-            let mut last = LAST_KNOWN_MTIME.lock().unwrap();
-            *last = Some(mtime);
+            let mut map = LAST_KNOWN_MTIME.lock().unwrap();
+            map.insert(working_dir, mtime);
         }
     }
 
@@ -827,13 +828,14 @@ async fn bd_check_changed(cwd: Option<String>) -> Result<bool, String> {
     let beads_dir = std::path::Path::new(&working_dir).join(".beads");
     let current_mtime = get_beads_mtime(&beads_dir);
 
-    let mut last = LAST_KNOWN_MTIME.lock().unwrap();
+    let mut map = LAST_KNOWN_MTIME.lock().unwrap();
+    let previous = map.get(&working_dir).copied();
 
-    match (current_mtime, *last) {
-        (Some(current), Some(previous)) => {
-            if current != previous {
+    match (current_mtime, previous) {
+        (Some(current), Some(prev)) => {
+            if current != prev {
                 log_info!("[bd_check_changed] mtime changed — data may have been modified");
-                *last = Some(current);
+                map.insert(working_dir, current);
                 Ok(true)
             } else {
                 log_debug!("[bd_check_changed] mtime unchanged — no changes");
@@ -842,7 +844,7 @@ async fn bd_check_changed(cwd: Option<String>) -> Result<bool, String> {
         }
         (Some(current), None) => {
             // First check — store mtime, report changed so initial load happens
-            *last = Some(current);
+            map.insert(working_dir, current);
             Ok(true)
         }
         (None, _) => {
@@ -851,6 +853,21 @@ async fn bd_check_changed(cwd: Option<String>) -> Result<bool, String> {
             Ok(true) // Report changed to let caller handle missing db
         }
     }
+}
+
+/// Reset the cached mtime for a specific project (or all projects).
+/// Called from the frontend when switching projects to force a fresh poll.
+#[tauri::command]
+async fn bd_reset_mtime(cwd: Option<String>) -> Result<(), String> {
+    let mut map = LAST_KNOWN_MTIME.lock().unwrap();
+    if let Some(path) = cwd {
+        log_info!("[bd_reset_mtime] Resetting mtime for: {}", path);
+        map.remove(&path);
+    } else {
+        log_info!("[bd_reset_mtime] Resetting all cached mtimes");
+        map.clear();
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -2053,6 +2070,7 @@ pub fn run() {
             bd_sync,
             bd_repair_database,
             bd_check_changed,
+            bd_reset_mtime,
             bd_poll_data,
             bd_list,
             bd_count,

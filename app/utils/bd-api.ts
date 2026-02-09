@@ -58,6 +58,16 @@ export async function bdCheckChanged(path?: string): Promise<boolean> {
 }
 
 /**
+ * Reset the cached mtime for a specific project (or all projects).
+ * Called when switching projects to force a fresh poll on next cycle.
+ */
+export async function bdResetMtime(path?: string): Promise<void> {
+  if (isTauri()) {
+    return invoke<void>('bd_reset_mtime', { cwd: path })
+  }
+}
+
+/**
  * Batched poll: fetches open + closed + ready issues in a single IPC call.
  * Syncs once, then runs 3 bd commands sequentially on the backend.
  * Replaces 3 separate IPC calls for lower overhead.

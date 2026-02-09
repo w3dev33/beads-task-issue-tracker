@@ -412,6 +412,8 @@ const handlePathChange = async () => {
   selectIssue(null)
   isEditMode.value = false
   isCreatingNew.value = false
+  // Invalidate all cached mtimes so the next poll cycle detects the new project
+  await bdResetMtime()
   // Per-project storage is automatically isolated via useProjectStorage
   await fetchIssues()
   await fetchStats(issues.value)
