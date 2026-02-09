@@ -58,7 +58,7 @@ bd create "My first issue" --type task --priority p2
       </div>
 
       <!-- Markdown content -->
-      <div class="markdown-content">
+      <div class="markdown-base compact">
         <LinkifiedText :text="prerequisitesContent" />
       </div>
 

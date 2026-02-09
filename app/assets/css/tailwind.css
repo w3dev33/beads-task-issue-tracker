@@ -244,203 +244,194 @@ body {
   -webkit-app-region: no-drag;
 }
 
-/* Markdown content styles */
-.markdown-content a {
+/* ──────────────────────────────────────────────────────────────────────────────
+   Markdown base styles — shared by all markdown renderers
+   Use with modifier classes: .compact (issue previews) or .reader (full viewer)
+   ────────────────────────────────────────────────────────────────────────────── */
+
+.markdown-base a {
   color: #60a5fa;
   @apply hover:underline cursor-pointer;
 }
 
-.markdown-content p {
-  @apply my-1 first:mt-0 last:mb-0;
+.markdown-base strong,
+.markdown-base b {
+  @apply font-semibold;
 }
 
-.markdown-content ul,
-.markdown-content ol {
-  @apply my-1 pl-4;
+.markdown-base em,
+.markdown-base i {
+  @apply italic;
 }
 
-.markdown-content li {
-  @apply my-0.5;
-}
-
-.markdown-content ul {
+.markdown-base ul {
   @apply list-disc;
 }
 
-.markdown-content ol {
+.markdown-base ol {
   @apply list-decimal;
 }
 
-.markdown-content code {
+.markdown-base code {
   @apply bg-muted px-1 py-0.5 rounded font-mono;
   font-size: 0.9em;
 }
 
-.markdown-content pre {
+.markdown-base pre code {
+  @apply bg-transparent p-0;
+}
+
+.markdown-base table {
+  @apply w-full my-2 border-collapse text-[inherit];
+}
+
+.markdown-base th {
+  @apply text-left font-semibold px-2 py-1.5 border border-border bg-muted/50;
+}
+
+.markdown-base td {
+  @apply px-2 py-1.5 border border-border;
+}
+
+.markdown-base tr:hover td {
+  @apply bg-muted/30;
+}
+
+/* ── Compact variant (IssuePreview, LinkifiedText, PrerequisitesCard) ──────── */
+
+.markdown-base.compact p {
+  @apply my-1 first:mt-0 last:mb-0;
+}
+
+.markdown-base.compact ul,
+.markdown-base.compact ol {
+  @apply my-1 pl-4;
+}
+
+.markdown-base.compact li {
+  @apply my-0.5;
+}
+
+.markdown-base.compact pre {
   @apply bg-muted p-2 rounded my-1 overflow-x-auto;
 }
 
-.markdown-content pre code {
-  @apply bg-transparent p-0;
-}
-
-.markdown-content blockquote {
+.markdown-base.compact blockquote {
   @apply border-l-2 border-muted-foreground/30 pl-3 my-1 italic text-muted-foreground;
 }
 
-.markdown-content strong,
-.markdown-content b {
-  @apply font-semibold;
-}
-
-.markdown-content em,
-.markdown-content i {
-  @apply italic;
-}
-
-.markdown-content h1,
-.markdown-content h2,
-.markdown-content h3,
-.markdown-content h4,
-.markdown-content h5,
-.markdown-content h6 {
+.markdown-base.compact h1,
+.markdown-base.compact h2,
+.markdown-base.compact h3,
+.markdown-base.compact h4,
+.markdown-base.compact h5,
+.markdown-base.compact h6 {
   @apply font-semibold mt-2 mb-1 first:mt-0;
 }
 
-.markdown-content h1 {
+.markdown-base.compact h1 {
   @apply text-lg;
 }
 
-.markdown-content h2 {
+.markdown-base.compact h2 {
   @apply text-base;
 }
 
-.markdown-content h3,
-.markdown-content h4,
-.markdown-content h5,
-.markdown-content h6 {
+.markdown-base.compact h3,
+.markdown-base.compact h4,
+.markdown-base.compact h5,
+.markdown-base.compact h6 {
   @apply text-sm;
 }
 
-.markdown-content hr {
+.markdown-base.compact hr {
   @apply my-2 border-muted;
 }
 
-/* Markdown reader styles — full document viewer (MarkdownPreviewDialog) */
-/* Inspired by GitHub/Obsidian rendering: generous spacing, colored headers, clear hierarchy */
+/* ── Reader variant (MarkdownPreviewDialog — full document viewer) ─────────── */
+/* Inspired by GitHub/Obsidian: generous spacing, colored headers, clear hierarchy */
 
-.markdown-reader {
+.markdown-base.reader {
   @apply text-base leading-7 text-foreground;
 }
 
-.markdown-reader a {
-  color: #60a5fa;
-  @apply hover:underline cursor-pointer;
-}
-
-.markdown-reader p {
+.markdown-base.reader p {
   @apply my-3 first:mt-0 last:mb-0;
 }
 
-.markdown-reader ul,
-.markdown-reader ol {
+.markdown-base.reader ul,
+.markdown-base.reader ol {
   @apply my-3 pl-6;
 }
 
-.markdown-reader li {
+.markdown-base.reader li {
   @apply my-1.5;
 }
 
-.markdown-reader ul {
-  @apply list-disc;
-}
-
-.markdown-reader ol {
-  @apply list-decimal;
-}
-
-.markdown-reader code {
+.markdown-base.reader code {
   @apply bg-muted px-1.5 py-0.5 rounded font-mono text-[0.85em];
 }
 
-.markdown-reader pre {
+.markdown-base.reader pre {
   @apply bg-muted p-4 rounded-lg my-4 overflow-x-auto text-sm leading-7;
 }
 
-.markdown-reader pre code {
-  @apply bg-transparent p-0;
-}
-
-.markdown-reader blockquote {
+.markdown-base.reader blockquote {
   @apply border-l-3 border-sky-500/40 pl-4 my-4 italic text-muted-foreground;
 }
 
-.markdown-reader strong,
-.markdown-reader b {
-  @apply font-semibold;
-}
-
-.markdown-reader em,
-.markdown-reader i {
-  @apply italic;
-}
-
-.markdown-reader h1,
-.markdown-reader h2,
-.markdown-reader h3,
-.markdown-reader h4,
-.markdown-reader h5,
-.markdown-reader h6 {
+.markdown-base.reader h1,
+.markdown-base.reader h2,
+.markdown-base.reader h3,
+.markdown-base.reader h4,
+.markdown-base.reader h5,
+.markdown-base.reader h6 {
   @apply font-bold leading-tight first:mt-0;
 }
 
-.markdown-reader h1 {
+.markdown-base.reader h1 {
   @apply text-2xl mt-8 mb-4 pb-2 border-b border-border;
   color: #93b4e0;
 }
 
-.markdown-reader h2 {
+.markdown-base.reader h2 {
   @apply text-xl mt-7 mb-3 pb-1.5 border-b border-border/50;
   color: #7da8c9;
 }
 
-.markdown-reader h3 {
+.markdown-base.reader h3 {
   @apply text-lg mt-6 mb-2;
   color: #7db89e;
 }
 
-.markdown-reader h4 {
+.markdown-base.reader h4 {
   @apply text-base mt-5 mb-2;
   color: #a599c4;
 }
 
-.markdown-reader h5 {
+.markdown-base.reader h5 {
   @apply text-sm mt-4 mb-1.5;
   color: #b0a0b8;
 }
 
-.markdown-reader h6 {
+.markdown-base.reader h6 {
   @apply text-sm mt-4 mb-1.5 text-muted-foreground;
 }
 
-.markdown-reader hr {
+.markdown-base.reader hr {
   @apply my-6 border-border;
 }
 
-.markdown-reader table {
+.markdown-base.reader table {
   @apply w-full my-4 border-collapse text-sm;
 }
 
-.markdown-reader th {
+.markdown-base.reader th {
   @apply text-left font-semibold px-3 py-2 border border-border bg-muted/50;
 }
 
-.markdown-reader td {
+.markdown-base.reader td {
   @apply px-3 py-2 border border-border;
-}
-
-.markdown-reader tr:hover td {
-  @apply bg-muted/30;
 }
 
 /* Search highlights in markdown modal */

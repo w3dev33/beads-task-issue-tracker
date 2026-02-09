@@ -454,7 +454,7 @@ onUnmounted(() => {
           <div
             v-else
             ref="previewContentRef"
-            class="markdown-reader max-w-5xl mx-auto px-8 py-4"
+            class="markdown-base reader max-w-5xl mx-auto px-8 py-4"
             :class="{ 'px-18': hasMultipleFiles }"
             @click="handleContentClick"
             v-html="renderedHtml"
