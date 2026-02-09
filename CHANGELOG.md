@@ -2,6 +2,16 @@
 
 All notable changes to Beads Task-Issue Tracker will be documented in this file.
 
+## [1.10.3] - 2026-02-09
+
+### Bug Fixes
+- **Stale issue list on project switch**: Fixed mtime tracking using a global singleton that caused stale data when switching between favorite projects. Now uses per-project HashMap to track mtimes independently
+- **Slow refresh after favorite change**: Added `bd_reset_mtime` command to invalidate cached mtimes on project switch, ensuring immediate refresh with correct data
+
+### Improvements
+- **Markdown CSS consolidation**: Refactored markdown preview styles into a shared CSS base with table support
+- **README documentation**: Expanded feature documentation with attachments, bulk operations, and keyboard shortcuts
+
 ## [1.10.1] - 2026-02-08
 
 ### Improvements
