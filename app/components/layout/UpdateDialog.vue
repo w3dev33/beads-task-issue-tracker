@@ -10,6 +10,8 @@ import {
 import { Button } from '~/components/ui/button'
 import { renderMarkdown } from '~/utils/markdown'
 
+const isDev = import.meta.dev
+
 const open = defineModel<boolean>('open', { default: false })
 
 const { updateInfo, isChecking, isDownloading, downloadError, error, demoMode, check, toggleDemo, openReleasesPage, downloadAndQuit } = useUpdateChecker()
@@ -59,6 +61,7 @@ const handleViewOnGitHub = () => {
         <DialogTitle class="flex items-center gap-2">
           Check for Updates
           <button
+            v-if="isDev"
             tabindex="-1"
             @click="toggleDemo"
             class="text-[10px] font-normal cursor-pointer transition-colors px-1.5 py-0.5 rounded border"
