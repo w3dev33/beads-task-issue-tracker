@@ -591,15 +591,20 @@ export function useIssues() {
 
     try {
       const data = await bdShow(id, getPath())
+
+      if (data === null) {
+        selectedIssue.value = null
+        error.value = `Issue ${id} not found`
+        return null
+      }
+
       selectedIssue.value = data
 
       // Also update the issue in the issues array to preserve parent/children info
       // (bd list doesn't return parent field, but bd show does)
-      if (data) {
-        const index = issues.value.findIndex(i => i.id === id)
-        if (index !== -1) {
-          issues.value[index] = data
-        }
+      const index = issues.value.findIndex(i => i.id === id)
+      if (index !== -1) {
+        issues.value[index] = data
       }
 
       return data

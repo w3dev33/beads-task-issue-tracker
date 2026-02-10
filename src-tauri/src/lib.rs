@@ -1082,10 +1082,28 @@ async fn bd_show(id: String, options: CwdOptions) -> Result<Option<Issue>, Strin
     // Sync database before reading to ensure data is up-to-date
     sync_bd_database(options.cwd.as_deref());
 
-    let output = execute_bd("show", std::slice::from_ref(&id), options.cwd.as_deref())?;
+    let output = match execute_bd("show", std::slice::from_ref(&id), options.cwd.as_deref()) {
+        Ok(output) => output,
+        Err(e) => {
+            // Handle "not found" errors gracefully (future bd versions may use non-zero exit)
+            let err_lower = e.to_lowercase();
+            if err_lower.contains("no issue found") || err_lower.contains("not found") {
+                log_info!("[bd_show] Issue {} not found (error from bd): {}", id, e);
+                return Ok(None);
+            }
+            return Err(e);
+        }
+    };
+
+    // Handle empty output (current bd behavior for missing issues: exit 0, empty stdout)
+    let trimmed = output.trim();
+    if trimmed.is_empty() {
+        log_info!("[bd_show] Issue {} not found (empty output from bd)", id);
+        return Ok(None);
+    }
 
     // bd show can return either a single object or an array
-    let result: serde_json::Value = serde_json::from_str(&output)
+    let result: serde_json::Value = serde_json::from_str(trimmed)
         .map_err(|e| {
             log_error!("[bd_show] Failed to parse JSON for {}: {}", id, e);
             format!("Failed to parse issue: {}", e)
