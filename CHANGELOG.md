@@ -2,6 +2,16 @@
 
 All notable changes to Beads Task-Issue Tracker will be documented in this file.
 
+## [1.10.4] - 2026-02-10
+
+### New Features
+- **Changelog in update dialog**: Release notes from GitHub are now displayed in a scrollable "What's new" section when an update is available
+- **Download & Quit**: New button downloads the update (DMG on macOS), mounts it, and closes the app automatically
+- **macOS xattr helper**: Shows the `xattr -cr` command with click-to-copy for unsigned app workaround
+
+### Bug Fixes
+- **Window close permission**: Added missing `core:window:allow-close` Tauri capability that prevented the app from closing after download
+
 ## [1.10.3] - 2026-02-09
 
 ### Bug Fixes
