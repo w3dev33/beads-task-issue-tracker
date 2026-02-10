@@ -1,5 +1,24 @@
 # Changelog
 
+## [1.13.0] - 2026-02-10
+
+> Requires **bd 0.49.3+** for full feature support. Core features work with bd 0.42+.
+
+### New Features
+- **Metadata display**: Read-only formatted JSON display of per-issue metadata in detail view (set via `bd update --metadata`)
+- **Spec ID field**: Full create/edit support for the `spec_id` field linking issues to specification documents
+- **Comment count column**: New "Comments" column in issue list (hidden by default, enable via column config), with fallback to comments array length
+- **bd/br client detection**: Automatic detection of CLI client type (bd vs br) with version-aware feature profiles
+- **bd 0.50.0 compatibility**: Version-aware compatibility layer that auto-disables `--no-daemon` flag and JSONL file watching for bd 0.50.0+
+- **In Progress sidebar**: Dashboard sidebar now shows issues currently in progress
+
+### Improvements
+- **Column config auto-sync**: New default columns are automatically added to persisted column config for existing users
+- **Philosophy documentation**: Project philosophy integrated into README
+
+### Bug Fixes
+- **Graceful missing issues**: Handle missing issues in `bd_show` without crashing
+
 ## [1.12.2] - 2026-02-10
 
 ### New Features
