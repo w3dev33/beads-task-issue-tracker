@@ -53,3 +53,7 @@ The workflow is collaborative: the AI pilots the issue lifecycle through `bd`, a
 - Change detection: Has something changed since I last looked?
 
 The moment this application tries to become a full-featured project management tool is the moment it loses focus. It should remain lightweight, fast to open, and immediately useful — a control panel, not a workspace.
+
+---
+
+*Laurent Chapin*
