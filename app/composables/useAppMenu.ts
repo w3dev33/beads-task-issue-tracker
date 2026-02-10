@@ -1,6 +1,7 @@
 // Global state for dialog/panel visibility
 const showUpdateDialog = ref(false)
 const showAboutDialog = ref(false)
+const showSettingsDialog = ref(false)
 const showDebugPanel = ref(false)
 let menuInitialized = false
 
@@ -31,6 +32,14 @@ export function useAppMenu() {
         },
       })
 
+      const settingsItem = await MenuItem.new({
+        text: 'Settings...',
+        accelerator: 'CmdOrCtrl+,',
+        action: () => {
+          showSettingsDialog.value = true
+        },
+      })
+
       const separator2 = await PredefinedMenuItem.new({ item: 'Separator' })
       const servicesItem = await PredefinedMenuItem.new({ item: 'Services' })
       const separator3 = await PredefinedMenuItem.new({ item: 'Separator' })
@@ -46,6 +55,7 @@ export function useAppMenu() {
           aboutItem,
           separator1,
           checkUpdateItem,
+          settingsItem,
           separator2,
           servicesItem,
           separator3,
@@ -123,6 +133,7 @@ export function useAppMenu() {
   return {
     showUpdateDialog,
     showAboutDialog,
+    showSettingsDialog,
     showDebugPanel,
     initializeMenu,
   }

@@ -20,6 +20,9 @@ const SYNC_COOLDOWN_SECS: u64 = 10;
 static LAST_KNOWN_MTIME: LazyLock<Mutex<HashMap<String, std::time::SystemTime>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
 
+// Configurable CLI binary name (default: "bd")
+static CLI_BINARY: LazyLock<Mutex<String>> = LazyLock::new(|| Mutex::new("bd".to_string()));
+
 // Conditional logging macros
 macro_rules! log_info {
     ($($arg:tt)*) => {
@@ -510,6 +513,66 @@ fn new_command(program: &str) -> Command {
     cmd
 }
 
+// ============================================================================
+// CLI Binary Configuration
+// ============================================================================
+
+#[derive(Debug, Serialize, Deserialize)]
+struct AppConfig {
+    #[serde(default = "default_cli_binary")]
+    cli_binary: String,
+}
+
+fn default_cli_binary() -> String {
+    "bd".to_string()
+}
+
+impl Default for AppConfig {
+    fn default() -> Self {
+        Self {
+            cli_binary: default_cli_binary(),
+        }
+    }
+}
+
+fn get_config_path() -> PathBuf {
+    dirs::config_dir()
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join("com.beads.manager")
+        .join("settings.json")
+}
+
+fn load_config() -> AppConfig {
+    let path = get_config_path();
+    if path.exists() {
+        match fs::read_to_string(&path) {
+            Ok(content) => match serde_json::from_str(&content) {
+                Ok(config) => return config,
+                Err(e) => log::warn!("[config] Failed to parse settings.json: {}", e),
+            },
+            Err(e) => log::warn!("[config] Failed to read settings.json: {}", e),
+        }
+    }
+    AppConfig::default()
+}
+
+fn save_config(config: &AppConfig) -> Result<(), String> {
+    let path = get_config_path();
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)
+            .map_err(|e| format!("Failed to create config directory: {}", e))?;
+    }
+    let json = serde_json::to_string_pretty(config)
+        .map_err(|e| format!("Failed to serialize config: {}", e))?;
+    fs::write(&path, json)
+        .map_err(|e| format!("Failed to write config: {}", e))?;
+    Ok(())
+}
+
+fn get_cli_binary() -> String {
+    CLI_BINARY.lock().unwrap().clone()
+}
+
 fn execute_bd(command: &str, args: &[String], cwd: Option<&str>) -> Result<String, String> {
     let working_dir = cwd
         .map(String::from)
@@ -528,17 +591,18 @@ fn execute_bd(command: &str, args: &[String], cwd: Option<&str>) -> Result<Strin
     full_args.push("--no-daemon");
     full_args.push("--json");
 
-    log_info!("[bd] bd {} | cwd: {}", full_args.join(" "), working_dir);
+    let binary = get_cli_binary();
+    log_info!("[bd] {} {} | cwd: {}", binary, full_args.join(" "), working_dir);
 
-    let output = new_command("bd")
+    let output = new_command(&binary)
         .args(&full_args)
         .current_dir(&working_dir)
         .env("PATH", get_extended_path())
         .env("BEADS_PATH", &working_dir)
         .output()
         .map_err(|e| {
-            log_error!("[bd] Failed to execute bd: {}", e);
-            format!("Failed to execute bd: {}", e)
+            log_error!("[bd] Failed to execute {}: {}", binary, e);
+            format!("Failed to execute {}: {}", binary, e)
         })?;
 
     if !output.status.success() {
@@ -596,7 +660,8 @@ fn sync_bd_database(cwd: Option<&str>) {
     log_info!("[sync] Starting bidirectional sync for: {}", working_dir);
 
     // Run bd sync (bidirectional - exports local changes AND imports remote changes)
-    match new_command("bd")
+    let binary = get_cli_binary();
+    match new_command(&binary)
         .args(["sync", "--no-daemon"])
         .current_dir(&working_dir)
         .env("PATH", get_extended_path())
@@ -611,12 +676,13 @@ fn sync_bd_database(cwd: Option<&str>) {
         }
         Ok(output) => {
             log_warn!(
-                "[sync] bd sync failed: {}",
+                "[sync] {} sync failed: {}",
+                binary,
                 String::from_utf8_lossy(&output.stderr)
             );
         }
         Err(e) => {
-            log_error!("[sync] Failed to run bd sync: {}", e);
+            log_error!("[sync] Failed to run {} sync: {}", binary, e);
         }
     }
 }
@@ -635,15 +701,16 @@ async fn bd_sync(cwd: Option<String>) -> Result<(), String> {
                 .unwrap_or_else(|_| ".".to_string())
         });
 
+    let binary = get_cli_binary();
     log_info!("[bd_sync] Manual sync requested for: {}", working_dir);
 
-    let output = new_command("bd")
+    let output = new_command(&binary)
         .args(["sync", "--no-daemon"])
         .current_dir(&working_dir)
         .env("PATH", get_extended_path())
         .env("BEADS_PATH", &working_dir)
         .output()
-        .map_err(|e| format!("Failed to run bd sync: {}", e))?;
+        .map_err(|e| format!("Failed to run {} sync: {}", binary, e))?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
@@ -719,7 +786,7 @@ async fn bd_repair_database(cwd: Option<String>) -> Result<RepairResult, String>
     log_info!("[bd_repair] Removed old database files");
 
     // Test that bd can now work (it will recreate the database)
-    let test_output = new_command("bd")
+    let test_output = new_command(&get_cli_binary())
         .args(["list", "--limit=1", "--no-daemon", "--json"])
         .current_dir(&working_dir)
         .env("PATH", get_extended_path())
@@ -1678,15 +1745,89 @@ async fn log_frontend(level: String, message: String) {
 
 #[tauri::command]
 async fn get_bd_version() -> String {
-    match new_command("bd")
+    let binary = get_cli_binary();
+    match new_command(&binary)
         .arg("--version")
         .env("PATH", get_extended_path())
         .output()
     {
         Ok(output) if output.status.success() => {
-            String::from_utf8_lossy(&output.stdout).trim().to_string()
+            let version = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            if binary != "bd" {
+                format!("{} ({})", version, binary)
+            } else {
+                version
+            }
         }
-        _ => "bd not found".to_string(),
+        _ => format!("{} not found", binary),
+    }
+}
+
+// ============================================================================
+// CLI Binary Configuration Commands
+// ============================================================================
+
+#[tauri::command]
+async fn get_cli_binary_path() -> String {
+    get_cli_binary()
+}
+
+#[tauri::command]
+async fn set_cli_binary_path(path: String) -> Result<String, String> {
+    let binary = if path.trim().is_empty() { "bd".to_string() } else { path.trim().to_string() };
+
+    // Validate the binary first
+    let version = validate_cli_binary_internal(&binary)?;
+
+    // Update global state
+    *CLI_BINARY.lock().unwrap() = binary.clone();
+
+    // Persist to config file
+    let mut config = load_config();
+    config.cli_binary = binary.clone();
+    save_config(&config)?;
+
+    log_info!("[config] CLI binary set to: {} ({})", binary, version);
+    Ok(version)
+}
+
+#[tauri::command]
+async fn validate_cli_binary(path: String) -> Result<String, String> {
+    let binary = if path.trim().is_empty() { "bd".to_string() } else { path.trim().to_string() };
+    validate_cli_binary_internal(&binary)
+}
+
+fn validate_cli_binary_internal(binary: &str) -> Result<String, String> {
+    // Security: reject shell metacharacters — Command::new() doesn't use a shell,
+    // but defense-in-depth prevents any future misuse
+    let forbidden = [';', '|', '&', '$', '`', '>', '<', '(', ')', '{', '}', '!', '\n', '\r'];
+    if binary.chars().any(|c| forbidden.contains(&c)) {
+        return Err("Invalid binary path: contains shell metacharacters".to_string());
+    }
+    if binary.contains("..") {
+        return Err("Invalid binary path: directory traversal not allowed".to_string());
+    }
+
+    match new_command(binary)
+        .arg("--version")
+        .env("PATH", get_extended_path())
+        .output()
+    {
+        Ok(output) if output.status.success() => {
+            let version = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            if version.is_empty() {
+                Err(format!("'{}' returned empty version output", binary))
+            } else {
+                Ok(version)
+            }
+        }
+        Ok(output) => {
+            let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+            Err(format!("'{}' failed: {}", binary, if stderr.is_empty() { "unknown error".to_string() } else { stderr }))
+        }
+        Err(e) => {
+            Err(format!("'{}' not found or not executable: {}", binary, e))
+        }
     }
 }
 
@@ -2193,21 +2334,29 @@ pub fn run() {
             log::info!("=== Beads Task-Issue Tracker starting ===");
             log::info!("[startup] Extended PATH: {}", get_extended_path());
 
-            // Check if bd is accessible
-            match new_command("bd")
+            // Load config and set CLI binary
+            let config = load_config();
+            if config.cli_binary != "bd" {
+                log::info!("[startup] Using custom CLI binary: {}", config.cli_binary);
+            }
+            *CLI_BINARY.lock().unwrap() = config.cli_binary.clone();
+
+            // Check if CLI binary is accessible
+            let binary = get_cli_binary();
+            match new_command(&binary)
                 .arg("--version")
                 .env("PATH", get_extended_path())
                 .output()
             {
                 Ok(output) if output.status.success() => {
                     let version = String::from_utf8_lossy(&output.stdout);
-                    log::info!("[startup] bd found: {}", version.trim());
+                    log::info!("[startup] {} found: {}", binary, version.trim());
                 }
                 Ok(output) => {
-                    log::warn!("[startup] bd command failed: {}", String::from_utf8_lossy(&output.stderr));
+                    log::warn!("[startup] {} command failed: {}", binary, String::from_utf8_lossy(&output.stderr));
                 }
                 Err(e) => {
-                    log::error!("[startup] bd not found or not executable: {}", e);
+                    log::error!("[startup] {} not found or not executable: {}", binary, e);
                 }
             }
 
@@ -2235,6 +2384,9 @@ pub fn run() {
             get_log_path_string,
             log_frontend,
             get_bd_version,
+            get_cli_binary_path,
+            set_cli_binary_path,
+            validate_cli_binary,
             bd_update,
             bd_close,
             bd_delete,

@@ -3,7 +3,7 @@
   import { NotificationToast } from '~/components/ui/notification-toast'
 
   const { isDark } = useTheme()
-  const { showUpdateDialog, showAboutDialog, initializeMenu } = useAppMenu()
+  const { showUpdateDialog, showAboutDialog, showSettingsDialog, initializeMenu } = useAppMenu()
 
   useHead({
     title: 'Beads Task-Issue Tracker',
@@ -27,6 +27,7 @@
     <NuxtPage />
     <LayoutUpdateDialog v-model:open="showUpdateDialog" />
     <LayoutAboutDialog v-model:open="showAboutDialog" />
+    <LayoutSettingsDialog v-model:open="showSettingsDialog" />
     <NotificationToast />
   </TooltipProvider>
 </template>

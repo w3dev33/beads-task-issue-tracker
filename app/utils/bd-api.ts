@@ -348,6 +348,31 @@ export async function getBdVersion(): Promise<string> {
 }
 
 // ============================================================================
+// CLI Binary Configuration API
+// ============================================================================
+
+export async function getCliBinaryPath(): Promise<string> {
+  if (isTauri()) {
+    return invoke<string>('get_cli_binary_path')
+  }
+  return 'bd'
+}
+
+export async function setCliBinaryPath(path: string): Promise<string> {
+  if (!isTauri()) {
+    throw new Error('CLI binary configuration is only available in the desktop app')
+  }
+  return invoke<string>('set_cli_binary_path', { path })
+}
+
+export async function validateCliBinary(path: string): Promise<string> {
+  if (!isTauri()) {
+    throw new Error('CLI binary validation is only available in the desktop app')
+  }
+  return invoke<string>('validate_cli_binary', { path })
+}
+
+// ============================================================================
 // File System API - For folder picker
 // ============================================================================
 
