@@ -10,6 +10,8 @@ async function fsExistsWithRetry(path: string): Promise<boolean> {
   return fsExists(path)
 }
 
+export type FavoritesSortMode = 'alpha' | 'alpha-desc' | 'manual'
+
 export interface Favorite {
   path: string
   name: string
@@ -18,8 +20,19 @@ export interface Favorite {
 
 // Shared state across all components
 const favorites = ref<Favorite[]>([])
+const sortMode = ref<FavoritesSortMode>('alpha')
+const hasReordered = ref(false)
 let isInitialized = false
 let isValidating = false
+
+function initSortModeFromStorage() {
+  if (import.meta.client) {
+    const stored = localStorage.getItem('beads:favoritesSortMode')
+    if (stored === 'alpha' || stored === 'alpha-desc' || stored === 'manual') {
+      sortMode.value = stored
+    }
+  }
+}
 
 function initFromStorage() {
   if (import.meta.client && !isInitialized) {
@@ -65,6 +78,7 @@ function initFromStorage() {
         favorites.value = []
       }
     }
+    initSortModeFromStorage()
     isInitialized = true
   }
 }
@@ -83,6 +97,16 @@ export function useFavorites() {
       { deep: true }
     )
   }
+
+  const sortedFavorites = computed<Favorite[]>(() => {
+    if (sortMode.value === 'alpha') {
+      return [...favorites.value].sort((a, b) => a.name.localeCompare(b.name))
+    }
+    if (sortMode.value === 'alpha-desc') {
+      return [...favorites.value].sort((a, b) => b.name.localeCompare(a.name))
+    }
+    return favorites.value
+  })
 
   const addFavorite = (path: string, name?: string) => {
     // Don't add duplicates
@@ -124,11 +148,35 @@ export function useFavorites() {
     return false
   }
 
+  const reorderFavorites = (newOrder: Favorite[]) => {
+    favorites.value = newOrder
+    sortMode.value = 'manual'
+    hasReordered.value = true
+    localStorage.setItem('beads:favoritesSortMode', 'manual')
+  }
+
+  const setSortMode = (mode: FavoritesSortMode) => {
+    sortMode.value = mode
+    localStorage.setItem('beads:favoritesSortMode', mode)
+  }
+
+  const resetSortOrder = () => {
+    sortMode.value = 'alpha'
+    hasReordered.value = false
+    localStorage.setItem('beads:favoritesSortMode', 'alpha')
+  }
+
   return {
     favorites: readonly(favorites),
+    sortedFavorites,
+    sortMode: readonly(sortMode),
+    hasReordered: readonly(hasReordered),
     addFavorite,
     removeFavorite,
     isFavorite,
     renameFavorite,
+    reorderFavorites,
+    setSortMode,
+    resetSortOrder,
   }
 }
