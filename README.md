@@ -48,10 +48,11 @@ This project is a reimplementation of the Beads UI as a native desktop app using
 - **Zoom Controls**: Adjust UI scale from 75% to 150% (Alt+Click to reset)
 
 ### Settings & Tools
+- **Custom CLI Binary**: Use an alternative bd-compatible CLI (e.g., [`br`](https://github.com/Dicklesworthstone/beads_rust)) — configurable via Settings (`Cmd/Ctrl+,`)
 - **Dark/Light Theme**: Toggle via settings
 - **Debug Panel**: Live log viewer with auto-refresh, accessible via `Cmd/Ctrl+Shift+L`
 - **Database Repair**: Automatic detection and repair of schema migration issues
-- **Keyboard Shortcuts**: `Cmd/Ctrl+F` (search in markdown), `Cmd/Ctrl+Shift+L` (debug logs), arrow keys (gallery navigation)
+- **Keyboard Shortcuts**: `Cmd/Ctrl+,` (settings), `Cmd/Ctrl+F` (search in markdown), `Cmd/Ctrl+Shift+L` (debug logs), arrow keys (gallery navigation)
 
 ## My Workflow
 
@@ -77,7 +78,7 @@ This means the attachment storage lives inside the `.beads` directory and gets v
 
 ## Prerequisites
 
-> **Important**: This app requires the Beads CLI to be installed on your system. It acts as a graphical interface for the `bd` command-line tool.
+> **Important**: This app requires the Beads CLI (or a compatible fork) to be installed on your system. It acts as a graphical interface for the `bd` command-line tool.
 
 1. **Install the Beads CLI** (`bd`)
 
@@ -89,6 +90,8 @@ This means the attachment storage lives inside the `.beads` directory and gets v
    # Quick install (check the repo for the latest method)
    curl -fsSL https://raw.githubusercontent.com/steveyegge/beads/main/scripts/install.sh | bash
    ```
+
+   **Alternative**: You can also use [beads_rust](https://github.com/Dicklesworthstone/beads_rust) (`br`), a Rust port of Beads. After installing, go to **Settings** (`Cmd/Ctrl+,`) and set the CLI binary to `br`.
 
 2. **Initialize Beads in your project**
 
