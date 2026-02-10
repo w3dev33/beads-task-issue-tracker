@@ -1589,38 +1589,63 @@ async fn download_and_install_update(download_url: String) -> Result<String, Str
         .next()
         .unwrap_or("update-download")
         .to_string();
+    log::info!("[download_update] Target filename: {}", filename);
 
     // Download the file
     let client = reqwest::Client::builder()
         .user_agent("beads-task-issue-tracker")
         .build()
-        .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
+        .map_err(|e| {
+            log::error!("[download_update] Failed to create HTTP client: {}", e);
+            format!("Failed to create HTTP client: {}", e)
+        })?;
 
+    log::info!("[download_update] Sending GET request...");
     let response = client
         .get(&download_url)
         .send()
         .await
-        .map_err(|e| format!("Failed to download update: {}", e))?;
+        .map_err(|e| {
+            log::error!("[download_update] HTTP request failed: {} (url: {})", e, download_url);
+            format!("Failed to download update: {}", e)
+        })?;
 
-    if !response.status().is_success() {
-        return Err(format!("Download failed with status: {}", response.status()));
+    let status = response.status();
+    let final_url = response.url().to_string();
+    log::info!("[download_update] Response status: {} (final URL: {})", status, final_url);
+
+    if !status.is_success() {
+        log::error!("[download_update] Download failed with status: {} (url: {})", status, final_url);
+        return Err(format!("Download failed with status: {}", status));
     }
 
+    log::info!("[download_update] Reading response bytes...");
     let bytes = response
         .bytes()
         .await
-        .map_err(|e| format!("Failed to read download bytes: {}", e))?;
+        .map_err(|e| {
+            log::error!("[download_update] Failed to read response bytes: {}", e);
+            format!("Failed to read download bytes: {}", e)
+        })?;
+    log::info!("[download_update] Downloaded {} bytes", bytes.len());
 
     // Save to ~/Downloads
     let download_dir = dirs::download_dir()
-        .ok_or_else(|| "Could not find Downloads directory".to_string())?;
+        .ok_or_else(|| {
+            log::error!("[download_update] Could not find Downloads directory");
+            "Could not find Downloads directory".to_string()
+        })?;
 
     let dest_path = download_dir.join(&filename);
+    log::info!("[download_update] Saving to: {}", dest_path.display());
     fs::write(&dest_path, &bytes)
-        .map_err(|e| format!("Failed to save file: {}", e))?;
+        .map_err(|e| {
+            log::error!("[download_update] Failed to save file to {}: {}", dest_path.display(), e);
+            format!("Failed to save file: {}", e)
+        })?;
 
     let dest_str = dest_path.to_string_lossy().to_string();
-    log::info!("[download_update] Saved to: {}", dest_str);
+    log::info!("[download_update] Saved successfully: {} ({} bytes)", dest_str, bytes.len());
 
     // On macOS, mount the DMG
     #[cfg(target_os = "macos")]
@@ -1630,7 +1655,10 @@ async fn download_and_install_update(download_url: String) -> Result<String, Str
             Command::new("open")
                 .arg(&dest_path)
                 .spawn()
-                .map_err(|e| format!("Failed to open DMG: {}", e))?;
+                .map_err(|e| {
+                    log::error!("[download_update] Failed to open DMG: {}", e);
+                    format!("Failed to open DMG: {}", e)
+                })?;
         }
     }
 

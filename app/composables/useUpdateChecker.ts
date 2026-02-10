@@ -76,7 +76,7 @@ export function useUpdateChecker() {
         await openReleasesPage()
       }
     } catch (e) {
-      const msg = e instanceof Error ? e.message : 'Failed to download update'
+      const msg = e instanceof Error ? e.message : (typeof e === 'string' ? e : 'Failed to download update')
       downloadError.value = msg
       logFrontend('error', `[update] Download failed: ${msg}`)
       console.error('Download failed:', e)
