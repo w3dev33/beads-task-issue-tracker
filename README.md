@@ -6,13 +6,18 @@ A lightweight, standalone desktop application for managing [Beads](https://githu
 
 ## Why This App?
 
-[bd Beads](https://github.com/steveyegge/beads) is an AI-native issue tracker that stores issues directly in your codebase (in a `.beads` folder). The `bd` CLI is designed for AI agents — they create issues, update statuses, and pilot workflows programmatically. But **humans need visibility and control** over what the AI is doing.
+[bd Beads](https://github.com/steveyegge/beads) is an AI-native issue tracker that stores issues directly in your codebase (in a `.beads` folder).
 
-This application is a **human interface for AI-piloted issue tracking**: it lets you observe what the AI is driving, and step in to edit, correct, or redirect at any point. The workflow is collaborative — the AI pilots through `bd`, and you use this app as your control panel.
-
-This application follows the `bd` CLI — it does not define the format, it reads what `bd` writes and presents it for humans. If `bd` evolves, we adapt. If `bd` ever becomes purely machine-to-machine with no human-interpretable output, we freeze at the last meaningful version.
-
-> For the full design rationale, see **[docs/philosophy.md](docs/philosophy.md)**.
+> [!IMPORTANT]
+> **A human interface for AI-piloted issue tracking**
+>
+> The `bd` CLI is designed for AI agents — they create issues, update statuses, and pilot workflows programmatically. But **humans need visibility and control** over what the AI is doing.
+>
+> This application lets you **observe** what the AI is driving, and **step in** to edit, correct, or redirect at any point. The workflow is collaborative — the AI pilots through `bd`, and you use this app as your control panel.
+>
+> We follow the `bd` CLI — we don't define the format, we read what `bd` writes and present it for humans. If `bd` evolves, we adapt. If `bd` ever becomes purely machine-to-machine with no human-interpretable output, we freeze at the last meaningful version.
+>
+> *See **[docs/philosophy.md](docs/philosophy.md)** for the full design rationale.*
 
 Planet57's [vscode-beads extension](https://marketplace.visualstudio.com/items?itemName=planet57.vscode-beads) provides an excellent interface for managing these issues.
 However, **VS Code can be resource-intensive**.
