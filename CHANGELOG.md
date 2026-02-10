@@ -2,6 +2,16 @@
 
 All notable changes to Beads Task-Issue Tracker will be documented in this file.
 
+## [1.11.0] - 2026-02-10
+
+### New Features
+- **Sortable favorites**: Drag-and-drop reordering of sidebar favorites with grip handles
+- **Sort mode toggle**: Cycle between A-Z, Z-A, and manual order via header button
+- **Reset button**: Quick reset to alphabetical order after manual reordering, appears only when needed
+
+### Bug Fixes
+- **Project path field**: Fixed path field not updating when opening picker from favorites
+
 ## [1.10.4] - 2026-02-10
 
 ### New Features
