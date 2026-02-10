@@ -450,6 +450,17 @@ export async function checkForUpdates(): Promise<UpdateInfo> {
     return false
   }
 
+  // Fetch CHANGELOG.md for full release notes
+  let releaseNotes: string | null = release.body || null
+  try {
+    const changelogResponse = await fetch('https://raw.githubusercontent.com/w3dev33/beads-task-issue-tracker/master/CHANGELOG.md')
+    if (changelogResponse.ok) {
+      releaseNotes = await changelogResponse.text()
+    }
+  } catch {
+    // Fallback to release body
+  }
+
   return {
     currentVersion,
     latestVersion,
@@ -457,7 +468,7 @@ export async function checkForUpdates(): Promise<UpdateInfo> {
     releaseUrl: release.html_url,
     downloadUrl: null,
     platform: 'unknown',
-    releaseNotes: release.body || null,
+    releaseNotes,
   }
 }
 

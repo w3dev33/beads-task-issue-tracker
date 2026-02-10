@@ -257,6 +257,12 @@ body {
 .markdown-base strong,
 .markdown-base b {
   @apply font-semibold;
+  color: #334155;
+}
+
+.dark .markdown-base strong,
+.dark .markdown-base b {
+  color: #cbd5e1;
 }
 
 .markdown-base em,
@@ -331,14 +337,24 @@ body {
 
 .markdown-base.compact h1 {
   @apply text-lg;
+  color: #93b4e0;
 }
 
 .markdown-base.compact h2 {
   @apply text-base;
+  color: #7da8c9;
 }
 
-.markdown-base.compact h3,
-.markdown-base.compact h4,
+.markdown-base.compact h3 {
+  @apply text-sm;
+  color: #7db89e;
+}
+
+.markdown-base.compact h4 {
+  @apply text-sm;
+  color: #a599c4;
+}
+
 .markdown-base.compact h5,
 .markdown-base.compact h6 {
   @apply text-sm;

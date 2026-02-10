@@ -43,7 +43,16 @@ const copyXattrCommand = async () => {
   }
 }
 
-const handleDownloadAndQuit = () => {
+const handleDownloadAndQuit = async () => {
+  // Auto-copy xattr command to clipboard on macOS before downloading
+  if (updateInfo.value?.platform === 'macos') {
+    try {
+      await navigator.clipboard.writeText(xattrCommand)
+      xattrCopied.value = true
+    } catch (err) {
+      console.error('Failed to auto-copy xattr command:', err)
+    }
+  }
   downloadAndQuit()
 }
 
@@ -56,7 +65,7 @@ const handleViewOnGitHub = () => {
 
 <template>
   <Dialog v-model:open="open">
-    <DialogContent class="sm:max-w-xl">
+    <DialogContent class="sm:max-w-3xl">
       <DialogHeader>
         <DialogTitle class="flex items-center gap-2">
           Check for Updates
@@ -132,7 +141,7 @@ const handleViewOnGitHub = () => {
               <div v-if="renderedChangelog" class="mt-4">
                 <p class="text-xs font-medium text-muted-foreground mb-2">What's new</p>
                 <div
-                  class="max-h-48 overflow-y-auto rounded border border-border p-3 text-sm markdown-base compact"
+                  class="max-h-96 overflow-y-auto rounded border border-border p-3 text-sm markdown-base compact"
                   v-html="renderedChangelog"
                 />
               </div>

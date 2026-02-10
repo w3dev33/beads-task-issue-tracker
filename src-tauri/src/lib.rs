@@ -1529,6 +1529,18 @@ async fn check_for_updates() -> Result<UpdateInfo, String> {
     let download_url = find_platform_asset(&release.assets)
         .map(|a| a.browser_download_url.clone());
 
+    // Fetch CHANGELOG.md from the repo for full release notes
+    let changelog = client
+        .get("https://raw.githubusercontent.com/w3dev33/beads-task-issue-tracker/master/CHANGELOG.md")
+        .send()
+        .await
+        .ok()
+        .and_then(|r| if r.status().is_success() { Some(r) } else { None });
+    let changelog_text = match changelog {
+        Some(r) => r.text().await.ok(),
+        None => None,
+    };
+
     Ok(UpdateInfo {
         current_version: CURRENT_VERSION.to_string(),
         latest_version,
@@ -1536,7 +1548,7 @@ async fn check_for_updates() -> Result<UpdateInfo, String> {
         release_url: release.html_url,
         download_url,
         platform: get_platform_string().to_string(),
-        release_notes: release.body,
+        release_notes: changelog_text.or(release.body),
     })
 }
 
@@ -1567,6 +1579,18 @@ async fn check_for_updates_demo() -> Result<UpdateInfo, String> {
     let download_url = find_platform_asset(&release.assets)
         .map(|a| a.browser_download_url.clone());
 
+    // Fetch CHANGELOG.md from the repo for full release notes
+    let changelog = client
+        .get("https://raw.githubusercontent.com/w3dev33/beads-task-issue-tracker/master/CHANGELOG.md")
+        .send()
+        .await
+        .ok()
+        .and_then(|r| if r.status().is_success() { Some(r) } else { None });
+    let changelog_text = match changelog {
+        Some(r) => r.text().await.ok(),
+        None => None,
+    };
+
     // Demo mode: force has_update = true, fake current version as 0.0.0
     Ok(UpdateInfo {
         current_version: "0.0.0".to_string(),
@@ -1575,7 +1599,7 @@ async fn check_for_updates_demo() -> Result<UpdateInfo, String> {
         release_url: release.html_url,
         download_url,
         platform: get_platform_string().to_string(),
-        release_notes: release.body,
+        release_notes: changelog_text.or(release.body),
     })
 }
 

@@ -25,6 +25,14 @@ export function useAppMenu() {
       })
       const separator1 = await PredefinedMenuItem.new({ item: 'Separator' })
 
+      const settingsItem = await MenuItem.new({
+        text: 'Settings...',
+        accelerator: 'CmdOrCtrl+,',
+        action: () => {
+          showSettingsDialog.value = true
+        },
+      })
+
       const checkUpdateItem = await MenuItem.new({
         text: 'Check for Update...',
         action: () => {
@@ -32,11 +40,11 @@ export function useAppMenu() {
         },
       })
 
-      const settingsItem = await MenuItem.new({
-        text: 'Settings...',
-        accelerator: 'CmdOrCtrl+,',
+      const showLogsItem = await MenuItem.new({
+        text: 'Show Logs...',
+        accelerator: 'CmdOrCtrl+Shift+L',
         action: () => {
-          showSettingsDialog.value = true
+          showDebugPanel.value = !showDebugPanel.value
         },
       })
 
@@ -54,8 +62,9 @@ export function useAppMenu() {
         items: [
           aboutItem,
           separator1,
-          checkUpdateItem,
           settingsItem,
+          checkUpdateItem,
+          showLogsItem,
           separator2,
           servicesItem,
           separator3,
@@ -105,23 +114,9 @@ export function useAppMenu() {
         ],
       })
 
-      // Debug menu
-      const debugLogsItem = await MenuItem.new({
-        text: 'Show Logs...',
-        accelerator: 'CmdOrCtrl+Shift+L',
-        action: () => {
-          showDebugPanel.value = !showDebugPanel.value
-        },
-      })
-
-      const debugMenu = await Submenu.new({
-        text: 'Debug',
-        items: [debugLogsItem],
-      })
-
       // Create and set the menu
       const menu = await Menu.new({
-        items: [appMenu, editMenu, windowMenu, debugMenu],
+        items: [appMenu, editMenu, windowMenu],
       })
 
       await menu.setAsAppMenu()

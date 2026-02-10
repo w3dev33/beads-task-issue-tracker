@@ -1,6 +1,14 @@
 # Changelog
 
-All notable changes to Beads Task-Issue Tracker will be documented in this file.
+## [1.12.1] - 2026-02-10
+
+### Bug Fixes
+- **Update download errors**: Add error logging and fix error display for update download failures
+
+## [1.12.0] - 2026-02-10
+
+### New Features
+- **Configurable CLI binary**: Add configurable CLI binary path for bd-compatible forks, allowing users to specify a custom binary in settings
 
 ## [1.11.0] - 2026-02-10
 
