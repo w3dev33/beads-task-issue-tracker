@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.12.2] - 2026-02-10
+
+### New Features
+- **LATEST release mode**: New workflow mode to quickly publish development builds without version bump, overwriting the same `latest` GitHub release
+- **Full changelog in update dialog**: Update dialog now fetches and displays the full CHANGELOG.md instead of just the release body
+- **Auto-copy xattr command**: On macOS, clicking "Download & Quit" automatically copies the `xattr -cr` command to clipboard
+
+### Improvements
+- **App menu reorganization**: Moved Settings, Check for Update, and Show Logs into the main app menu; removed standalone Debug menu
+- **Colored markdown headings**: Compact markdown variant now has colored headings (h1-h4) and styled strong text for dark/light modes
+- **Wider update dialog**: Increased dialog width and changelog scroll height for better readability
+
 ## [1.12.1] - 2026-02-10
 
 ### Bug Fixes
