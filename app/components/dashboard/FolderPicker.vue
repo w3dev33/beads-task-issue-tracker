@@ -44,9 +44,17 @@ watch(() => props.open, (isOpen) => {
   }
 })
 
-// Watch currentPath to update input
+// Watch currentPath to update input (immediate so pathInput is set on mount)
 watch(currentPath, (path) => {
   pathInput.value = path
+}, { immediate: true })
+
+// Watch prop changes so opening from a different favorite updates the path
+watch(() => props.currentPath, (newPath) => {
+  if (props.open && newPath && newPath !== '.') {
+    currentPath.value = newPath
+    loadDirectory(newPath)
+  }
 })
 
 const loadDirectory = async (path: string) => {
@@ -111,7 +119,7 @@ const isCurrentFavorite = computed(() => isFavorite(currentPath.value))
 
 <template>
   <Dialog :open="open" @update:open="$emit('update:open', $event)">
-    <DialogContent class="max-w-2xl max-h-[80vh] flex flex-col">
+    <DialogContent class="max-w-3xl max-h-[80vh] flex flex-col">
       <DialogHeader>
         <DialogTitle>Select Beads Project Folder</DialogTitle>
         <DialogDescription>
@@ -136,6 +144,7 @@ const isCurrentFavorite = computed(() => isFavorite(currentPath.value))
           <div class="flex-1 flex items-center gap-2">
             <Input
               v-model="pathInput"
+              dir="rtl"
               class="flex-1 font-mono text-sm h-9"
               placeholder="/path/to/folder"
               @keyup.enter="handlePathInput"
