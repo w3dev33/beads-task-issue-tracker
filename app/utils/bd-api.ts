@@ -394,6 +394,9 @@ export interface UpdateInfo {
   latestVersion: string
   hasUpdate: boolean
   releaseUrl: string
+  downloadUrl: string | null
+  platform: string
+  releaseNotes: string | null
 }
 
 export async function checkForUpdates(): Promise<UpdateInfo> {
@@ -427,5 +430,29 @@ export async function checkForUpdates(): Promise<UpdateInfo> {
     latestVersion,
     hasUpdate: compareVersions(currentVersion, latestVersion),
     releaseUrl: release.html_url,
+    downloadUrl: null,
+    platform: 'unknown',
+    releaseNotes: release.body || null,
   }
+}
+
+export async function checkForUpdatesDemo(): Promise<UpdateInfo> {
+  if (isTauri()) {
+    return invoke<UpdateInfo>('check_for_updates_demo')
+  }
+
+  // Web fallback: simulate demo with real GitHub data
+  const info = await checkForUpdates()
+  return {
+    ...info,
+    currentVersion: '0.0.0',
+    hasUpdate: true,
+  }
+}
+
+export async function downloadAndInstallUpdate(downloadUrl: string): Promise<string> {
+  if (isTauri()) {
+    return invoke<string>('download_and_install_update', { downloadUrl })
+  }
+  throw new Error('Download is only available in the desktop app')
 }

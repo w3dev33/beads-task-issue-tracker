@@ -6,6 +6,7 @@
   "permissions": [
     "core:default",
     "core:window:allow-start-dragging",
+    "core:window:allow-close",
     "shell:allow-open",
     "shell:allow-execute",
     "core:menu:default",

@@ -67,12 +67,27 @@ pub struct UpdateInfo {
     pub has_update: bool,
     #[serde(rename = "releaseUrl")]
     pub release_url: String,
+    #[serde(rename = "downloadUrl")]
+    pub download_url: Option<String>,
+    pub platform: String,
+    #[serde(rename = "releaseNotes")]
+    pub release_notes: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct GitHubAsset {
+    name: String,
+    browser_download_url: String,
 }
 
 #[derive(Debug, Deserialize)]
 struct GitHubRelease {
     tag_name: String,
     html_url: String,
+    #[serde(default)]
+    assets: Vec<GitHubAsset>,
+    #[serde(default)]
+    body: Option<String>,
 }
 
 // File watcher removed - replaced by frontend polling for lower CPU usage
@@ -1353,6 +1368,32 @@ async fn fs_list(path: Option<String>) -> Result<FsListResult, String> {
 const CURRENT_VERSION: &str = env!("CARGO_PKG_VERSION");
 const GITHUB_RELEASES_URL: &str = "https://api.github.com/repos/w3dev33/beads-task-issue-tracker/releases/latest";
 
+fn get_platform_string() -> &'static str {
+    if cfg!(target_os = "macos") {
+        "macos"
+    } else if cfg!(target_os = "windows") {
+        "windows"
+    } else {
+        "linux"
+    }
+}
+
+fn find_platform_asset(assets: &[GitHubAsset]) -> Option<&GitHubAsset> {
+    let suffix = if cfg!(target_os = "macos") {
+        if cfg!(target_arch = "aarch64") {
+            "_macOS-ARM64.dmg"
+        } else {
+            "_macOS-Intel.dmg"
+        }
+    } else if cfg!(target_os = "windows") {
+        "_Windows.msi"
+    } else {
+        "_Linux-amd64.AppImage"
+    };
+
+    assets.iter().find(|a| a.name.ends_with(suffix))
+}
+
 fn compare_versions(current: &str, latest: &str) -> bool {
     // Remove 'v' prefix if present
     let current = current.trim_start_matches('v');
@@ -1400,6 +1441,9 @@ async fn check_for_updates() -> Result<UpdateInfo, String> {
             latest_version: CURRENT_VERSION.to_string(),
             has_update: false,
             release_url: "https://github.com/w3dev33/beads-task-issue-tracker/releases".to_string(),
+            download_url: None,
+            platform: get_platform_string().to_string(),
+            release_notes: None,
         });
     }
 
@@ -1415,12 +1459,115 @@ async fn check_for_updates() -> Result<UpdateInfo, String> {
     let latest_version = release.tag_name.trim_start_matches('v').to_string();
     let has_update = compare_versions(CURRENT_VERSION, &latest_version);
 
+    let download_url = find_platform_asset(&release.assets)
+        .map(|a| a.browser_download_url.clone());
+
     Ok(UpdateInfo {
         current_version: CURRENT_VERSION.to_string(),
         latest_version,
         has_update,
         release_url: release.html_url,
+        download_url,
+        platform: get_platform_string().to_string(),
+        release_notes: release.body,
     })
+}
+
+#[tauri::command]
+async fn check_for_updates_demo() -> Result<UpdateInfo, String> {
+    let client = reqwest::Client::builder()
+        .user_agent("beads-task-issue-tracker")
+        .build()
+        .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
+
+    let response = client
+        .get(GITHUB_RELEASES_URL)
+        .send()
+        .await
+        .map_err(|e| format!("Failed to fetch releases: {}", e))?;
+
+    if !response.status().is_success() {
+        return Err(format!("GitHub API returned status: {}", response.status()));
+    }
+
+    let release: GitHubRelease = response
+        .json()
+        .await
+        .map_err(|e| format!("Failed to parse release info: {}", e))?;
+
+    let latest_version = release.tag_name.trim_start_matches('v').to_string();
+
+    let download_url = find_platform_asset(&release.assets)
+        .map(|a| a.browser_download_url.clone());
+
+    // Demo mode: force has_update = true, fake current version as 0.0.0
+    Ok(UpdateInfo {
+        current_version: "0.0.0".to_string(),
+        latest_version,
+        has_update: true,
+        release_url: release.html_url,
+        download_url,
+        platform: get_platform_string().to_string(),
+        release_notes: release.body,
+    })
+}
+
+#[tauri::command]
+async fn download_and_install_update(download_url: String) -> Result<String, String> {
+    log::info!("[download_update] Starting download from: {}", download_url);
+
+    // Extract filename from URL
+    let filename = download_url
+        .rsplit('/')
+        .next()
+        .unwrap_or("update-download")
+        .to_string();
+
+    // Download the file
+    let client = reqwest::Client::builder()
+        .user_agent("beads-task-issue-tracker")
+        .build()
+        .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
+
+    let response = client
+        .get(&download_url)
+        .send()
+        .await
+        .map_err(|e| format!("Failed to download update: {}", e))?;
+
+    if !response.status().is_success() {
+        return Err(format!("Download failed with status: {}", response.status()));
+    }
+
+    let bytes = response
+        .bytes()
+        .await
+        .map_err(|e| format!("Failed to read download bytes: {}", e))?;
+
+    // Save to ~/Downloads
+    let download_dir = dirs::download_dir()
+        .ok_or_else(|| "Could not find Downloads directory".to_string())?;
+
+    let dest_path = download_dir.join(&filename);
+    fs::write(&dest_path, &bytes)
+        .map_err(|e| format!("Failed to save file: {}", e))?;
+
+    let dest_str = dest_path.to_string_lossy().to_string();
+    log::info!("[download_update] Saved to: {}", dest_str);
+
+    // On macOS, mount the DMG
+    #[cfg(target_os = "macos")]
+    {
+        if filename.ends_with(".dmg") {
+            log::info!("[download_update] Mounting DMG: {}", dest_str);
+            Command::new("open")
+                .arg(&dest_path)
+                .spawn()
+                .map_err(|e| format!("Failed to open DMG: {}", e))?;
+        }
+    }
+
+    Ok(dest_str)
 }
 
 // ============================================================================
@@ -2095,6 +2242,8 @@ pub fn run() {
             fs_exists,
             fs_list,
             check_for_updates,
+            check_for_updates_demo,
+            download_and_install_update,
             open_image_file,
             read_image_file,
             copy_file_to_attachments,
