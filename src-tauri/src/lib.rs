@@ -23,6 +23,10 @@ static LAST_KNOWN_MTIME: LazyLock<Mutex<HashMap<String, std::time::SystemTime>>>
 // Configurable CLI binary name (default: "bd")
 static CLI_BINARY: LazyLock<Mutex<String>> = LazyLock::new(|| Mutex::new("bd".to_string()));
 
+// Cached bd CLI version tuple (major, minor, patch) — detected once on first use
+static BD_VERSION: LazyLock<Mutex<Option<(u32, u32, u32)>>> =
+    LazyLock::new(|| Mutex::new(None));
+
 // Conditional logging macros
 macro_rules! log_info {
     ($($arg:tt)*) => {
@@ -573,6 +577,94 @@ fn get_cli_binary() -> String {
     CLI_BINARY.lock().unwrap().clone()
 }
 
+// ============================================================================
+// bd Version Detection
+// ============================================================================
+
+/// Parse a bd version string like "bd version 0.49.6 (Homebrew)" into (0, 49, 6).
+fn parse_bd_version(version_str: &str) -> Option<(u32, u32, u32)> {
+    // Look for a semver-like pattern: digits.digits.digits
+    let re_like = version_str
+        .split_whitespace()
+        .find(|word| word.contains('.') && word.chars().next().map_or(false, |c| c.is_ascii_digit()));
+
+    let version_part = re_like?;
+    let parts: Vec<&str> = version_part.split('.').collect();
+    if parts.len() >= 3 {
+        let major = parts[0].parse::<u32>().ok()?;
+        let minor = parts[1].parse::<u32>().ok()?;
+        // Patch may have trailing non-numeric chars (e.g. "6-beta")
+        let patch_str: String = parts[2].chars().take_while(|c| c.is_ascii_digit()).collect();
+        let patch = patch_str.parse::<u32>().ok()?;
+        Some((major, minor, patch))
+    } else {
+        None
+    }
+}
+
+/// Get the bd CLI version as a tuple, caching the result after first call.
+fn get_bd_version_tuple() -> Option<(u32, u32, u32)> {
+    let mut cached = BD_VERSION.lock().unwrap();
+    if let Some(v) = *cached {
+        return Some(v);
+    }
+
+    // Run `bd --version` to detect version
+    let binary = get_cli_binary();
+    let output = new_command(&binary)
+        .arg("--version")
+        .env("PATH", get_extended_path())
+        .output()
+        .ok()?;
+
+    if !output.status.success() {
+        log_warn!("[bd_version] Failed to get bd version");
+        return None;
+    }
+
+    let version_str = String::from_utf8_lossy(&output.stdout);
+    let tuple = parse_bd_version(version_str.trim());
+
+    if let Some(t) = tuple {
+        log_info!("[bd_version] Detected bd version: {}.{}.{}", t.0, t.1, t.2);
+        *cached = Some(t);
+    } else {
+        log_warn!("[bd_version] Could not parse version from: {}", version_str.trim());
+    }
+
+    tuple
+}
+
+/// Returns true if the current bd version supports the --no-daemon flag (< 0.50.0).
+/// For unknown versions, defaults to false (safe: bd ignores the absent flag).
+fn supports_daemon_flag() -> bool {
+    match get_bd_version_tuple() {
+        Some((major, minor, _)) => {
+            if major == 0 && minor < 50 {
+                true
+            } else {
+                false
+            }
+        }
+        None => false, // Unknown version: don't add the flag
+    }
+}
+
+/// Returns true if the current bd version uses issues.jsonl files (< 0.50.0).
+/// bd 0.50.0+ uses Dolt exclusively and may not have JSONL files.
+fn uses_jsonl_files() -> bool {
+    match get_bd_version_tuple() {
+        Some((major, minor, _)) => major == 0 && minor < 50,
+        None => false, // Unknown version: assume no JSONL
+    }
+}
+
+/// Reset the cached bd version (called when CLI binary path changes).
+fn reset_bd_version_cache() {
+    let mut cached = BD_VERSION.lock().unwrap();
+    *cached = None;
+}
+
 fn execute_bd(command: &str, args: &[String], cwd: Option<&str>) -> Result<String, String> {
     let working_dir = cwd
         .map(String::from)
@@ -588,7 +680,9 @@ fn execute_bd(command: &str, args: &[String], cwd: Option<&str>) -> Result<Strin
     for arg in args {
         full_args.push(arg);
     }
-    full_args.push("--no-daemon");
+    if supports_daemon_flag() {
+        full_args.push("--no-daemon");
+    }
     full_args.push("--json");
 
     let binary = get_cli_binary();
@@ -661,8 +755,12 @@ fn sync_bd_database(cwd: Option<&str>) {
 
     // Run bd sync (bidirectional - exports local changes AND imports remote changes)
     let binary = get_cli_binary();
+    let mut sync_args = vec!["sync"];
+    if supports_daemon_flag() {
+        sync_args.push("--no-daemon");
+    }
     match new_command(&binary)
-        .args(["sync", "--no-daemon"])
+        .args(&sync_args)
         .current_dir(&working_dir)
         .env("PATH", get_extended_path())
         .env("BEADS_PATH", &working_dir)
@@ -704,8 +802,12 @@ async fn bd_sync(cwd: Option<String>) -> Result<(), String> {
     let binary = get_cli_binary();
     log_info!("[bd_sync] Manual sync requested for: {}", working_dir);
 
+    let mut sync_args = vec!["sync"];
+    if supports_daemon_flag() {
+        sync_args.push("--no-daemon");
+    }
     let output = new_command(&binary)
-        .args(["sync", "--no-daemon"])
+        .args(&sync_args)
         .current_dir(&working_dir)
         .env("PATH", get_extended_path())
         .env("BEADS_PATH", &working_dir)
@@ -763,13 +865,19 @@ async fn bd_repair_database(cwd: Option<String>) -> Result<RepairResult, String>
         });
     }
 
-    // Check if issues.jsonl exists and has content
-    let jsonl_size = std::fs::metadata(&jsonl_path)
-        .map(|m| m.len())
-        .unwrap_or(0);
+    // For bd < 0.50.0: require issues.jsonl for repair (db is rebuilt from JSONL)
+    // For bd 0.50.0+: skip JSONL check (db is rebuilt from Dolt/git)
+    if uses_jsonl_files() {
+        let jsonl_size = std::fs::metadata(&jsonl_path)
+            .map(|m| m.len())
+            .unwrap_or(0);
 
-    if !jsonl_path.exists() || jsonl_size == 0 {
-        return Err("Cannot repair: issues.jsonl is missing or empty. Your data would be lost.".to_string());
+        if !jsonl_path.exists() || jsonl_size == 0 {
+            return Err("Cannot repair: issues.jsonl is missing or empty. Your data would be lost.".to_string());
+        }
+        log_info!("[bd_repair] Using JSONL-based repair strategy (bd < 0.50.0)");
+    } else {
+        log_info!("[bd_repair] Using Dolt-based repair strategy (bd >= 0.50.0 or unknown version)");
     }
 
     // Create backup of current database
@@ -786,8 +894,13 @@ async fn bd_repair_database(cwd: Option<String>) -> Result<RepairResult, String>
     log_info!("[bd_repair] Removed old database files");
 
     // Test that bd can now work (it will recreate the database)
+    let mut test_args = vec!["list", "--limit=1"];
+    if supports_daemon_flag() {
+        test_args.push("--no-daemon");
+    }
+    test_args.push("--json");
     let test_output = new_command(&get_cli_binary())
-        .args(["list", "--limit=1", "--no-daemon", "--json"])
+        .args(&test_args)
         .current_dir(&working_dir)
         .env("PATH", get_extended_path())
         .env("BEADS_PATH", &working_dir)
@@ -881,14 +994,16 @@ async fn bd_poll_data(cwd: Option<String>) -> Result<PollData, String> {
     })
 }
 
-/// Get the latest mtime across all beads database files (db, WAL, jsonl).
+/// Get the latest mtime across all beads database files (db, WAL, and optionally jsonl).
 /// SQLite WAL mode writes to beads.db-wal, so the main .db file mtime may not change.
 fn get_beads_mtime(beads_dir: &std::path::Path) -> Option<std::time::SystemTime> {
-    let paths = [
+    let mut paths = vec![
         beads_dir.join("beads.db"),
         beads_dir.join("beads.db-wal"),
-        beads_dir.join("issues.jsonl"),
     ];
+    if uses_jsonl_files() {
+        paths.push(beads_dir.join("issues.jsonl"));
+    }
     paths.iter()
         .filter_map(|p| fs::metadata(p).and_then(|m| m.modified()).ok())
         .max()
@@ -1833,6 +1948,47 @@ async fn get_bd_version() -> String {
     }
 }
 
+#[derive(Debug, Serialize)]
+struct CompatibilityInfo {
+    version: String,
+    #[serde(rename = "versionTuple")]
+    version_tuple: Option<Vec<u32>>,
+    #[serde(rename = "supportsDaemonFlag")]
+    supports_daemon_flag: bool,
+    #[serde(rename = "usesJsonlFiles")]
+    uses_jsonl_files: bool,
+    warnings: Vec<String>,
+}
+
+#[tauri::command]
+async fn check_bd_compatibility() -> CompatibilityInfo {
+    let version_string = get_bd_version().await;
+    let tuple = get_bd_version_tuple();
+
+    let mut warnings = Vec::new();
+
+    if tuple.is_none() {
+        warnings.push(format!("Could not parse bd version from: {}", version_string));
+    }
+
+    if let Some((major, minor, _)) = tuple {
+        if major == 0 && minor >= 50 {
+            warnings.push("bd >= 0.50.0 detected: daemon and JSONL systems have been removed".to_string());
+        }
+    }
+
+    let daemon_flag = supports_daemon_flag();
+    let jsonl = uses_jsonl_files();
+
+    CompatibilityInfo {
+        version: version_string,
+        version_tuple: tuple.map(|(a, b, c)| vec![a, b, c]),
+        supports_daemon_flag: daemon_flag,
+        uses_jsonl_files: jsonl,
+        warnings,
+    }
+}
+
 // ============================================================================
 // CLI Binary Configuration Commands
 // ============================================================================
@@ -1849,8 +2005,9 @@ async fn set_cli_binary_path(path: String) -> Result<String, String> {
     // Validate the binary first
     let version = validate_cli_binary_internal(&binary)?;
 
-    // Update global state
+    // Update global state and reset version cache (new binary may be different version)
     *CLI_BINARY.lock().unwrap() = binary.clone();
+    reset_bd_version_cache();
 
     // Persist to config file
     let mut config = load_config();
@@ -2454,6 +2611,7 @@ pub fn run() {
             get_log_path_string,
             log_frontend,
             get_bd_version,
+            check_bd_compatibility,
             get_cli_binary_path,
             set_cli_binary_path,
             validate_cli_binary,

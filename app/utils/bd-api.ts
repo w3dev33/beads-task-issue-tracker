@@ -240,7 +240,7 @@ export async function bdSync(path?: string): Promise<void> {
     return invoke<void>('bd_sync', { cwd: path })
   }
 
-  // Web fallback - no-op (sync is handled by bd daemon in web mode)
+  // Web fallback - no-op (sync not available in web mode)
 }
 
 export interface PurgeResult {
@@ -345,6 +345,31 @@ export async function getBdVersion(): Promise<string> {
     return invoke<string>('get_bd_version')
   }
   return 'web mode'
+}
+
+// ============================================================================
+// bd Compatibility Check API
+// ============================================================================
+
+export interface BdCompatibilityInfo {
+  version: string
+  versionTuple: number[] | null
+  supportsDaemonFlag: boolean
+  usesJsonlFiles: boolean
+  warnings: string[]
+}
+
+export async function checkBdCompatibility(): Promise<BdCompatibilityInfo> {
+  if (isTauri()) {
+    return invoke<BdCompatibilityInfo>('check_bd_compatibility')
+  }
+  return {
+    version: 'web mode',
+    versionTuple: null,
+    supportsDaemonFlag: false,
+    usesJsonlFiles: false,
+    warnings: [],
+  }
 }
 
 // ============================================================================
