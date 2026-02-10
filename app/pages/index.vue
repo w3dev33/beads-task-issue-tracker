@@ -103,6 +103,7 @@ if (import.meta.client && !selectedIssue.value) {
   isRightSidebarOpen.value = false
 }
 const isChartsCollapsed = useProjectStorage('chartsCollapsed', true)
+const isInProgressCollapsed = useProjectStorage('inProgressCollapsed', true)
 const isReadyCollapsed = useProjectStorage('readyCollapsed', true)
 const leftSidebarWidth = useLocalStorage('beads:leftSidebarWidth', 360)
 const rightSidebarWidth = useLocalStorage('beads:rightSidebarWidth', 484)
@@ -903,6 +904,11 @@ const availableEpics = computed(() => {
     .map(issue => ({ id: issue.id, title: issue.title }))
 })
 
+// In-progress issues for dashboard sidebar
+const inProgressIssues = computed(() => {
+  return issues.value.filter(issue => issue.status === 'in_progress')
+})
+
 // Default parent for new issues (set when creating child from epic)
 const defaultParent = ref<string | undefined>(undefined)
 
@@ -1057,6 +1063,30 @@ watch(
               <div v-show="!isChartsCollapsed" class="space-y-4 pl-5">
                 <StatusChart :open="stats.open" :closed="stats.closed" />
                 <PriorityChart :by-priority="stats.byPriority" />
+              </div>
+            </div>
+
+            <!-- Collapsible In Progress Section -->
+            <div v-if="inProgressIssues.length > 0" class="space-y-2">
+              <button
+                class="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors w-full"
+                @click="isInProgressCollapsed = !isInProgressCollapsed"
+              >
+                <svg
+                  class="w-3 h-3 transition-transform"
+                  :class="{ '-rotate-90': isInProgressCollapsed }"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                >
+                  <polyline points="6 9 12 15 18 9" />
+                </svg>
+                <span class="uppercase tracking-wide">In Progress</span>
+                <span class="text-[10px] ml-auto">({{ inProgressIssues.length }})</span>
+              </button>
+              <div v-show="!isInProgressCollapsed" class="pl-5">
+                <QuickList :issues="inProgressIssues" @select="handleSelectIssue" />
               </div>
             </div>
 
@@ -1401,6 +1431,30 @@ watch(
               <div v-show="!isChartsCollapsed" class="space-y-4 pl-5">
                 <StatusChart :open="stats.open" :closed="stats.closed" />
                 <PriorityChart :by-priority="stats.byPriority" />
+              </div>
+            </div>
+
+            <!-- Collapsible In Progress Section -->
+            <div v-if="inProgressIssues.length > 0" class="space-y-2">
+              <button
+                class="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors w-full"
+                @click="isInProgressCollapsed = !isInProgressCollapsed"
+              >
+                <svg
+                  class="w-3 h-3 transition-transform"
+                  :class="{ '-rotate-90': isInProgressCollapsed }"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                >
+                  <polyline points="6 9 12 15 18 9" />
+                </svg>
+                <span class="uppercase tracking-wide">In Progress</span>
+                <span class="text-[10px] ml-auto">({{ inProgressIssues.length }})</span>
+              </button>
+              <div v-show="!isInProgressCollapsed" class="pl-5">
+                <QuickList :issues="inProgressIssues" @select="handleSelectIssue" />
               </div>
             </div>
 
