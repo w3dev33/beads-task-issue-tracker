@@ -353,6 +353,8 @@ export async function getBdVersion(): Promise<string> {
 
 export interface BdCompatibilityInfo {
   version: string
+  /** "bd", "br", or "unknown" */
+  clientType: string
   versionTuple: number[] | null
   supportsDaemonFlag: boolean
   usesJsonlFiles: boolean
@@ -365,6 +367,7 @@ export async function checkBdCompatibility(): Promise<BdCompatibilityInfo> {
   }
   return {
     version: 'web mode',
+    clientType: 'unknown',
     versionTuple: null,
     supportsDaemonFlag: false,
     usesJsonlFiles: false,
@@ -390,12 +393,6 @@ export async function setCliBinaryPath(path: string): Promise<string> {
   return invoke<string>('set_cli_binary_path', { path })
 }
 
-export async function validateCliBinary(path: string): Promise<string> {
-  if (!isTauri()) {
-    throw new Error('CLI binary validation is only available in the desktop app')
-  }
-  return invoke<string>('validate_cli_binary', { path })
-}
 
 // ============================================================================
 // File System API - For folder picker

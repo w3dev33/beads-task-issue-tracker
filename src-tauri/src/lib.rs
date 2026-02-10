@@ -23,8 +23,16 @@ static LAST_KNOWN_MTIME: LazyLock<Mutex<HashMap<String, std::time::SystemTime>>>
 // Configurable CLI binary name (default: "bd")
 static CLI_BINARY: LazyLock<Mutex<String>> = LazyLock::new(|| Mutex::new("bd".to_string()));
 
-// Cached bd CLI version tuple (major, minor, patch) — detected once on first use
-static BD_VERSION: LazyLock<Mutex<Option<(u32, u32, u32)>>> =
+// Cached CLI client info — detected once on first use
+// Stores: (client_type, major, minor, patch)
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum CliClient {
+    Bd,  // Original Go-based beads CLI
+    Br,  // beads_rust — frozen at classic SQLite+JSONL architecture, no daemon
+    Unknown,
+}
+
+static CLI_CLIENT_INFO: LazyLock<Mutex<Option<(CliClient, u32, u32, u32)>>> =
     LazyLock::new(|| Mutex::new(None));
 
 // Conditional logging macros
@@ -578,10 +586,25 @@ fn get_cli_binary() -> String {
 }
 
 // ============================================================================
-// bd Version Detection
+// CLI Client Detection (bd vs br)
 // ============================================================================
 
-/// Parse a bd version string like "bd version 0.49.6 (Homebrew)" into (0, 49, 6).
+/// Detect the client type from the version string.
+/// - "bd version 0.49.6 (Homebrew)" → Bd
+/// - "br 0.1.13 (rustc 1.85.0-nightly)" → Br
+fn detect_cli_client(version_str: &str) -> CliClient {
+    let lower = version_str.to_lowercase();
+    if lower.starts_with("br ") || lower.contains("beads_rust") || lower.contains("beads-rust") {
+        CliClient::Br
+    } else if lower.starts_with("bd ") || lower.contains("bd version") {
+        CliClient::Bd
+    } else {
+        CliClient::Unknown
+    }
+}
+
+/// Parse a version string into (major, minor, patch).
+/// Works for both "bd version 0.49.6 (Homebrew)" and "br 0.1.13 (rustc ...)".
 fn parse_bd_version(version_str: &str) -> Option<(u32, u32, u32)> {
     // Look for a semver-like pattern: digits.digits.digits
     let re_like = version_str
@@ -602,14 +625,13 @@ fn parse_bd_version(version_str: &str) -> Option<(u32, u32, u32)> {
     }
 }
 
-/// Get the bd CLI version as a tuple, caching the result after first call.
-fn get_bd_version_tuple() -> Option<(u32, u32, u32)> {
-    let mut cached = BD_VERSION.lock().unwrap();
-    if let Some(v) = *cached {
-        return Some(v);
+/// Detect and cache the CLI client type and version. Runs `binary --version` once.
+fn get_cli_client_info() -> Option<(CliClient, u32, u32, u32)> {
+    let mut cached = CLI_CLIENT_INFO.lock().unwrap();
+    if let Some(info) = *cached {
+        return Some(info);
     }
 
-    // Run `bd --version` to detect version
     let binary = get_cli_binary();
     let output = new_command(&binary)
         .arg("--version")
@@ -618,50 +640,62 @@ fn get_bd_version_tuple() -> Option<(u32, u32, u32)> {
         .ok()?;
 
     if !output.status.success() {
-        log_warn!("[bd_version] Failed to get bd version");
+        log_warn!("[cli_detect] Failed to get version from {}", binary);
         return None;
     }
 
     let version_str = String::from_utf8_lossy(&output.stdout);
-    let tuple = parse_bd_version(version_str.trim());
+    let trimmed = version_str.trim();
+    let client = detect_cli_client(trimmed);
+    let tuple = parse_bd_version(trimmed);
 
-    if let Some(t) = tuple {
-        log_info!("[bd_version] Detected bd version: {}.{}.{}", t.0, t.1, t.2);
-        *cached = Some(t);
+    if let Some((major, minor, patch)) = tuple {
+        let info = (client, major, minor, patch);
+        let client_name = match client {
+            CliClient::Bd => "bd",
+            CliClient::Br => "br",
+            CliClient::Unknown => "unknown",
+        };
+        log_info!("[cli_detect] Detected {} client v{}.{}.{}", client_name, major, minor, patch);
+        *cached = Some(info);
+        Some(info)
     } else {
-        log_warn!("[bd_version] Could not parse version from: {}", version_str.trim());
+        log_warn!("[cli_detect] Could not parse version from: {}", trimmed);
+        None
     }
-
-    tuple
 }
 
-/// Returns true if the current bd version supports the --no-daemon flag (< 0.50.0).
-/// For unknown versions, defaults to false (safe: bd ignores the absent flag).
+/// Returns true if the CLI supports the --no-daemon flag.
+/// - br: NEVER (no daemon concept)
+/// - bd < 0.50.0: YES
+/// - bd >= 0.50.0: NO (daemon removed)
+/// - unknown: NO (safe default)
 fn supports_daemon_flag() -> bool {
-    match get_bd_version_tuple() {
-        Some((major, minor, _)) => {
-            if major == 0 && minor < 50 {
-                true
-            } else {
-                false
-            }
-        }
-        None => false, // Unknown version: don't add the flag
+    match get_cli_client_info() {
+        Some((CliClient::Br, _, _, _)) => false, // br has no daemon
+        Some((CliClient::Bd, major, minor, _)) => major == 0 && minor < 50,
+        Some((CliClient::Unknown, _, _, _)) => false,
+        None => false,
     }
 }
 
-/// Returns true if the current bd version uses issues.jsonl files (< 0.50.0).
-/// bd 0.50.0+ uses Dolt exclusively and may not have JSONL files.
+/// Returns true if the CLI uses issues.jsonl files.
+/// - br: ALWAYS (frozen on SQLite+JSONL architecture)
+/// - bd < 0.50.0: YES
+/// - bd >= 0.50.0: NO (Dolt only)
+/// - unknown: NO (safe default)
 fn uses_jsonl_files() -> bool {
-    match get_bd_version_tuple() {
-        Some((major, minor, _)) => major == 0 && minor < 50,
-        None => false, // Unknown version: assume no JSONL
+    match get_cli_client_info() {
+        Some((CliClient::Br, _, _, _)) => true, // br always uses JSONL
+        Some((CliClient::Bd, major, minor, _)) => major == 0 && minor < 50,
+        Some((CliClient::Unknown, _, _, _)) => false,
+        None => false,
     }
 }
 
-/// Reset the cached bd version (called when CLI binary path changes).
+/// Reset the cached client info (called when CLI binary path changes).
 fn reset_bd_version_cache() {
-    let mut cached = BD_VERSION.lock().unwrap();
+    let mut cached = CLI_CLIENT_INFO.lock().unwrap();
     *cached = None;
 }
 
@@ -1951,6 +1985,9 @@ async fn get_bd_version() -> String {
 #[derive(Debug, Serialize)]
 struct CompatibilityInfo {
     version: String,
+    /// "bd", "br", or "unknown"
+    #[serde(rename = "clientType")]
+    client_type: String,
     #[serde(rename = "versionTuple")]
     version_tuple: Option<Vec<u32>>,
     #[serde(rename = "supportsDaemonFlag")]
@@ -1963,28 +2000,40 @@ struct CompatibilityInfo {
 #[tauri::command]
 async fn check_bd_compatibility() -> CompatibilityInfo {
     let version_string = get_bd_version().await;
-    let tuple = get_bd_version_tuple();
+    let info = get_cli_client_info();
 
     let mut warnings = Vec::new();
 
-    if tuple.is_none() {
-        warnings.push(format!("Could not parse bd version from: {}", version_string));
+    let (client, tuple) = match info {
+        Some((client, major, minor, patch)) => (client, Some((major, minor, patch))),
+        None => {
+            warnings.push(format!("Could not detect CLI client from: {}", version_string));
+            (CliClient::Unknown, None)
+        }
+    };
+
+    let client_type_str = match client {
+        CliClient::Bd => "bd",
+        CliClient::Br => "br",
+        CliClient::Unknown => "unknown",
+    };
+
+    if client == CliClient::Br {
+        warnings.push("br (beads_rust) detected: frozen on classic SQLite+JSONL architecture, no daemon support".to_string());
     }
 
     if let Some((major, minor, _)) = tuple {
-        if major == 0 && minor >= 50 {
+        if client == CliClient::Bd && major == 0 && minor >= 50 {
             warnings.push("bd >= 0.50.0 detected: daemon and JSONL systems have been removed".to_string());
         }
     }
 
-    let daemon_flag = supports_daemon_flag();
-    let jsonl = uses_jsonl_files();
-
     CompatibilityInfo {
         version: version_string,
+        client_type: client_type_str.to_string(),
         version_tuple: tuple.map(|(a, b, c)| vec![a, b, c]),
-        supports_daemon_flag: daemon_flag,
-        uses_jsonl_files: jsonl,
+        supports_daemon_flag: supports_daemon_flag(),
+        uses_jsonl_files: uses_jsonl_files(),
         warnings,
     }
 }
