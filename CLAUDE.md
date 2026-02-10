@@ -91,6 +91,7 @@ Always use the `/review-to-commit` skill when the user asks to commit changes. T
 
 **IMPORTANT - Release Notes**:
 - **Never upload DMG files manually** - GitHub Actions automatically builds and attaches release artifacts
+- **Always include bd compatibility** in CHANGELOG and release notes: specify the minimum `bd` version required for full feature support (e.g., `> Requires **bd 0.49.3+** for full feature support.`). Update this whenever new bd fields or CLI flags are used.
 - Always include the macOS unsigned certificate notice in release notes:
 
 ```markdown

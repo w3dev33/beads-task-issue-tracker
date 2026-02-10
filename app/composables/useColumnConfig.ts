@@ -11,17 +11,23 @@ const defaultColumns: ColumnConfig[] = [
   { id: 'assignee', label: 'Assignee', visible: true, sortable: true },
   { id: 'createdAt', label: 'Created', visible: true, sortable: true },
   { id: 'updatedAt', label: 'Updated', visible: true, sortable: true },
+  { id: 'commentCount', label: 'Comments', visible: false, sortable: true },
 ]
 
 export function useColumnConfig() {
   const columns = useProjectStorage<ColumnConfig[]>('columns', defaultColumns)
 
-  // Sync sortable property from defaults (in case it changed)
+  // Sync with defaults: update sortable property and add any new columns
   const defaultSortableMap = new Map(defaultColumns.map(c => [c.id, c.sortable]))
-  columns.value = columns.value.map(col => ({
-    ...col,
-    sortable: defaultSortableMap.get(col.id) ?? col.sortable,
-  }))
+  const existingIds = new Set(columns.value.map(c => c.id))
+  const newColumns = defaultColumns.filter(c => !existingIds.has(c.id))
+  columns.value = [
+    ...columns.value.map(col => ({
+      ...col,
+      sortable: defaultSortableMap.get(col.id) ?? col.sortable,
+    })),
+    ...newColumns,
+  ]
 
   const visibleColumns = computed(() =>
     columns.value.filter((col) => col.visible)

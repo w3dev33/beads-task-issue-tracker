@@ -131,6 +131,8 @@ interface PreviewCollapsedState {
   designNotes: boolean
   acceptanceCriteria: boolean
   workingNotes: boolean
+  metadata: boolean
+  specId: boolean
 }
 
 const defaultCollapsedState: PreviewCollapsedState = {
@@ -145,6 +147,8 @@ const defaultCollapsedState: PreviewCollapsedState = {
   designNotes: true,
   acceptanceCriteria: true,
   workingNotes: true,
+  metadata: true,
+  specId: true,
 }
 
 const previewSections = useProjectStorage<PreviewCollapsedState>('previewSections', defaultCollapsedState)
@@ -172,6 +176,16 @@ const isEstimateOpen = computed(() => previewSections.value.estimate)
 const isDesignNotesOpen = computed(() => previewSections.value.designNotes)
 const isAcceptanceCriteriaOpen = computed(() => previewSections.value.acceptanceCriteria)
 const isWorkingNotesOpen = computed(() => previewSections.value.workingNotes)
+const isMetadataOpen = computed(() => previewSections.value.metadata)
+const isSpecIdOpen = computed(() => previewSections.value.specId)
+
+const formatMetadata = (raw: string): string => {
+  try {
+    return JSON.stringify(JSON.parse(raw), null, 2)
+  } catch {
+    return raw
+  }
+}
 
 const formatDate = (dateStr: string) => {
   if (!dateStr) return '-'
@@ -586,6 +600,52 @@ const formatEstimate = (minutes: number) => {
       </button>
       <div v-show="isWorkingNotesOpen" class="mt-1 pl-4.5">
         <div class="text-xs"><LinkifiedText :text="issue.workingNotes" /></div>
+      </div>
+    </div>
+
+    <!-- Metadata Section (only if exists, read-only JSON) -->
+    <div v-if="issue.metadata">
+      <button
+        class="flex items-center gap-1.5 w-full text-left group"
+        @click="toggleSection('metadata')"
+      >
+        <svg
+          class="w-3 h-3 text-muted-foreground transition-transform"
+          :class="{ '-rotate-90': !isMetadataOpen }"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+        >
+          <polyline points="6 9 12 15 18 9" />
+        </svg>
+        <h4 class="text-[10px] font-medium text-muted-foreground uppercase tracking-wide group-hover:text-foreground transition-colors">Metadata</h4>
+      </button>
+      <div v-show="isMetadataOpen" class="mt-1 pl-4.5">
+        <pre class="text-xs bg-muted/50 rounded p-2 overflow-x-auto whitespace-pre-wrap break-words">{{ formatMetadata(issue.metadata) }}</pre>
+      </div>
+    </div>
+
+    <!-- Spec ID Section (only if exists) -->
+    <div v-if="issue.specId">
+      <button
+        class="flex items-center gap-1.5 w-full text-left group"
+        @click="toggleSection('specId')"
+      >
+        <svg
+          class="w-3 h-3 text-muted-foreground transition-transform"
+          :class="{ '-rotate-90': !isSpecIdOpen }"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+        >
+          <polyline points="6 9 12 15 18 9" />
+        </svg>
+        <h4 class="text-[10px] font-medium text-muted-foreground uppercase tracking-wide group-hover:text-foreground transition-colors">Spec ID</h4>
+      </button>
+      <div v-show="isSpecIdOpen" class="mt-1 pl-4.5">
+        <p class="text-xs font-mono">{{ issue.specId }}</p>
       </div>
     </div>
   </div>

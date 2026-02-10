@@ -61,6 +61,7 @@ const form = reactive({
   acceptanceCriteria: props.issue?.acceptanceCriteria || '',
   workingNotes: props.issue?.workingNotes || '',
   parent: props.issue?.parent?.id || props.defaultParent || '',
+  specId: props.issue?.specId || '',
 })
 
 watch(
@@ -80,6 +81,7 @@ watch(
       form.acceptanceCriteria = newIssue.acceptanceCriteria || ''
       form.workingNotes = newIssue.workingNotes || ''
       form.parent = newIssue.parent?.id || ''
+      form.specId = newIssue.specId || ''
     }
   }
 )
@@ -168,6 +170,7 @@ const handleSubmit = () => {
     acceptanceCriteria: form.acceptanceCriteria,
     workingNotes: form.workingNotes,
     parent: parentValue, // Empty string to detach, epic ID to attach
+    specId: form.specId || undefined,
   }
   emit('save', payload)
 }
@@ -375,6 +378,16 @@ const attachFile = async () => {
             placeholder="URLs, IDs, or image paths (one per line)"
             rows="2"
             class="text-xs"
+          />
+        </div>
+
+        <div class="space-y-1">
+          <Label for="specId" class="text-[10px] uppercase tracking-wide text-sky-400">Spec ID</Label>
+          <Input
+            id="specId"
+            v-model="form.specId"
+            placeholder="e.g. SPEC-001"
+            class="h-8 text-xs"
           />
         </div>
 

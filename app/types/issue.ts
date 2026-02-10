@@ -45,6 +45,9 @@ export interface Issue {
   workingNotes?: string
   parent?: ParentIssue
   children?: ChildIssue[]
+  metadata?: string
+  specId?: string
+  commentCount?: number
 }
 
 export interface FilterState {
@@ -87,6 +90,7 @@ export interface CreateIssuePayload {
   acceptanceCriteria?: string
   workingNotes?: string
   parent?: string // Parent epic ID for hierarchical child
+  specId?: string
 }
 
 export interface UpdateIssuePayload {
@@ -103,6 +107,8 @@ export interface UpdateIssuePayload {
   acceptanceCriteria?: string
   workingNotes?: string
   parent?: string | null // null or empty string to detach, string ID to attach
+  metadata?: string
+  specId?: string
 }
 
 export interface CollapsibleState {

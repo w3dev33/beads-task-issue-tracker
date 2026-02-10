@@ -507,6 +507,11 @@ function getIssueField(issue: Issue, field: string): string {
                     </div>
                   </template>
 
+                  <template v-else-if="col.id === 'commentCount'">
+                    <span v-if="group.epic.commentCount" class="text-xs text-muted-foreground">{{ group.epic.commentCount }}</span>
+                    <span v-else class="text-xs text-muted-foreground">-</span>
+                  </template>
+
                   <template v-else>
                     <span class="text-xs">{{ getIssueField(group.epic, col.id) }}</span>
                   </template>
@@ -595,6 +600,11 @@ function getIssueField(issue: Issue, field: string): string {
                       </div>
                     </template>
 
+                    <template v-else-if="col.id === 'commentCount'">
+                      <span v-if="child.commentCount" class="text-xs text-muted-foreground">{{ child.commentCount }}</span>
+                      <span v-else class="text-xs text-muted-foreground">-</span>
+                    </template>
+
                     <template v-else>
                       <span class="text-xs">{{ getIssueField(child, col.id) }}</span>
                     </template>
@@ -679,6 +689,11 @@ function getIssueField(issue: Issue, field: string): string {
                       <span class="text-xs text-muted-foreground">{{ formatDate(issue.updatedAt) }}</span>
                       <span class="text-[10px] text-muted-foreground/70">{{ formatTime(issue.updatedAt) }}</span>
                     </div>
+                  </template>
+
+                  <template v-else-if="col.id === 'commentCount'">
+                    <span v-if="issue.commentCount" class="text-xs text-muted-foreground">{{ issue.commentCount }}</span>
+                    <span v-else class="text-xs text-muted-foreground">-</span>
                   </template>
 
                   <template v-else>
@@ -766,6 +781,11 @@ function getIssueField(issue: Issue, field: string): string {
                   <span class="text-xs text-muted-foreground">{{ formatDate(issue.updatedAt) }}</span>
                   <span class="text-[10px] text-muted-foreground/70">{{ formatTime(issue.updatedAt) }}</span>
                 </div>
+              </template>
+
+              <template v-else-if="col.id === 'commentCount'">
+                <span v-if="issue.commentCount" class="text-xs text-muted-foreground">{{ issue.commentCount }}</span>
+                <span v-else class="text-xs text-muted-foreground">-</span>
               </template>
 
               <template v-else>

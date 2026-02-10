@@ -164,6 +164,9 @@ pub struct BdRawIssue {
     pub dependencies: Option<Vec<BdRawDependency>>,
     pub dependency_count: Option<i32>,
     pub dependent_count: Option<i32>,
+    pub metadata: Option<String>,
+    pub spec_id: Option<String>,
+    pub comment_count: Option<i32>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -209,6 +212,11 @@ pub struct Issue {
     pub working_notes: Option<String>,
     pub parent: Option<ParentIssue>,
     pub children: Option<Vec<ChildIssue>>,
+    pub metadata: Option<String>,
+    #[serde(rename = "specId")]
+    pub spec_id: Option<String>,
+    #[serde(rename = "commentCount")]
+    pub comment_count: Option<i32>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -315,6 +323,8 @@ pub struct CreatePayload {
     #[serde(rename = "workingNotes")]
     pub working_notes: Option<String>,
     pub parent: Option<String>, // Parent epic ID for hierarchical child
+    #[serde(rename = "specId")]
+    pub spec_id: Option<String>,
     pub cwd: Option<String>,
 }
 
@@ -339,6 +349,9 @@ pub struct UpdatePayload {
     #[serde(rename = "workingNotes")]
     pub working_notes: Option<String>,
     pub parent: Option<String>, // Some("") to detach, Some("id") to attach
+    pub metadata: Option<String>,
+    #[serde(rename = "specId")]
+    pub spec_id: Option<String>,
     pub cwd: Option<String>,
 }
 
@@ -403,6 +416,11 @@ fn transform_issue(raw: BdRawIssue) -> Issue {
             .collect()
     }).filter(|v: &Vec<ChildIssue>| !v.is_empty());
 
+    // Compute comment_count before consuming raw.comments
+    let comment_count = raw.comment_count.or_else(|| {
+        raw.comments.as_ref().map(|c| c.len() as i32)
+    });
+
     Issue {
         id: raw.id,
         title: raw.title,
@@ -436,6 +454,9 @@ fn transform_issue(raw: BdRawIssue) -> Issue {
         working_notes: raw.notes,
         parent,
         children,
+        metadata: raw.metadata,
+        spec_id: raw.spec_id,
+        comment_count,
     }
 }
 
@@ -1323,6 +1344,12 @@ async fn bd_create(payload: CreatePayload) -> Result<Option<Issue>, String> {
             args.push(parent.clone());
         }
     }
+    if let Some(ref spec_id) = payload.spec_id {
+        if !spec_id.is_empty() {
+            args.push("--spec-id".to_string());
+            args.push(spec_id.clone());
+        }
+    }
 
     let output = execute_bd("create", &args, payload.cwd.as_deref())?;
 
@@ -1393,6 +1420,14 @@ async fn bd_update(id: String, updates: UpdatePayload) -> Result<Option<Issue>, 
     if let Some(ref notes) = updates.working_notes {
         args.push("--notes".to_string());
         args.push(notes.clone());
+    }
+    if let Some(ref metadata) = updates.metadata {
+        args.push("--metadata".to_string());
+        args.push(metadata.clone());
+    }
+    if let Some(ref spec_id) = updates.spec_id {
+        args.push("--spec-id".to_string());
+        args.push(spec_id.clone());
     }
     if let Some(ref parent) = updates.parent {
         args.push("--parent".to_string());
