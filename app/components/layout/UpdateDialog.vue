@@ -205,21 +205,21 @@ const handleViewOnGitHub = () => {
       </DialogHeader>
       <DialogFooter class="flex items-center justify-end">
         <div class="flex items-center gap-2">
-          <template v-if="updateInfo?.hasUpdate && !isChecking">
-            <Button
-              @click="handleDownloadAndQuit"
-              :disabled="isDownloading"
-            >
-              Download &amp; Quit
-            </Button>
-            <Button
-              variant="outline"
-              @click="handleViewOnGitHub"
-              :disabled="isDownloading"
-            >
-              View on GitHub
-            </Button>
-          </template>
+          <Button
+            v-if="updateInfo?.hasUpdate && !isChecking"
+            @click="handleDownloadAndQuit"
+            :disabled="isDownloading"
+          >
+            Download &amp; Quit
+          </Button>
+          <Button
+            v-if="(updateInfo || error) && !isChecking"
+            variant="outline"
+            @click="handleViewOnGitHub"
+            :disabled="isDownloading"
+          >
+            View on GitHub
+          </Button>
           <Button
             v-if="!isDownloading"
             variant="outline"
