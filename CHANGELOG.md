@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.13.2] - 2026-02-11
+
+> Requires **bd 0.49.3+** for full feature support.
+
+### New Features
+- **Fast mtime detection**: Decouple cheap mtime check (1s interval) from data fetch (5s poll). External changes are now detected in ~1s instead of ~5s, with zero CPU cost when nothing changed
+- **bd CLI update detection**: Debug Panel now shows when a newer version of the bd CLI is available, with direct link to releases
+
+### Bug Fixes
+- **View on GitHub button**: Always show "View on GitHub" button in the update dialog, not just when an update is available
+
 ## [1.13.1] - 2026-02-11
 
 > Requires **bd 0.49.3+** for full feature support.
