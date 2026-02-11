@@ -73,6 +73,7 @@ const attachFile = async () => {
   const selected = await open({
     multiple: false,
     filters: [
+      { name: 'All supported files', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp', 'md', 'markdown'] },
       { name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp'] },
       { name: 'Markdown', extensions: ['md', 'markdown'] },
     ],
