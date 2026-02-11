@@ -247,8 +247,21 @@ const { showErrorDialog: showSyncErrorDialog, lastSyncError, closeErrorDialog: c
 // 1. Sync cooldown (Rust backend skips redundant syncs within 10s)
 // 2. Filesystem mtime check (zero bd processes if nothing changed)
 // 3. Batched poll command (1 IPC call instead of 3 when changes detected)
-// 4. Adaptive intervals (5s active, 30s blurred, 60s idle, paused when hidden)
+// 4. Adaptive intervals (5s poll, 1s mtime check when active, 30s blurred, 60s idle)
+// 5. Fast mtime detection: checkFn runs every 1s, triggers immediate pollFn on change
 const isSyncing = ref(false)
+let skipMtimeCheck = false // Set by fast check to avoid redundant bdCheckChanged in pollFn
+
+// Fast change detection (cheap mtime stat, ~0ms) — runs every 1s when active
+const checkMtimeChanged = async (): Promise<boolean> => {
+  if (isLoading.value || isUpdating.value || showOnboarding.value || !beadsPath.value || favorites.value.length === 0) {
+    return false
+  }
+  const path = beadsPath.value && beadsPath.value !== '.' ? beadsPath.value : undefined
+  const changed = await bdCheckChanged(path)
+  if (changed) skipMtimeCheck = true // pollFn can skip the mtime check — we already consumed it
+  return changed
+}
 
 const pollForChanges = async () => {
   // Don't poll if no active project
@@ -259,14 +272,17 @@ const pollForChanges = async () => {
   try {
     isSyncing.value = true
 
-    // Layer 2: Check filesystem mtime first — zero process spawns if nothing changed
     const path = beadsPath.value && beadsPath.value !== '.' ? beadsPath.value : undefined
-    const changed = await bdCheckChanged(path)
 
-    if (!changed) {
-      // Nothing changed on disk — skip entire poll cycle
-      return
+    // Layer 2: Check filesystem mtime first — skip if fast check already detected change
+    if (!skipMtimeCheck) {
+      const changed = await bdCheckChanged(path)
+      if (!changed) {
+        // Nothing changed on disk — skip entire poll cycle
+        return
+      }
     }
+    skipMtimeCheck = false
 
     // Layer 3: Changes detected — use batched command (1 IPC instead of 3)
     const readyData = await fetchPollData()
@@ -286,8 +302,10 @@ const pollForChanges = async () => {
   }
 }
 
-// Layer 4: Adaptive polling — replaces fixed setInterval + visibilitychange
-const { start: startPolling, stop: stopPolling } = useAdaptivePolling(pollForChanges)
+// Layer 4+5: Adaptive polling with fast mtime detection
+const { start: startPolling, stop: stopPolling } = useAdaptivePolling(pollForChanges, {
+  checkFn: checkMtimeChanged,
+})
 
 onMounted(async () => {
   checkViewport()
