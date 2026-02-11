@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.13.1] - 2026-02-11
+
+> Requires **bd 0.49.3+** for full feature support.
+
+### Bug Fixes
+- **File picker on Linux**: Add "All supported files" filter as default in file dialogs so Markdown files are visible without manually switching filters (GTK defaults to first filter)
+
 ## [1.13.0] - 2026-02-10
 
 > Requires **bd 0.49.3+** for full feature support. Core features work with bd 0.42+.
