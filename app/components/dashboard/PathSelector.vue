@@ -84,7 +84,7 @@ const toggleSortMode = () => {
     'alpha-desc': 'manual',
     manual: 'alpha',
   }
-  setSortMode(cycle[sortMode.value])
+  setSortMode(cycle[sortMode.value] ?? 'alpha')
 }
 
 const emit = defineEmits<{

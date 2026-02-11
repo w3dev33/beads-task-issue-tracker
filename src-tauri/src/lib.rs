@@ -105,6 +105,18 @@ struct GitHubRelease {
     body: Option<String>,
 }
 
+#[derive(Debug, Clone, Serialize)]
+pub struct BdCliUpdateInfo {
+    #[serde(rename = "currentVersion")]
+    pub current_version: String,
+    #[serde(rename = "latestVersion")]
+    pub latest_version: String,
+    #[serde(rename = "hasUpdate")]
+    pub has_update: bool,
+    #[serde(rename = "releaseUrl")]
+    pub release_url: String,
+}
+
 // File watcher removed - replaced by frontend polling for lower CPU usage
 
 // ============================================================================
@@ -1806,6 +1818,61 @@ async fn check_for_updates_demo() -> Result<UpdateInfo, String> {
 }
 
 #[tauri::command]
+async fn check_bd_cli_update() -> Result<BdCliUpdateInfo, String> {
+    // Get current bd version
+    let version_str = get_bd_version().await;
+    if version_str.contains("not found") {
+        return Err("bd CLI not found".to_string());
+    }
+
+    // Parse semver from version string
+    let current_tuple = parse_bd_version(&version_str)
+        .ok_or_else(|| format!("Could not parse version from: {}", version_str))?;
+    let current_version = format!("{}.{}.{}", current_tuple.0, current_tuple.1, current_tuple.2);
+
+    // Determine the correct GitHub repo based on client type (bd vs br)
+    let client_type = detect_cli_client(&version_str);
+    let api_url = match client_type {
+        CliClient::Br => "https://api.github.com/repos/Dicklesworthstone/beads_rust/releases/latest",
+        _ => "https://api.github.com/repos/steveyegge/beads/releases/latest",
+    };
+    let releases_url = match client_type {
+        CliClient::Br => "https://github.com/Dicklesworthstone/beads_rust/releases",
+        _ => "https://github.com/steveyegge/beads/releases",
+    };
+
+    let client = reqwest::Client::builder()
+        .user_agent("beads-task-issue-tracker")
+        .build()
+        .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
+
+    let response = client
+        .get(api_url)
+        .send()
+        .await
+        .map_err(|e| format!("Failed to fetch releases: {}", e))?;
+
+    if !response.status().is_success() {
+        return Err(format!("GitHub API returned status: {}", response.status()));
+    }
+
+    let release: GitHubRelease = response
+        .json()
+        .await
+        .map_err(|e| format!("Failed to parse release info: {}", e))?;
+
+    let latest_version = release.tag_name.trim_start_matches('v').to_string();
+    let has_update = compare_versions(&current_version, &latest_version);
+
+    Ok(BdCliUpdateInfo {
+        current_version,
+        latest_version,
+        has_update,
+        release_url: releases_url.to_string(),
+    })
+}
+
+#[tauri::command]
 async fn download_and_install_update(download_url: String) -> Result<String, String> {
     log::info!("[download_update] Starting download from: {}", download_url);
 
@@ -2707,6 +2774,7 @@ pub fn run() {
             fs_list,
             check_for_updates,
             check_for_updates_demo,
+            check_bd_cli_update,
             download_and_install_update,
             open_image_file,
             read_image_file,

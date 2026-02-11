@@ -347,6 +347,20 @@ export async function getBdVersion(): Promise<string> {
   return 'web mode'
 }
 
+export interface BdCliUpdateInfo {
+  currentVersion: string
+  latestVersion: string
+  hasUpdate: boolean
+  releaseUrl: string
+}
+
+export async function checkBdCliUpdate(): Promise<BdCliUpdateInfo> {
+  if (isTauri()) {
+    return invoke<BdCliUpdateInfo>('check_bd_cli_update')
+  }
+  return { currentVersion: 'web', latestVersion: 'web', hasUpdate: false, releaseUrl: '' }
+}
+
 // ============================================================================
 // bd Compatibility Check API
 // ============================================================================

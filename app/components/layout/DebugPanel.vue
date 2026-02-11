@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Button } from '~/components/ui/button'
-import { readLogs, clearLogs, exportLogs as exportLogsApi, getLogPath, getBdVersion, getLoggingEnabled, setLoggingEnabled, getVerboseLogging, setVerboseLogging } from '~/utils/bd-api'
+import { readLogs, clearLogs, exportLogs as exportLogsApi, getLogPath, getBdVersion, getLoggingEnabled, setLoggingEnabled, getVerboseLogging, setVerboseLogging, checkBdCliUpdate, type BdCliUpdateInfo } from '~/utils/bd-api'
+import { openUrl } from '~/utils/open-url'
 
 const { isSyncing: isForceSyncing, forceSync, syncMessage, lastSyncSuccess } = useSyncStatus()
 
@@ -18,6 +19,7 @@ const bdVersion = ref('')
 const isAutoRefresh = ref(true)
 const isLoading = ref(false)
 const isVerbose = ref(false)
+const bdCliUpdate = ref<BdCliUpdateInfo | null>(null)
 let refreshInterval: ReturnType<typeof setInterval> | null = null
 
 const logContainerRef = ref<HTMLDivElement | null>(null)
@@ -188,6 +190,8 @@ watch(() => props.isOpen, async (isOpen) => {
     bdVersion.value = await getBdVersion()
     logPath.value = await getLogPath()
     isVerbose.value = await getVerboseLogging()
+    // Check for bd CLI updates (non-blocking)
+    checkBdCliUpdate().then((info) => { bdCliUpdate.value = info }).catch(() => {})
     // Enable backend logging so log_info!/log_debug! macros produce output
     await setLoggingEnabled(true)
     if (isAutoRefresh.value) {
@@ -311,7 +315,27 @@ onUnmounted(() => {
       </div>
 
       <div class="flex items-center gap-2">
-        <span class="text-xs font-medium text-foreground">{{ bdVersion }}</span>
+        <button
+          v-if="bdCliUpdate?.hasUpdate"
+          class="flex items-center gap-1.5 text-xs font-medium text-foreground hover:text-green-500 transition-colors cursor-pointer"
+          :title="`Update available: v${bdCliUpdate.latestVersion} — click to view`"
+          @click="openUrl(bdCliUpdate.releaseUrl)"
+        >
+          {{ bdVersion }}
+          <span class="relative flex h-2.5 w-2.5">
+            <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+            <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-green-500"></span>
+          </span>
+        </button>
+        <button
+          v-else-if="bdCliUpdate"
+          class="text-xs font-medium text-foreground hover:text-primary transition-colors cursor-pointer"
+          title="View bd CLI releases"
+          @click="openUrl(bdCliUpdate.releaseUrl)"
+        >
+          {{ bdVersion }}
+        </button>
+        <span v-else class="text-xs font-medium text-foreground">{{ bdVersion }}</span>
         <span class="text-muted-foreground">|</span>
         <span class="text-xs text-muted-foreground truncate max-w-[300px]">{{ logPath }}</span>
         <Button variant="outline" size="sm" class="h-7 w-7 p-0" @click="close">
