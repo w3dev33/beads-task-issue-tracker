@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.14.0] - 2026-02-12
+
+> Requires **bd 0.49.3+** for full feature support.
+
+### New Features
+- **Live updates via native file watcher**: Replace the 1s mtime polling loop with a debounced native filesystem watcher (`notify` crate). External changes (e.g. `bd create` from the terminal) are detected instantly with near-zero CPU usage when idle. The previous adaptive polling remains as a 30s safety net with graceful degradation if the watcher fails to start.
+
+### Technical Details
+- Rust-side: 1000ms debounce covers SQLite WAL write bursts, `NonRecursive` watch on `.beads/` only
+- Frontend: 300ms event coalescing + 3s self-trigger cooldown prevents cascading from bd sync writes
+- New `useBeadsWatcher` composable with concurrency guard and project path filtering
+- `useAdaptivePolling` upgraded with watcher-aware mode (30s safety net replaces 5s+1s polling)
+
 ## [1.13.2] - 2026-02-11
 
 > Requires **bd 0.49.3+** for full feature support.
