@@ -31,12 +31,21 @@ This project is a reimplementation of the Beads UI as a native desktop app using
 
 ## Features
 
+### Live Updates — No Polling
+The app uses a **native file watcher** on the `.beads` directory. When an AI agent (or anyone) creates, updates, or closes an issue via `bd`, the change appears in real time — no refresh button, no polling interval. This is critical when monitoring AI-driven workflows where issues change rapidly.
+
+### Interactive Dependency Management
+Manage `blockedBy` / `blocks` relationships directly from the issue preview:
+- **Add blockers** with an autocomplete search (by ID or title)
+- **Remove blockers** with an inline X button and confirmation modal
+- **Navigate** by clicking any dependency badge to jump to that issue
+- **Blocked indicator** in the issue table — a red icon next to the status badge shows at a glance which issues have unresolved blockers
+
 ### Core
 - **Dashboard**: Visual overview of issues by status, type, and priority
 - **Issue Management**: Create, edit, close, and comment on issues
 - **Epic Hierarchy**: Parent/child relationships with collapsible groups and progress tracking
 - **Multi-Project Support**: Save favorite projects and switch between them instantly
-- **Auto-Sync**: Background synchronization with the Beads database
 
 ### Attachments
 - **Image Attachments**: Attach and preview screenshots directly in issues (thumbnail gallery)
