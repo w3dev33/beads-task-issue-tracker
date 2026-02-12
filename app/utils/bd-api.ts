@@ -444,7 +444,33 @@ export async function fsExists(path: string): Promise<boolean> {
   return true
 }
 
-// File watcher removed - replaced by polling for lower CPU usage
+// ============================================================================
+// File Watcher API
+// ============================================================================
+
+export interface WatcherStatus {
+  active: boolean
+  watchedPath: string | null
+}
+
+export async function startWatching(path: string): Promise<void> {
+  if (isTauri()) {
+    return invoke<void>('start_watching', { path })
+  }
+}
+
+export async function stopWatching(): Promise<void> {
+  if (isTauri()) {
+    return invoke<void>('stop_watching')
+  }
+}
+
+export async function getWatcherStatus(): Promise<WatcherStatus> {
+  if (isTauri()) {
+    return invoke<WatcherStatus>('get_watcher_status')
+  }
+  return { active: false, watchedPath: null }
+}
 
 // ============================================================================
 // Update Checker API

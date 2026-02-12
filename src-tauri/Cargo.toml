@@ -25,4 +25,5 @@ tauri-plugin-shell = "2"
 tauri-plugin-dialog = "2"
 dirs = "6.0"
 reqwest = { version = "0.12", features = ["json", "rustls-tls"], default-features = false }
-# notify dependencies removed - replaced by frontend polling for lower CPU usage
+notify = "7.0"
+notify-debouncer-mini = "0.5"

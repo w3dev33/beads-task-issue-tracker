@@ -243,14 +243,33 @@ const checkViewport = () => {
 // Sync status composable (for auto-sync indicator and error dialog)
 const { showErrorDialog: showSyncErrorDialog, lastSyncError, closeErrorDialog: closeSyncErrorDialog } = useSyncStatus()
 
-// Polling for external changes — optimized with 4 layers:
-// 1. Sync cooldown (Rust backend skips redundant syncs within 10s)
-// 2. Filesystem mtime check (zero bd processes if nothing changed)
-// 3. Batched poll command (1 IPC call instead of 3 when changes detected)
-// 4. Adaptive intervals (5s poll, 1s mtime check when active, 30s blurred, 60s idle)
-// 5. Fast mtime detection: checkFn runs every 1s, triggers immediate pollFn on change
+// File watcher: native fs watcher on .beads/ directory (replaces 1s mtime polling)
+// Falls back to adaptive polling if watcher fails to start
+const onWatcherChanged = async () => {
+  // Watcher detected a change — fetch data immediately
+  const path = beadsPath.value && beadsPath.value !== '.' ? beadsPath.value : undefined
+  skipMtimeCheck = true // Skip mtime check in pollFn since watcher already detected change
+  const readyData = await fetchPollData()
+  if (readyData) {
+    updateFromPollData(issues.value, readyData)
+  }
+  // Snapshot mtime AFTER operations so next poll cycle ignores our own changes
+  await bdCheckChanged(path)
+  skipMtimeCheck = false
+}
+
+const { watcherActive, startListening, stopListening, switchProject, notifySelfWrite } = useBeadsWatcher({
+  onChanged: onWatcherChanged,
+})
+
+// Polling for external changes — optimized with 5 layers:
+// 1. Native file watcher (0 CPU when idle, instant detection)
+// 2. Sync cooldown (Rust backend skips redundant syncs within 10s)
+// 3. Filesystem mtime check as fallback (zero bd processes if nothing changed)
+// 4. Batched poll command (1 IPC call instead of 3 when changes detected)
+// 5. Adaptive intervals (30s safety net when watcher active, 5s/1s fallback without watcher)
 const isSyncing = ref(false)
-let skipMtimeCheck = false // Set by fast check to avoid redundant bdCheckChanged in pollFn
+let skipMtimeCheck = false // Set by watcher/fast check to avoid redundant bdCheckChanged in pollFn
 
 // Fast change detection (cheap mtime stat, ~0ms) — runs every 1s when active
 const checkMtimeChanged = async (): Promise<boolean> => {
@@ -295,6 +314,9 @@ const pollForChanges = async () => {
     // Snapshot mtime AFTER all operations (including epic bd_show calls in fetchPollData)
     // so the next check ignores changes caused by our own poll cycle
     await bdCheckChanged(path)
+
+    // Tell watcher to ignore self-triggered events from our sync/poll writes
+    notifySelfWrite()
   } catch {
     // Ignore polling errors
   } finally {
@@ -302,9 +324,10 @@ const pollForChanges = async () => {
   }
 }
 
-// Layer 4+5: Adaptive polling with fast mtime detection
+// Adaptive polling with fast mtime detection (degrades gracefully if watcher unavailable)
 const { start: startPolling, stop: stopPolling } = useAdaptivePolling(pollForChanges, {
   checkFn: checkMtimeChanged,
+  watcherActive,
 })
 
 onMounted(async () => {
@@ -312,7 +335,13 @@ onMounted(async () => {
   if (import.meta.client) {
     window.addEventListener('resize', checkViewport)
 
+    // Start native file watcher (if project path available)
+    if (beadsPath.value && !showOnboarding.value) {
+      await startListening(beadsPath.value)
+    }
+
     // Start adaptive polling (handles visibility, focus, idle internally)
+    // When watcher is active, polling uses 30s safety-net instead of 1s mtime checks
     startPolling()
 
     // Check for updates after initial load + start periodic check (hourly)
@@ -328,6 +357,7 @@ onMounted(async () => {
 onUnmounted(() => {
   if (import.meta.client) {
     window.removeEventListener('resize', checkViewport)
+    stopListening()
     stopPolling()
     stopPeriodicCheck()
   }
@@ -431,6 +461,10 @@ const handlePathChange = async () => {
   selectIssue(null)
   isEditMode.value = false
   isCreatingNew.value = false
+  // Switch file watcher to new project path
+  if (beadsPath.value) {
+    await switchProject(beadsPath.value)
+  }
   // Invalidate all cached mtimes so the next poll cycle detects the new project
   await bdResetMtime()
   // Per-project storage is automatically isolated via useProjectStorage
