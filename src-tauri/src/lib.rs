@@ -150,9 +150,10 @@ struct BeadsChangedPayload {
 /// Format: {"issue_id": "...", "depends_on_id": "...", "type": "blocks", "created_at": "...", "created_by": "..."}
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct BdRawDependency {
+    pub id: Option<String>,
     pub issue_id: Option<String>,
     pub depends_on_id: Option<String>,
-    #[serde(rename = "type")]
+    #[serde(rename = "type", alias = "dependency_type")]
     pub dependency_type: Option<String>,
     pub created_at: Option<String>,
     pub created_by: Option<String>,
@@ -480,8 +481,42 @@ fn transform_issue(raw: BdRawIssue) -> Issue {
                 created_at: c.created_at,
             }
         }).collect(),
-        blocked_by: raw.blocked_by,
-        blocks: raw.blocks,
+        blocked_by: {
+            // Try raw.blocked_by first (if bd ever populates it directly)
+            let mut bb = raw.blocked_by.unwrap_or_default();
+            // Extract from dependencies array (bd show: objects with dependency_type "blocks" = blockers)
+            if let Some(ref deps) = raw.dependencies {
+                // bd show format: [{id, dependency_type: "blocks"}] — these block the current issue
+                for dep in deps {
+                    if let (Some(ref dep_type), Some(ref id)) = (&dep.dependency_type, &dep.id) {
+                        if dep_type == "blocks" && !bb.contains(id) {
+                            bb.push(id.clone());
+                        }
+                    }
+                    // bd list format: [{issue_id, depends_on_id, type: "blocks"}]
+                    if let (Some(ref dep_type), Some(ref depends_on_id), Some(ref _issue_id)) = (&dep.dependency_type, &dep.depends_on_id, &dep.issue_id) {
+                        if dep_type == "blocks" && !bb.contains(depends_on_id) {
+                            bb.push(depends_on_id.clone());
+                        }
+                    }
+                }
+            }
+            if bb.is_empty() { None } else { Some(bb) }
+        },
+        blocks: {
+            let mut bl = raw.blocks.unwrap_or_default();
+            // Extract from dependents array (bd show: objects with dependency_type "blocks" = issues blocked by current)
+            if let Some(ref dependents) = raw.dependents {
+                for dep in dependents {
+                    if let Some(ref id) = dep.id {
+                        if !bl.contains(id) {
+                            bl.push(id.clone());
+                        }
+                    }
+                }
+            }
+            if bl.is_empty() { None } else { Some(bl) }
+        },
         external_ref: raw.external_ref,
         estimate_minutes: raw.estimate,
         design_notes: raw.design,
@@ -1586,6 +1621,24 @@ async fn bd_comments_add(id: String, content: String, options: CwdOptions) -> Re
     let args = vec![id, content];
 
     execute_bd("comments add", &args, options.cwd.as_deref())?;
+
+    Ok(serde_json::json!({ "success": true }))
+}
+
+#[tauri::command]
+async fn bd_dep_add(issue_id: String, blocker_id: String, options: CwdOptions) -> Result<serde_json::Value, String> {
+    let args = vec![issue_id, blocker_id];
+
+    execute_bd("dep add", &args, options.cwd.as_deref())?;
+
+    Ok(serde_json::json!({ "success": true }))
+}
+
+#[tauri::command]
+async fn bd_dep_remove(issue_id: String, blocker_id: String, options: CwdOptions) -> Result<serde_json::Value, String> {
+    let args = vec![issue_id, blocker_id];
+
+    execute_bd("dep remove", &args, options.cwd.as_deref())?;
 
     Ok(serde_json::json!({ "success": true }))
 }
@@ -2892,6 +2945,8 @@ pub fn run() {
             bd_close,
             bd_delete,
             bd_comments_add,
+            bd_dep_add,
+            bd_dep_remove,
             fs_exists,
             fs_list,
             check_for_updates,

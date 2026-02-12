@@ -86,6 +86,8 @@ const {
   deleteIssue,
   selectIssue,
   addComment,
+  addDependency,
+  removeDependency,
   checkForChanges,
   clearIssues,
 } = useIssues()
@@ -408,6 +410,11 @@ const isDetachDialogOpen = ref(false)
 const detachImagePath = ref<string | null>(null)
 const isDetaching = ref(false)
 
+// Remove dependency confirmation dialog
+const isRemoveDepDialogOpen = ref(false)
+const pendingDepRemoval = ref<{ issueId: string; blockerId: string } | null>(null)
+const isRemovingDep = ref(false)
+
 // Close and clear panel when issue transitions to closed (not when selecting an already closed issue)
 watch(
   () => selectedIssue.value?.status,
@@ -624,6 +631,41 @@ const handleAddComment = async (content: string) => {
     notifySuccess('Comment added')
   } catch {
     notifyError('Failed to add comment')
+  }
+}
+
+const availableIssuesForDeps = computed(() =>
+  issues.value
+    .filter(i => i.status !== 'closed')
+    .map(i => ({ id: i.id, title: i.title })),
+)
+
+const handleAddDependency = async (issueId: string, blockerId: string) => {
+  try {
+    await addDependency(issueId, blockerId)
+    notifySuccess('Dependency added', `${issueId} is now blocked by ${blockerId}`)
+  } catch {
+    notifyError('Failed to add dependency')
+  }
+}
+
+const confirmRemoveDependency = (issueId: string, blockerId: string) => {
+  pendingDepRemoval.value = { issueId, blockerId }
+  isRemoveDepDialogOpen.value = true
+}
+
+const handleRemoveDependency = async () => {
+  if (!pendingDepRemoval.value) return
+  isRemovingDep.value = true
+  try {
+    await removeDependency(pendingDepRemoval.value.issueId, pendingDepRemoval.value.blockerId)
+    notifySuccess('Dependency removed')
+  } catch {
+    notifyError('Failed to remove dependency')
+  } finally {
+    isRemovingDep.value = false
+    isRemoveDepDialogOpen.value = false
+    pendingDepRemoval.value = null
   }
 }
 
@@ -1389,10 +1431,13 @@ watch(
                 <IssuePreview
                   :issue="selectedIssue"
                   :readonly="selectedIssue.status === 'closed'"
+                  :available-issues="availableIssuesForDeps"
                   @navigate-to-issue="handleNavigateToIssue"
                   @attach-image="handleAttachImage"
                   @detach-image="confirmDetachImage"
                   @create-child="handleCreateChild"
+                  @add-dependency="handleAddDependency"
+                  @remove-dependency="confirmRemoveDependency"
                 />
                 <CommentSection
                   class="mt-3"
@@ -1704,10 +1749,13 @@ watch(
               <IssuePreview
                 :issue="selectedIssue"
                 :readonly="selectedIssue.status === 'closed'"
+                :available-issues="availableIssuesForDeps"
                 @navigate-to-issue="handleNavigateToIssue"
                 @attach-image="handleAttachImage"
                 @detach-image="confirmDetachImage"
                 @create-child="handleCreateChild"
+                @add-dependency="handleAddDependency"
+                @remove-dependency="confirmRemoveDependency"
               />
               <CommentSection
                 class="mt-3"
@@ -1911,6 +1959,35 @@ watch(
         <p v-else class="mt-3 text-sm text-muted-foreground">
           Only the reference will be removed. The original file will not be deleted.
         </p>
+      </template>
+    </ConfirmDialog>
+
+    <!-- Remove Dependency Confirmation Dialog -->
+    <ConfirmDialog
+      v-model:open="isRemoveDepDialogOpen"
+      title="Remove dependency"
+      confirm-text="Remove"
+      cancel-text="Cancel"
+      variant="destructive"
+      :is-loading="isRemovingDep"
+      @confirm="handleRemoveDependency"
+    >
+      <template #description>
+        <p class="text-sm text-muted-foreground">
+          Are you sure you want to remove this dependency?
+        </p>
+        <div v-if="pendingDepRemoval" class="mt-2 space-y-2">
+          <div>
+            <p class="text-xs text-muted-foreground uppercase tracking-wide">Issue</p>
+            <p class="text-sm font-mono text-sky-400">{{ pendingDepRemoval.issueId }}</p>
+            <p class="text-sm text-muted-foreground">{{ availableIssuesForDeps.find(i => i.id === pendingDepRemoval!.issueId)?.title }}</p>
+          </div>
+          <div>
+            <p class="text-xs text-muted-foreground uppercase tracking-wide">Blocker</p>
+            <p class="text-sm font-mono text-sky-400">{{ pendingDepRemoval.blockerId }}</p>
+            <p class="text-sm text-muted-foreground">{{ availableIssuesForDeps.find(i => i.id === pendingDepRemoval!.blockerId)?.title }}</p>
+          </div>
+        </div>
       </template>
     </ConfirmDialog>
 

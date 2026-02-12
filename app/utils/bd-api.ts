@@ -235,6 +235,22 @@ export async function bdAddComment(id: string, content: string, path?: string): 
   })
 }
 
+export async function bdAddDependency(issueId: string, blockerId: string, path?: string): Promise<{ success: boolean }> {
+  if (isTauri()) {
+    return invoke<{ success: boolean }>('bd_dep_add', { issueId, blockerId, options: { cwd: path } })
+  }
+
+  throw new Error('Dependency management is only available in the desktop app')
+}
+
+export async function bdRemoveDependency(issueId: string, blockerId: string, path?: string): Promise<{ success: boolean }> {
+  if (isTauri()) {
+    return invoke<{ success: boolean }>('bd_dep_remove', { issueId, blockerId, options: { cwd: path } })
+  }
+
+  throw new Error('Dependency management is only available in the desktop app')
+}
+
 export async function bdSync(path?: string): Promise<void> {
   if (isTauri()) {
     return invoke<void>('bd_sync', { cwd: path })

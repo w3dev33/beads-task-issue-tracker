@@ -13,6 +13,7 @@ import { extractImagesFromExternalRef, extractMarkdownFromExternalRef, extractNo
 const props = defineProps<{
   issue: Issue
   readonly?: boolean
+  availableIssues?: Array<{ id: string; title: string }>
 }>()
 
 const { beadsPath } = useBeadsPath()
@@ -88,6 +89,8 @@ const emit = defineEmits<{
   'attach-image': [path: string]
   'detach-image': [path: string]
   'create-child': [parentId: string]
+  'add-dependency': [issueId: string, blockerId: string]
+  'remove-dependency': [issueId: string, blockerId: string]
 }>()
 
 // Natural sort comparison for IDs (handles multi-digit numbers correctly)
@@ -118,6 +121,66 @@ const sortedChildren = computed(() => {
     naturalCompare(a.id.toLowerCase(), b.id.toLowerCase())
   )
 })
+
+// Blocker autocomplete state
+const isAddingBlocker = ref(false)
+const blockerSearchQuery = ref('')
+const blockerInputRef = ref<HTMLInputElement | null>(null)
+const blockerDropdownRef = ref<HTMLDivElement | null>(null)
+
+const filteredBlockerOptions = computed(() => {
+  if (!props.availableIssues) return []
+  const existing = new Set([
+    props.issue.id,
+    ...(props.issue.blockedBy || []),
+  ])
+  const query = blockerSearchQuery.value.toLowerCase()
+  return props.availableIssues
+    .filter(i => !existing.has(i.id))
+    .filter(i => !query || i.id.toLowerCase().includes(query) || i.title.toLowerCase().includes(query))
+    .slice(0, 10)
+})
+
+const handleAddBlockerClick = () => {
+  isAddingBlocker.value = true
+  blockerSearchQuery.value = ''
+  nextTick(() => blockerInputRef.value?.focus())
+}
+
+const handleSelectBlocker = (id: string) => {
+  emit('add-dependency', props.issue.id, id)
+  isAddingBlocker.value = false
+  blockerSearchQuery.value = ''
+}
+
+let blurTimeout: ReturnType<typeof setTimeout> | null = null
+
+const handleBlockerInputBlur = (e: FocusEvent) => {
+  // Delay to allow click on dropdown item
+  blurTimeout = setTimeout(() => {
+    isAddingBlocker.value = false
+    blockerSearchQuery.value = ''
+  }, 150)
+}
+
+const handleBlockerKeydown = (e: KeyboardEvent) => {
+  if (e.key === 'Escape') {
+    isAddingBlocker.value = false
+    blockerSearchQuery.value = ''
+  } else if (e.key === 'Enter' && filteredBlockerOptions.value.length === 1) {
+    handleSelectBlocker(filteredBlockerOptions.value[0]!.id)
+  }
+}
+
+const handleRemoveDependency = (id: string, section: 'blockedBy' | 'blocks') => {
+  if (section === 'blockedBy') {
+    // Current issue is blocked by `id` → remove dep(currentIssue, id)
+    emit('remove-dependency', props.issue.id, id)
+  } else {
+    // Current issue blocks `id` → remove dep(id, currentIssue)
+    emit('remove-dependency', id, props.issue.id)
+  }
+}
 
 // Collapsible section states (persisted per project, all open by default)
 interface PreviewCollapsedState {
@@ -473,39 +536,108 @@ const formatEstimate = (minutes: number) => {
       </div>
     </div>
 
-    <!-- Dependencies Section (only if exists) -->
-    <div v-if="issue.blockedBy?.length || issue.blocks?.length">
-      <button
-        class="flex items-center gap-1.5 w-full text-left group"
-        @click="toggleSection('dependencies')"
-      >
-        <svg
-          class="w-3 h-3 text-muted-foreground transition-transform"
-          :class="{ '-rotate-90': !isDependenciesOpen }"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
+    <!-- Dependencies Section (show when has deps OR editable) -->
+    <div v-if="issue.blockedBy?.length || issue.blocks?.length || !readonly">
+      <div class="flex items-center justify-between">
+        <button
+          class="flex items-center gap-1.5 text-left group"
+          @click="toggleSection('dependencies')"
         >
-          <polyline points="6 9 12 15 18 9" />
-        </svg>
-        <h4 class="text-[10px] font-medium text-muted-foreground uppercase tracking-wide group-hover:text-foreground transition-colors">Dependencies</h4>
-      </button>
+          <svg
+            class="w-3 h-3 text-muted-foreground transition-transform"
+            :class="{ '-rotate-90': !isDependenciesOpen }"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <polyline points="6 9 12 15 18 9" />
+          </svg>
+          <h4 class="text-[10px] font-medium text-muted-foreground uppercase tracking-wide group-hover:text-foreground transition-colors">Dependencies</h4>
+        </button>
+        <Button
+          v-if="!readonly && !isAddingBlocker"
+          type="button"
+          variant="outline"
+          size="sm"
+          class="h-5 px-1.5 text-[10px] hover:bg-sky-500/20 hover:border-sky-500 hover:text-sky-400 active:scale-95 active:bg-sky-500/30 transition-all"
+          @click="handleAddBlockerClick"
+        >
+          <Plus class="w-3 h-3 mr-1" />
+          Add blocker
+        </Button>
+      </div>
       <div v-show="isDependenciesOpen" class="mt-1 pl-4.5 space-y-2">
+        <!-- Add blocker autocomplete -->
+        <div v-if="isAddingBlocker" class="relative">
+          <input
+            ref="blockerInputRef"
+            v-model="blockerSearchQuery"
+            type="text"
+            class="h-6 w-full text-[11px] px-2 rounded border border-border bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+            placeholder="Search by ID or title..."
+            @blur="handleBlockerInputBlur"
+            @keydown="handleBlockerKeydown"
+          />
+          <div
+            v-if="filteredBlockerOptions.length"
+            ref="blockerDropdownRef"
+            class="absolute z-50 mt-0.5 left-0 right-0 max-h-48 overflow-y-auto rounded border border-border bg-popover shadow-md"
+          >
+            <button
+              v-for="opt in filteredBlockerOptions"
+              :key="opt.id"
+              class="flex items-center gap-2 w-full text-left px-2 py-1.5 text-[11px] hover:bg-accent hover:text-accent-foreground"
+              @mousedown.prevent="handleSelectBlocker(opt.id)"
+            >
+              <span class="font-medium text-sky-400 shrink-0">{{ opt.id }}</span>
+              <span class="truncate text-muted-foreground">{{ opt.title }}</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Blocked By -->
         <div v-if="issue.blockedBy?.length">
           <h5 class="text-[10px] font-medium text-sky-400 uppercase tracking-wide mb-0.5">Blocked By</h5>
-          <div class="flex flex-wrap gap-1">
-            <Badge v-for="id in issue.blockedBy" :key="id" variant="secondary" class="text-[10px] px-1.5 py-0">
+          <div class="flex flex-wrap gap-1 items-center">
+            <Badge
+              v-for="id in issue.blockedBy"
+              :key="id"
+              variant="outline"
+              class="group/dep text-[10px] px-1.5 py-0.5 cursor-pointer text-foreground bg-transparent border-muted-foreground/50 hover:underline gap-1"
+              @click="emit('navigate-to-issue', id)"
+            >
               {{ id }}
+              <span
+                v-if="!readonly"
+                class="opacity-0 group-hover/dep:opacity-100 transition-opacity text-muted-foreground hover:text-destructive cursor-pointer"
+                @click.stop="handleRemoveDependency(id, 'blockedBy')"
+              >
+                <X class="w-3 h-3" />
+              </span>
             </Badge>
           </div>
         </div>
 
+        <!-- Blocks -->
         <div v-if="issue.blocks?.length">
           <h5 class="text-[10px] font-medium text-sky-400 uppercase tracking-wide mb-0.5">Blocks</h5>
           <div class="flex flex-wrap gap-1">
-            <Badge v-for="id in issue.blocks" :key="id" variant="secondary" class="text-[10px] px-1.5 py-0">
+            <Badge
+              v-for="id in issue.blocks"
+              :key="id"
+              variant="outline"
+              class="group/dep text-[10px] px-1.5 py-0.5 cursor-pointer text-foreground bg-transparent border-muted-foreground/50 hover:underline gap-1"
+              @click="emit('navigate-to-issue', id)"
+            >
               {{ id }}
+              <span
+                v-if="!readonly"
+                class="opacity-0 group-hover/dep:opacity-100 transition-opacity text-muted-foreground hover:text-destructive cursor-pointer"
+                @click.stop="handleRemoveDependency(id, 'blocks')"
+              >
+                <X class="w-3 h-3" />
+              </span>
             </Badge>
           </div>
         </div>

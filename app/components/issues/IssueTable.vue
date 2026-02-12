@@ -20,6 +20,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '~/components/ui/tooltip'
+import { Ban } from 'lucide-vue-next'
 
 const props = defineProps<{
   issues: Issue[]
@@ -470,7 +471,17 @@ function getIssueField(issue: Issue, field: string): string {
                   </template>
 
                   <template v-else-if="col.id === 'status'">
-                    <StatusBadge :status="group.epic.status" size="sm" />
+                    <div class="flex items-center gap-1">
+                      <StatusBadge :status="group.epic.status" size="sm" />
+                      <Tooltip v-if="group.epic.blockedBy?.length">
+                        <TooltipTrigger as-child>
+                          <Ban class="w-3 h-3 text-red-400" />
+                        </TooltipTrigger>
+                        <TooltipContent side="top">
+                          <p class="text-xs">Blocked by {{ group.epic.blockedBy.join(', ') }}</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </div>
                   </template>
 
                   <template v-else-if="col.id === 'priority'">
@@ -654,7 +665,17 @@ function getIssueField(issue: Issue, field: string): string {
                   </template>
 
                   <template v-else-if="col.id === 'status'">
-                    <StatusBadge :status="issue.status" size="sm" />
+                    <div class="flex items-center gap-1">
+                      <StatusBadge :status="issue.status" size="sm" />
+                      <Tooltip v-if="issue.blockedBy?.length">
+                        <TooltipTrigger as-child>
+                          <Ban class="w-3 h-3 text-red-400" />
+                        </TooltipTrigger>
+                        <TooltipContent side="top">
+                          <p class="text-xs">Blocked by {{ issue.blockedBy.join(', ') }}</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </div>
                   </template>
 
                   <template v-else-if="col.id === 'priority'">
@@ -746,7 +767,17 @@ function getIssueField(issue: Issue, field: string): string {
               </template>
 
               <template v-else-if="col.id === 'status'">
-                <StatusBadge :status="issue.status" size="sm" />
+                <div class="flex items-center gap-1">
+                  <StatusBadge :status="issue.status" size="sm" />
+                  <Tooltip v-if="issue.blockedBy?.length">
+                    <TooltipTrigger as-child>
+                      <Ban class="w-3 h-3 text-red-400" />
+                    </TooltipTrigger>
+                    <TooltipContent side="top">
+                      <p class="text-xs">Blocked by {{ issue.blockedBy.join(', ') }}</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </div>
               </template>
 
               <template v-else-if="col.id === 'priority'">

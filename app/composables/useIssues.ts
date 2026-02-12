@@ -1,5 +1,5 @@
 import type { Issue, CreateIssuePayload, UpdateIssuePayload } from '~/types/issue'
-import { bdList, bdCount, bdShow, bdCreate, bdUpdate, bdClose, bdDelete, bdAddComment, bdPurgeOrphanAttachments, bdPollData, type BdListOptions, type PollData } from '~/utils/bd-api'
+import { bdList, bdCount, bdShow, bdCreate, bdUpdate, bdClose, bdDelete, bdAddComment, bdAddDependency, bdRemoveDependency, bdPurgeOrphanAttachments, bdPollData, type BdListOptions, type PollData } from '~/utils/bd-api'
 import { useProjectStorage } from '~/composables/useProjectStorage'
 
 // Interface for hierarchical grouping of epics and their children
@@ -736,6 +736,52 @@ export function useIssues() {
     }
   }
 
+  const addDependency = async (issueId: string, blockerId: string) => {
+    if (isUpdating.value) return false
+
+    isUpdating.value = true
+    error.value = null
+
+    try {
+      await bdAddDependency(issueId, blockerId, getPath())
+
+      // Refetch the issue to get updated dependencies
+      if (selectedIssue.value?.id === issueId) {
+        await fetchIssue(issueId)
+      }
+
+      return true
+    } catch (e) {
+      error.value = e instanceof Error ? e.message : 'Failed to add dependency'
+      return false
+    } finally {
+      isUpdating.value = false
+    }
+  }
+
+  const removeDependency = async (issueId: string, blockerId: string) => {
+    if (isUpdating.value) return false
+
+    isUpdating.value = true
+    error.value = null
+
+    try {
+      await bdRemoveDependency(issueId, blockerId, getPath())
+
+      // Refetch the issue to get updated dependencies
+      if (selectedIssue.value?.id === issueId) {
+        await fetchIssue(issueId)
+      }
+
+      return true
+    } catch (e) {
+      error.value = e instanceof Error ? e.message : 'Failed to remove dependency'
+      return false
+    } finally {
+      isUpdating.value = false
+    }
+  }
+
   // Clear all issues data (used when removing last favorite)
   const clearIssues = () => {
     issues.value = []
@@ -779,6 +825,8 @@ export function useIssues() {
     deleteIssue,
     selectIssue,
     addComment,
+    addDependency,
+    removeDependency,
     checkForChanges,
     clearIssues,
   }
