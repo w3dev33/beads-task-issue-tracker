@@ -295,23 +295,18 @@ const formatTime = (dateStr: string) => {
 
 // Epic border colors for visual grouping (left and right)
 const epicBorderColors = [
-  { left: 'border-l-blue-500', right: 'border-r-blue-500' },
-  { left: 'border-l-green-500', right: 'border-r-green-500' },
   { left: 'border-l-purple-500', right: 'border-r-purple-500' },
   { left: 'border-l-orange-500', right: 'border-r-orange-500' },
   { left: 'border-l-pink-500', right: 'border-r-pink-500' },
   { left: 'border-l-cyan-500', right: 'border-r-cyan-500' },
   { left: 'border-l-yellow-500', right: 'border-r-yellow-500' },
-  { left: 'border-l-red-500', right: 'border-r-red-500' },
+  { left: 'border-l-amber-500', right: 'border-r-amber-500' },
+  { left: 'border-l-violet-500', right: 'border-r-violet-500' },
+  { left: 'border-l-teal-500', right: 'border-r-teal-500' },
 ]
 
-const getEpicBorderColors = (epicId: string): { left: string; right: string } => {
-  let hash = 0
-  for (let i = 0; i < epicId.length; i++) {
-    hash = ((hash << 5) - hash) + epicId.charCodeAt(i)
-    hash = hash & hash
-  }
-  return epicBorderColors[Math.abs(hash) % epicBorderColors.length]!
+const getEpicBorderColors = (index: number): { left: string; right: string } => {
+  return epicBorderColors[index % epicBorderColors.length]!
 }
 
 function getIssueField(issue: Issue, field: string): string {
@@ -396,7 +391,7 @@ function getIssueField(issue: Issue, field: string): string {
 
         <!-- Hierarchical display with grouped issues -->
         <template v-if="useHierarchicalDisplay">
-          <template v-for="group in groupedIssues" :key="group.epic?.id || group.children[0]?.id">
+          <template v-for="(group, groupIndex) in groupedIssues" :key="group.epic?.id || group.children[0]?.id">
             <!-- Epic row with expand/collapse -->
             <template v-if="group.epic">
               <TableRow
@@ -405,7 +400,7 @@ function getIssueField(issue: Issue, field: string): string {
                   multiSelectMode
                     ? (isSelected(group.epic.id) ? 'bg-accent/50 hover:bg-accent/70' : 'hover:bg-muted/50')
                     : (selectedId === group.epic.id ? 'bg-accent/50 hover:bg-accent/70' : 'hover:bg-muted/50'),
-                  isExpanded(group.epic.id) && group.childCount > 0 ? ['border-l-4', 'border-r-4', getEpicBorderColors(group.epic.id).left, getEpicBorderColors(group.epic.id).right] : ''
+                  group.childCount > 0 ? ['border-l-4', 'border-r-4', getEpicBorderColors(groupIndex).left, getEpicBorderColors(groupIndex).right] : ''
                 ]"
                 @click="multiSelectMode ? toggleSelect(group.epic.id) : $emit('select', group.epic)"
                 @dblclick="!multiSelectMode && $emit('edit', group.epic)"
@@ -536,8 +531,8 @@ function getIssueField(issue: Issue, field: string): string {
                   :key="child.id"
                   class="cursor-pointer border-l-4 border-r-4"
                   :class="[
-                    getEpicBorderColors(group.epic.id).left,
-                    getEpicBorderColors(group.epic.id).right,
+                    getEpicBorderColors(groupIndex).left,
+                    getEpicBorderColors(groupIndex).right,
                     multiSelectMode
                       ? (isSelected(child.id) ? 'bg-accent/50 hover:bg-accent/70' : 'hover:bg-muted/50')
                       : (selectedId === child.id ? 'bg-accent/50 hover:bg-accent/70' : 'hover:bg-muted/50')
