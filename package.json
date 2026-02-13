@@ -1,7 +1,7 @@
 {
   "name": "beads-task-issue-tracker",
   "type": "module",
-  "version": "1.15.1",
+  "version": "1.16.0",
   "description": "A lightweight desktop app for managing Beads issues outside your IDE",
   "author": {
     "name": "Laurent Chapin",

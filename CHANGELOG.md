@@ -1,5 +1,25 @@
 # Changelog
 
+## [1.16.0] - 2026-02-13
+
+> Requires **bd 0.49.3+** for full feature support.
+
+### New Features
+- **Add/remove relations**: Create and remove non-blocking relations (relates-to, duplicates, supersedes, caused-by, etc.) directly from the issue detail view
+- **Modal dialogs for blockers and relations**: Replace inline autocomplete forms with proper modal dialogs for a more reliable and spacious UI
+- **Dynamic relation types**: Available relation types adapt to the detected CLI client (bd: 10 types, br: 7 types)
+- **Relations on closed issues**: Relations can be added and removed on closed issues (e.g. retroactively linking duplicates)
+- **Search across all issues**: Modal search field searches open and closed issues regardless of the filter state
+- **Exclude closed filter**: Toggle filter in the relation modal to show/hide closed issues when browsing
+
+### Improvements
+- **Priority-colored IDs in modals**: Issue IDs are colored by priority (red/orange/green/gray) in both blocker and relation modals
+- **StatusBadge in modals**: Each issue in the selection list shows its status badge for quick identification
+- **Priority border fallback**: Relation badges now look up priority from loaded issues when the backend doesn't provide metadata
+
+### Bug Fixes
+- **Relation removal direction**: Fix remove not working when the relation direction is "dependent" (inverse dependency order)
+
 ## [1.15.1] - 2026-02-13
 
 > Requires **bd 0.49.3+** for full feature support.
