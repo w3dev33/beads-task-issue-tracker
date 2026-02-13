@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.15.1] - 2026-02-13
+
+> Requires **bd 0.49.3+** for full feature support.
+
+### Bug Fixes
+- **Epic colored borders always visible**: Borders no longer disappear when collapsing an epic or filtering by closed status
+- **Distinct epic colors**: Use index-based color assignment instead of ID hash to prevent color collisions between epics
+- **No status color confusion**: Replaced blue/green/red border colors with amber/violet/teal to avoid visual conflict with status badges
+
 ## [1.14.0] - 2026-02-12
 
 > Requires **bd 0.49.3+** for full feature support.
