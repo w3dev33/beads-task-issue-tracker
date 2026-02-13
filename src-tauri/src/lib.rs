@@ -253,6 +253,10 @@ pub struct Issue {
     pub spec_id: Option<String>,
     #[serde(rename = "commentCount")]
     pub comment_count: Option<i32>,
+    #[serde(rename = "dependencyCount")]
+    pub dependency_count: Option<i32>,
+    #[serde(rename = "dependentCount")]
+    pub dependent_count: Option<i32>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -506,10 +510,11 @@ fn transform_issue(raw: BdRawIssue) -> Issue {
         blocks: {
             let mut bl = raw.blocks.unwrap_or_default();
             // Extract from dependents array (bd show: objects with dependency_type "blocks" = issues blocked by current)
+            // Filter to only "blocks" type — exclude "parent-child" which are children, not dependencies
             if let Some(ref dependents) = raw.dependents {
                 for dep in dependents {
-                    if let Some(ref id) = dep.id {
-                        if !bl.contains(id) {
+                    if let (Some(ref dep_type), Some(ref id)) = (&dep.dependency_type, &dep.id) {
+                        if dep_type == "blocks" && !bl.contains(id) {
                             bl.push(id.clone());
                         }
                     }
@@ -527,6 +532,12 @@ fn transform_issue(raw: BdRawIssue) -> Issue {
         metadata: raw.metadata,
         spec_id: raw.spec_id,
         comment_count,
+        dependency_count: raw.dependency_count.or_else(|| {
+            raw.dependencies.as_ref().map(|d| d.len() as i32)
+        }),
+        dependent_count: raw.dependent_count.or_else(|| {
+            raw.dependents.as_ref().map(|d| d.len() as i32)
+        }),
     }
 }
 

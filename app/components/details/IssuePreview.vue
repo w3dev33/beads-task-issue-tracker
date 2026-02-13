@@ -13,7 +13,7 @@ import { extractImagesFromExternalRef, extractMarkdownFromExternalRef, extractNo
 const props = defineProps<{
   issue: Issue
   readonly?: boolean
-  availableIssues?: Array<{ id: string; title: string }>
+  availableIssues?: Array<{ id: string; title: string; priority?: string; status?: string }>
 }>()
 
 const { beadsPath } = useBeadsPath()
@@ -122,6 +122,17 @@ const sortedChildren = computed(() => {
   )
 })
 
+// Sorted dependencies using natural sort
+const sortedBlockedBy = computed(() => {
+  if (!props.issue.blockedBy?.length) return []
+  return [...props.issue.blockedBy].sort((a, b) => naturalCompare(a.toLowerCase(), b.toLowerCase()))
+})
+
+const sortedBlocks = computed(() => {
+  if (!props.issue.blocks?.length) return []
+  return [...props.issue.blocks].sort((a, b) => naturalCompare(a.toLowerCase(), b.toLowerCase()))
+})
+
 // Blocker autocomplete state
 const isAddingBlocker = ref(false)
 const blockerSearchQuery = ref('')
@@ -136,10 +147,35 @@ const filteredBlockerOptions = computed(() => {
   ])
   const query = blockerSearchQuery.value.toLowerCase()
   return props.availableIssues
-    .filter(i => !existing.has(i.id))
+    .filter(i => !existing.has(i.id) && i.status !== 'closed')
     .filter(i => !query || i.id.toLowerCase().includes(query) || i.title.toLowerCase().includes(query))
     .slice(0, 10)
 })
+
+const depBorderColor = (id: string) => {
+  const issue = props.availableIssues?.find(i => i.id === id)
+  if (!issue?.priority) return 'border-muted-foreground/50'
+  const colors: Record<string, string> = {
+    p0: 'border-[#ef4444]',
+    p1: 'border-[#ef4444]',
+    p2: 'border-[#f59e0b]',
+    p3: 'border-[#22c55e]',
+    p4: 'border-[#6b7280]',
+  }
+  return colors[issue.priority] || 'border-muted-foreground/50'
+}
+
+const depTextColor = (priority?: string) => {
+  if (!priority) return 'text-sky-400'
+  const colors: Record<string, string> = {
+    p0: 'text-[#ef4444]',
+    p1: 'text-[#ef4444]',
+    p2: 'text-[#f59e0b]',
+    p3: 'text-[#22c55e]',
+    p4: 'text-[#6b7280]',
+  }
+  return colors[priority] || 'text-sky-400'
+}
 
 const handleAddBlockerClick = () => {
   isAddingBlocker.value = true
@@ -590,7 +626,7 @@ const formatEstimate = (minutes: number) => {
               class="flex items-center gap-2 w-full text-left px-2 py-1.5 text-[11px] hover:bg-accent hover:text-accent-foreground"
               @mousedown.prevent="handleSelectBlocker(opt.id)"
             >
-              <span class="font-medium text-sky-400 shrink-0">{{ opt.id }}</span>
+              <span :class="['font-medium shrink-0', depTextColor(opt.priority)]">{{ opt.id }}</span>
               <span class="truncate text-muted-foreground">{{ opt.title }}</span>
             </button>
           </div>
@@ -601,10 +637,10 @@ const formatEstimate = (minutes: number) => {
           <h5 class="text-[10px] font-medium text-sky-400 uppercase tracking-wide mb-0.5">Blocked By</h5>
           <div class="flex flex-wrap gap-1 items-center">
             <Badge
-              v-for="id in issue.blockedBy"
+              v-for="id in sortedBlockedBy"
               :key="id"
               variant="outline"
-              class="group/dep text-[10px] px-1.5 py-0.5 cursor-pointer text-foreground bg-transparent border-muted-foreground/50 hover:underline gap-1"
+              :class="['group/dep text-[10px] px-1.5 py-0.5 cursor-pointer text-foreground bg-transparent hover:underline gap-1', depBorderColor(id)]"
               @click="emit('navigate-to-issue', id)"
             >
               {{ id }}
@@ -624,10 +660,10 @@ const formatEstimate = (minutes: number) => {
           <h5 class="text-[10px] font-medium text-sky-400 uppercase tracking-wide mb-0.5">Blocks</h5>
           <div class="flex flex-wrap gap-1">
             <Badge
-              v-for="id in issue.blocks"
+              v-for="id in sortedBlocks"
               :key="id"
               variant="outline"
-              class="group/dep text-[10px] px-1.5 py-0.5 cursor-pointer text-foreground bg-transparent border-muted-foreground/50 hover:underline gap-1"
+              :class="['group/dep text-[10px] px-1.5 py-0.5 cursor-pointer text-foreground bg-transparent hover:underline gap-1', depBorderColor(id)]"
               @click="emit('navigate-to-issue', id)"
             >
               {{ id }}

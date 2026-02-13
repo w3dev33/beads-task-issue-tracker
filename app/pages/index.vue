@@ -635,9 +635,7 @@ const handleAddComment = async (content: string) => {
 }
 
 const availableIssuesForDeps = computed(() =>
-  issues.value
-    .filter(i => i.status !== 'closed')
-    .map(i => ({ id: i.id, title: i.title })),
+  issues.value.map(i => ({ id: i.id, title: i.title, priority: i.priority, status: i.status })),
 )
 
 const handleAddDependency = async (issueId: string, blockerId: string) => {

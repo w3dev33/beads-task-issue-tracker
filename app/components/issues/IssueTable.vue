@@ -574,7 +574,17 @@ function getIssueField(issue: Issue, field: string): string {
                     </template>
 
                     <template v-else-if="col.id === 'status'">
-                      <StatusBadge :status="child.status" size="sm" />
+                      <div class="flex items-center gap-1">
+                        <StatusBadge :status="child.status" size="sm" />
+                        <Tooltip v-if="child.blockedBy?.length">
+                          <TooltipTrigger as-child>
+                            <Ban class="w-3 h-3 text-red-400" />
+                          </TooltipTrigger>
+                          <TooltipContent side="top">
+                            <p class="text-xs">Blocked by {{ child.blockedBy.join(', ') }}</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </div>
                     </template>
 
                     <template v-else-if="col.id === 'priority'">

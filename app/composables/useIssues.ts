@@ -110,29 +110,38 @@ export function useIssues() {
       const mergedIssues = [...(openIssues || []), ...(closedIssues || [])]
       const newIssues = deduplicateIssues(mergedIssues)
 
-      // Enrich with parent-child relationships
-      // bd list doesn't return parent field, but bd show returns children for epics
-      const epicIds = newIssues.filter(i => i.type === 'epic').map(i => i.id)
-      if (epicIds.length > 0) {
-        const issueMap = new Map(newIssues.map(i => [i.id, i]))
+      // Build parent-child relationships from the data we already have (no bdShow needed)
+      const issueMap = new Map(newIssues.map(i => [i.id, i]))
 
-        const epicDetails = await Promise.all(
-          epicIds.map(id => bdShow(id, path).catch(() => null))
-        )
-
-        for (const epicDetail of epicDetails) {
-          if (!epicDetail?.children) continue
-          for (const child of epicDetail.children) {
-            const issue = issueMap.get(child.id)
-            if (issue && !issue.parent) {
-              issue.parent = {
-                id: epicDetail.id,
-                title: epicDetail.title,
-                status: epicDetail.status,
-                priority: epicDetail.priority,
-              }
+      // 1. Fill in parent details: Rust sets parent.id from bd list, but title/status/priority are defaults
+      //    We have all issues in the map, so we can look up the real values
+      for (const issue of newIssues) {
+        if (issue.parent?.id) {
+          const parentIssue = issueMap.get(issue.parent.id)
+          if (parentIssue) {
+            issue.parent = {
+              id: parentIssue.id,
+              title: parentIssue.title,
+              status: parentIssue.status,
+              priority: parentIssue.priority,
             }
           }
+        }
+      }
+
+      // 2. Build children lists for epics from child issues that reference them
+      const childrenByParent = new Map<string, Array<{ id: string; title: string; status: typeof newIssues[0]['status']; priority: typeof newIssues[0]['priority'] }>>()
+      for (const issue of newIssues) {
+        if (issue.parent?.id) {
+          const list = childrenByParent.get(issue.parent.id) || []
+          list.push({ id: issue.id, title: issue.title, status: issue.status, priority: issue.priority })
+          childrenByParent.set(issue.parent.id, list)
+        }
+      }
+      for (const [epicId, children] of childrenByParent) {
+        const epic = issueMap.get(epicId)
+        if (epic && !epic.children?.length) {
+          epic.children = children
         }
       }
 
@@ -159,6 +168,7 @@ export function useIssues() {
         return issue.updatedAt > max ? issue.updatedAt : max
       }, '')
       lastKnownUpdated.value = maxUpdated || null
+
     } catch (e) {
       // Check if this is a schema migration error that needs repair
       if (checkRepairError(e)) {
@@ -188,28 +198,41 @@ export function useIssues() {
       const mergedIssues = [...(data.openIssues || []), ...(data.closedIssues || [])]
       const newIssues = deduplicateIssues(mergedIssues)
 
-      // Enrich with parent-child relationships (same as fetchIssues)
-      const epicIds = newIssues.filter(i => i.type === 'epic').map(i => i.id)
-      if (epicIds.length > 0) {
-        const issueMap = new Map(newIssues.map(i => [i.id, i]))
+      // Build parent-child relationships from the data we already have (no bdShow needed)
+      const issueMap = new Map(newIssues.map(i => [i.id, i]))
 
-        const epicDetails = await Promise.all(
-          epicIds.map(id => bdShow(id, path).catch(() => null))
-        )
-
-        for (const epicDetail of epicDetails) {
-          if (!epicDetail?.children) continue
-          for (const child of epicDetail.children) {
-            const issue = issueMap.get(child.id)
-            if (issue && !issue.parent) {
-              issue.parent = {
-                id: epicDetail.id,
-                title: epicDetail.title,
-                status: epicDetail.status,
-                priority: epicDetail.priority,
-              }
-            }
+      for (const issue of newIssues) {
+        if (issue.parent?.id) {
+          const parentIssue = issueMap.get(issue.parent.id)
+          if (parentIssue) {
+            issue.parent = { id: parentIssue.id, title: parentIssue.title, status: parentIssue.status, priority: parentIssue.priority }
           }
+        }
+      }
+
+      const childrenByParent = new Map<string, Array<{ id: string; title: string; status: typeof newIssues[0]['status']; priority: typeof newIssues[0]['priority'] }>>()
+      for (const issue of newIssues) {
+        if (issue.parent?.id) {
+          const list = childrenByParent.get(issue.parent.id) || []
+          list.push({ id: issue.id, title: issue.title, status: issue.status, priority: issue.priority })
+          childrenByParent.set(issue.parent.id, list)
+        }
+      }
+      for (const [epicId, children] of childrenByParent) {
+        const epic = issueMap.get(epicId)
+        if (epic && !epic.children?.length) {
+          epic.children = children
+        }
+      }
+
+      // Preserve blockedBy/blocks from previous enrichments (fetchIssues or fetchIssue)
+      // Poll data doesn't return these, but they were populated by earlier bdShow calls
+      const existingMap = new Map(issues.value.map(i => [i.id, i]))
+      for (const issue of newIssues) {
+        const existing = existingMap.get(issue.id)
+        if (existing) {
+          if (!issue.blockedBy && existing.blockedBy) issue.blockedBy = existing.blockedBy
+          if (!issue.blocks && existing.blocks) issue.blocks = existing.blocks
         }
       }
 
@@ -586,7 +609,6 @@ export function useIssues() {
   )
 
   const fetchIssue = async (id: string) => {
-    isLoading.value = true
     error.value = null
 
     try {
@@ -611,8 +633,6 @@ export function useIssues() {
     } catch (e) {
       error.value = e instanceof Error ? e.message : 'Failed to fetch issue'
       return null
-    } finally {
-      isLoading.value = false
     }
   }
 

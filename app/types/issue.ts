@@ -48,6 +48,8 @@ export interface Issue {
   metadata?: string
   specId?: string
   commentCount?: number
+  dependencyCount?: number
+  dependentCount?: number
 }
 
 export interface FilterState {
