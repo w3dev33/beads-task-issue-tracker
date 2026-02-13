@@ -23,6 +23,15 @@ export interface ParentIssue {
   priority: IssuePriority
 }
 
+export interface Relation {
+  id: string
+  title: string
+  status: string
+  priority: string
+  relationType: string
+  direction: string
+}
+
 export interface Issue {
   id: string
   title: string
@@ -45,6 +54,7 @@ export interface Issue {
   workingNotes?: string
   parent?: ParentIssue
   children?: ChildIssue[]
+  relations?: Relation[]
   metadata?: string
   specId?: string
   commentCount?: number

@@ -1,5 +1,5 @@
 import type { Issue, CreateIssuePayload, UpdateIssuePayload } from '~/types/issue'
-import { bdList, bdCount, bdShow, bdCreate, bdUpdate, bdClose, bdDelete, bdAddComment, bdAddDependency, bdRemoveDependency, bdPurgeOrphanAttachments, bdPollData, type BdListOptions, type PollData } from '~/utils/bd-api'
+import { bdList, bdCount, bdShow, bdCreate, bdUpdate, bdClose, bdDelete, bdAddComment, bdAddDependency, bdRemoveDependency, bdAddRelation, bdRemoveRelation, bdPurgeOrphanAttachments, bdPollData, type BdListOptions, type PollData } from '~/utils/bd-api'
 import { useProjectStorage } from '~/composables/useProjectStorage'
 
 // Interface for hierarchical grouping of epics and their children
@@ -802,6 +802,54 @@ export function useIssues() {
     }
   }
 
+  const addRelation = async (issueId: string, targetId: string, relationType: string) => {
+    if (isUpdating.value) return false
+
+    isUpdating.value = true
+    error.value = null
+
+    try {
+      await bdAddRelation(issueId, targetId, relationType, getPath())
+
+      // Refetch the issue to get updated relations
+      if (selectedIssue.value?.id === issueId) {
+        await fetchIssue(issueId)
+      }
+
+      return true
+    } catch (e) {
+      error.value = e instanceof Error ? e.message : 'Failed to add relation'
+      return false
+    } finally {
+      isUpdating.value = false
+    }
+  }
+
+  const removeRelation = async (sourceId: string, targetId: string) => {
+    if (isUpdating.value) return false
+
+    isUpdating.value = true
+    error.value = null
+
+    try {
+      await bdRemoveRelation(sourceId, targetId, getPath())
+
+      // Refetch the selected issue to get updated relations
+      // (sourceId may be the selected issue or the target, depending on direction)
+      const selected = selectedIssue.value?.id
+      if (selected && (selected === sourceId || selected === targetId)) {
+        await fetchIssue(selected)
+      }
+
+      return true
+    } catch (e) {
+      error.value = e instanceof Error ? e.message : 'Failed to remove relation'
+      return false
+    } finally {
+      isUpdating.value = false
+    }
+  }
+
   // Clear all issues data (used when removing last favorite)
   const clearIssues = () => {
     issues.value = []
@@ -847,6 +895,8 @@ export function useIssues() {
     addComment,
     addDependency,
     removeDependency,
+    addRelation,
+    removeRelation,
     checkForChanges,
     clearIssues,
   }

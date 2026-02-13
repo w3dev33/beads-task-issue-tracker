@@ -251,6 +251,27 @@ export async function bdRemoveDependency(issueId: string, blockerId: string, pat
   throw new Error('Dependency management is only available in the desktop app')
 }
 
+export async function bdAvailableRelationTypes(): Promise<Array<{ value: string; label: string }>> {
+  if (isTauri()) {
+    return invoke<Array<{ value: string; label: string }>>('bd_available_relation_types')
+  }
+  throw new Error('Only available in the desktop app')
+}
+
+export async function bdAddRelation(id1: string, id2: string, relationType: string, path?: string): Promise<{ success: boolean }> {
+  if (isTauri()) {
+    return invoke<{ success: boolean }>('bd_dep_add_relation', { id1, id2, relationType, options: { cwd: path } })
+  }
+  throw new Error('Relation management is only available in the desktop app')
+}
+
+export async function bdRemoveRelation(id1: string, id2: string, path?: string): Promise<{ success: boolean }> {
+  if (isTauri()) {
+    return invoke<{ success: boolean }>('bd_dep_remove_relation', { id1, id2, options: { cwd: path } })
+  }
+  throw new Error('Relation management is only available in the desktop app')
+}
+
 export async function bdSync(path?: string): Promise<void> {
   if (isTauri()) {
     return invoke<void>('bd_sync', { cwd: path })

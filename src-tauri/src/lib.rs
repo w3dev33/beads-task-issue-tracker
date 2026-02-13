@@ -248,6 +248,7 @@ pub struct Issue {
     pub working_notes: Option<String>,
     pub parent: Option<ParentIssue>,
     pub children: Option<Vec<ChildIssue>>,
+    pub relations: Option<Vec<Relation>>,
     pub metadata: Option<String>,
     #[serde(rename = "specId")]
     pub spec_id: Option<String>,
@@ -282,6 +283,17 @@ pub struct ParentIssue {
     pub title: String,
     pub status: String,
     pub priority: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Relation {
+    pub id: String,
+    pub title: String,
+    pub status: String,
+    pub priority: String,
+    #[serde(rename = "relationType")]
+    pub relation_type: String,
+    pub direction: String, // "dependency" or "dependent"
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -456,6 +468,75 @@ fn transform_issue(raw: BdRawIssue) -> Issue {
             .collect()
     }).filter(|v: &Vec<ChildIssue>| !v.is_empty());
 
+    // Extract non-blocking relations (everything except "blocks" and "parent-child")
+    let structural_types = ["blocks", "parent-child"];
+    let mut relations: Vec<Relation> = Vec::new();
+    let mut seen_relations: std::collections::HashSet<(String, String)> = std::collections::HashSet::new();
+
+    // From dependencies array (these are issues the current issue depends on)
+    if let Some(ref deps) = raw.dependencies {
+        for dep in deps {
+            if let Some(ref dep_type) = dep.dependency_type {
+                if structural_types.contains(&dep_type.as_str()) {
+                    continue;
+                }
+                let id = dep.id.clone().or_else(|| dep.depends_on_id.clone()).unwrap_or_default();
+                if id.is_empty() {
+                    continue;
+                }
+                let key = (id.clone(), dep_type.clone());
+                if !seen_relations.contains(&key) {
+                    seen_relations.insert(key);
+                    relations.push(Relation {
+                        id,
+                        title: String::new(),
+                        status: String::new(),
+                        priority: String::new(),
+                        relation_type: dep_type.clone(),
+                        direction: "dependency".to_string(),
+                    });
+                }
+            }
+        }
+    }
+
+    // From dependents array (these are issues that depend on the current issue — has full metadata)
+    if let Some(ref dependents) = raw.dependents {
+        for dep in dependents {
+            if let Some(ref dep_type) = dep.dependency_type {
+                if structural_types.contains(&dep_type.as_str()) {
+                    continue;
+                }
+                let id = dep.id.clone().unwrap_or_default();
+                if id.is_empty() {
+                    continue;
+                }
+                let key = (id.clone(), dep_type.clone());
+                if seen_relations.contains(&key) {
+                    // Replace existing entry from dependencies if this one has more metadata
+                    if dep.title.is_some() {
+                        if let Some(existing) = relations.iter_mut().find(|r| r.id == id && r.relation_type == *dep_type) {
+                            existing.title = dep.title.clone().unwrap_or_default();
+                            existing.status = normalize_issue_status(&dep.status.clone().unwrap_or_else(|| "open".to_string()));
+                            existing.priority = priority_to_string(dep.priority.unwrap_or(3));
+                            existing.direction = "dependent".to_string();
+                        }
+                    }
+                } else {
+                    seen_relations.insert(key);
+                    relations.push(Relation {
+                        id,
+                        title: dep.title.clone().unwrap_or_default(),
+                        status: normalize_issue_status(&dep.status.clone().unwrap_or_else(|| "open".to_string())),
+                        priority: priority_to_string(dep.priority.unwrap_or(3)),
+                        relation_type: dep_type.clone(),
+                        direction: "dependent".to_string(),
+                    });
+                }
+            }
+        }
+    }
+
     // Compute comment_count before consuming raw.comments
     let comment_count = raw.comment_count.or_else(|| {
         raw.comments.as_ref().map(|c| c.len() as i32)
@@ -529,6 +610,7 @@ fn transform_issue(raw: BdRawIssue) -> Issue {
         working_notes: raw.notes,
         parent,
         children,
+        relations: if relations.is_empty() { None } else { Some(relations) },
         metadata: raw.metadata,
         spec_id: raw.spec_id,
         comment_count,
@@ -1652,6 +1734,53 @@ async fn bd_dep_remove(issue_id: String, blocker_id: String, options: CwdOptions
     execute_bd("dep remove", &args, options.cwd.as_deref())?;
 
     Ok(serde_json::json!({ "success": true }))
+}
+
+#[tauri::command]
+async fn bd_dep_add_relation(id1: String, id2: String, relation_type: String, options: CwdOptions) -> Result<serde_json::Value, String> {
+    let args = vec![id1, id2, "--type".to_string(), relation_type];
+
+    execute_bd("dep add", &args, options.cwd.as_deref())?;
+
+    Ok(serde_json::json!({ "success": true }))
+}
+
+#[tauri::command]
+async fn bd_dep_remove_relation(id1: String, id2: String, options: CwdOptions) -> Result<serde_json::Value, String> {
+    let args = vec![id1, id2];
+
+    execute_bd("dep remove", &args, options.cwd.as_deref())?;
+
+    Ok(serde_json::json!({ "success": true }))
+}
+
+#[tauri::command]
+async fn bd_available_relation_types() -> Vec<serde_json::Value> {
+    let common: Vec<(&str, &str)> = vec![
+        ("relates-to", "Relates To"),
+        ("related", "Related"),
+        ("discovered-from", "Discovered From"),
+        ("duplicates", "Duplicates"),
+        ("supersedes", "Supersedes"),
+        ("caused-by", "Caused By"),
+        ("replies-to", "Replies To"),
+    ];
+    let bd_only: Vec<(&str, &str)> = vec![
+        ("tracks", "Tracks"),
+        ("until", "Until"),
+        ("validates", "Validates"),
+    ];
+
+    let types = match get_cli_client_info() {
+        Some((CliClient::Br, _, _, _)) => common,
+        _ => {
+            let mut all = common;
+            all.extend(bd_only);
+            all
+        }
+    };
+
+    types.into_iter().map(|(v, l)| serde_json::json!({ "value": v, "label": l })).collect()
 }
 
 #[tauri::command]
@@ -2958,6 +3087,9 @@ pub fn run() {
             bd_comments_add,
             bd_dep_add,
             bd_dep_remove,
+            bd_dep_add_relation,
+            bd_dep_remove_relation,
+            bd_available_relation_types,
             fs_exists,
             fs_list,
             check_for_updates,
