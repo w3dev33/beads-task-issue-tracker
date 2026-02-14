@@ -37,10 +37,17 @@ export function useDashboard() {
       },
     }
 
-    for (const issue of issues) {
+    // Exclude tombstone issues from all stats
+    const activeIssues = issues.filter((issue) => issue.status !== 'tombstone')
+    stats.total = activeIssues.length
+
+    for (const issue of activeIssues) {
       // Count by status
       switch (issue.status) {
         case 'open':
+        case 'deferred':
+        case 'pinned':
+        case 'hooked':
           stats.open++
           break
         case 'in_progress':

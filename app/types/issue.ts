@@ -1,5 +1,5 @@
 export type IssueType = 'bug' | 'task' | 'feature' | 'epic' | 'chore'
-export type IssueStatus = 'open' | 'in_progress' | 'blocked' | 'closed'
+export type IssueStatus = 'open' | 'in_progress' | 'blocked' | 'closed' | 'deferred' | 'tombstone' | 'pinned' | 'hooked'
 export type IssuePriority = 'p0' | 'p1' | 'p2' | 'p3' | 'p4'
 
 export interface Comment {

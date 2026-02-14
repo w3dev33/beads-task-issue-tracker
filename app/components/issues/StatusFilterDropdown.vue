@@ -29,6 +29,10 @@ const statusOptions: { value: IssueStatus; label: string }[] = [
   { value: 'in_progress', label: 'In Progress' },
   { value: 'blocked', label: 'Blocked' },
   { value: 'closed', label: 'Closed' },
+  { value: 'deferred', label: 'Deferred' },
+  { value: 'tombstone', label: 'Deleted' },
+  { value: 'pinned', label: 'Pinned' },
+  { value: 'hooked', label: 'Hooked' },
 ]
 
 const isSelected = (status: IssueStatus) => props.selectedStatuses.includes(status)

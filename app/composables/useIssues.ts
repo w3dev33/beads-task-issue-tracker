@@ -312,7 +312,7 @@ export function useIssues() {
       )
     } else {
       // Default: show all except closed
-      result = result.filter((issue) => issue.status !== 'closed')
+      result = result.filter((issue) => issue.status !== 'closed' && issue.status !== 'tombstone')
     }
 
     // Apply client-side type filter

@@ -12,6 +12,10 @@ const statusConfig: Record<IssueStatus, { label: string; class: string }> = {
   in_progress: { label: 'IN PROGRESS', class: 'badge-gradient bg-status-in-progress-gradient text-white' },
   blocked: { label: 'BLOCKED', class: 'badge-gradient bg-status-blocked-gradient text-white' },
   closed: { label: 'CLOSED', class: 'badge-gradient bg-status-closed-gradient text-white' },
+  deferred: { label: 'DEFERRED', class: 'badge-gradient bg-status-deferred-gradient text-white' },
+  tombstone: { label: 'DELETED', class: 'badge-gradient bg-status-tombstone-gradient text-white' },
+  pinned: { label: 'PINNED', class: 'badge-gradient bg-status-pinned-gradient text-white' },
+  hooked: { label: 'HOOKED', class: 'badge-gradient bg-status-hooked-gradient text-white' },
 }
 
 const config = computed(() => statusConfig[props.status] || statusConfig.open)
