@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.17.2] - 2026-02-14
+
+> Requires **bd 0.49.3+** for full feature support.
+
+### Bug Fixes
+- **Tombstone issues shown as Open**: Soft-deleted issues (`tombstone` status) were displayed as "Open" because `normalize_issue_status()` converted unknown statuses to `"open"`
+
+### New Features
+- **Extended bd status support**: Added `deferred`, `tombstone`, `pinned`, `hooked` statuses with distinct badge colors (amber, stone, purple, cyan) and filter options
+
 ## [1.17.1] - 2026-02-14
 
 > Requires **bd 0.49.3+** for full feature support.
