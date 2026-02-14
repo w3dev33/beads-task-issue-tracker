@@ -116,6 +116,15 @@ const naturalCompare = (a: string, b: string): number => {
   return 0
 }
 
+// Get short ID by removing the project prefix (e.g., "beads-demo-5tg.2" → "5tg.2")
+const getShortId = (id: string) => {
+  const lastHyphen = id.lastIndexOf('-')
+  if (lastHyphen > 0) {
+    return id.slice(lastHyphen + 1) || id
+  }
+  return id
+}
+
 // Sorted children using natural sort (1, 2, 3, ... 10 instead of 1, 10, 2, 3)
 const sortedChildren = computed(() => {
   if (!props.issue.children?.length) return []
@@ -134,6 +143,11 @@ const sortedBlocks = computed(() => {
   if (!props.issue.blocks?.length) return []
   return [...props.issue.blocks].sort((a, b) => naturalCompare(a.toLowerCase(), b.toLowerCase()))
 })
+
+// Lookup issue title from availableIssues
+const getIssueTitle = (id: string) => {
+  return props.availableIssues?.find(i => i.id === id)?.title
+}
 
 const depBorderColor = (id: string) => {
   const issue = props.availableIssues?.find(i => i.id === id)
@@ -495,7 +509,7 @@ const formatEstimate = (minutes: number) => {
             @click="emit('navigate-to-issue', child.id)"
           >
             <div class="flex items-center gap-2 min-w-0">
-              <span class="text-xs text-sky-400 hover:underline font-mono shrink-0">{{ child.id }}</span>
+              <span class="text-xs text-sky-400 hover:underline font-mono shrink-0">{{ getShortId(child.id) }}</span>
               <span class="text-xs truncate">{{ child.title }}</span>
             </div>
             <div class="flex items-center gap-1 shrink-0">
@@ -617,46 +631,46 @@ const formatEstimate = (minutes: number) => {
         <!-- Blocked By -->
         <div v-if="issue.blockedBy?.length">
           <h5 class="text-[10px] font-medium text-sky-400 uppercase tracking-wide mb-0.5">Blocked By</h5>
-          <div class="flex flex-wrap gap-1 items-center">
-            <Badge
+          <div class="space-y-0.5">
+            <div
               v-for="id in sortedBlockedBy"
               :key="id"
-              variant="outline"
-              :class="['group/dep text-[10px] px-1.5 py-0.5 cursor-pointer text-foreground bg-transparent hover:underline gap-1', depBorderColor(id)]"
+              class="group/dep flex items-center gap-2 py-1 cursor-pointer bg-muted hover:bg-muted/80 rounded border border-border/40 px-2 -mx-1"
               @click="emit('navigate-to-issue', id)"
             >
-              {{ id }}
+              <span :class="['text-xs font-mono shrink-0 hover:underline', depTextColor(availableIssues?.find(i => i.id === id)?.priority)]">{{ getShortId(id) }}</span>
+              <span v-if="getIssueTitle(id)" class="text-xs truncate text-muted-foreground">{{ getIssueTitle(id) }}</span>
               <span
                 v-if="!readonly"
-                class="opacity-0 group-hover/dep:opacity-100 transition-opacity text-muted-foreground hover:text-destructive cursor-pointer"
+                class="ml-auto opacity-0 group-hover/dep:opacity-100 transition-opacity text-muted-foreground hover:text-destructive cursor-pointer shrink-0"
                 @click.stop="handleRemoveDependency(id, 'blockedBy')"
               >
                 <X class="w-3 h-3" />
               </span>
-            </Badge>
+            </div>
           </div>
         </div>
 
         <!-- Blocks -->
         <div v-if="issue.blocks?.length">
           <h5 class="text-[10px] font-medium text-sky-400 uppercase tracking-wide mb-0.5">Blocks</h5>
-          <div class="flex flex-wrap gap-1">
-            <Badge
+          <div class="space-y-0.5">
+            <div
               v-for="id in sortedBlocks"
               :key="id"
-              variant="outline"
-              :class="['group/dep text-[10px] px-1.5 py-0.5 cursor-pointer text-foreground bg-transparent hover:underline gap-1', depBorderColor(id)]"
+              class="group/dep flex items-center gap-2 py-1 cursor-pointer bg-muted hover:bg-muted/80 rounded border border-border/40 px-2 -mx-1"
               @click="emit('navigate-to-issue', id)"
             >
-              {{ id }}
+              <span :class="['text-xs font-mono shrink-0 hover:underline', depTextColor(availableIssues?.find(i => i.id === id)?.priority)]">{{ getShortId(id) }}</span>
+              <span v-if="getIssueTitle(id)" class="text-xs truncate text-muted-foreground">{{ getIssueTitle(id) }}</span>
               <span
                 v-if="!readonly"
-                class="opacity-0 group-hover/dep:opacity-100 transition-opacity text-muted-foreground hover:text-destructive cursor-pointer"
+                class="ml-auto opacity-0 group-hover/dep:opacity-100 transition-opacity text-muted-foreground hover:text-destructive cursor-pointer shrink-0"
                 @click.stop="handleRemoveDependency(id, 'blocks')"
               >
                 <X class="w-3 h-3" />
               </span>
-            </Badge>
+            </div>
           </div>
         </div>
       </div>
@@ -698,23 +712,22 @@ const formatEstimate = (minutes: number) => {
       <div v-show="isRelationsOpen" class="mt-1 pl-4.5 space-y-2">
         <div v-for="group in groupedRelations" :key="group.type">
           <h5 class="text-[10px] font-medium text-sky-400 uppercase tracking-wide mb-0.5">{{ group.label }}</h5>
-          <div class="flex flex-wrap gap-1">
-            <Badge
+          <div class="space-y-0.5">
+            <div
               v-for="rel in group.items"
               :key="rel.id"
-              variant="outline"
-              :class="['group/rel text-[10px] px-1.5 py-0.5 cursor-pointer text-foreground bg-transparent hover:underline gap-1', relationBorderColor(rel)]"
+              class="group/rel flex items-center gap-2 py-1 cursor-pointer bg-muted hover:bg-muted/80 rounded border border-border/40 px-2 -mx-1"
               @click="emit('navigate-to-issue', rel.id)"
             >
-              {{ rel.id }}
-              <span v-if="rel.title" class="ml-1 text-muted-foreground truncate max-w-[120px]">{{ rel.title }}</span>
+              <span :class="['text-xs font-mono shrink-0 hover:underline', depTextColor(rel.priority || availableIssues?.find(i => i.id === rel.id)?.priority)]">{{ getShortId(rel.id) }}</span>
+              <span v-if="rel.title || getIssueTitle(rel.id)" class="text-xs truncate text-muted-foreground">{{ rel.title || getIssueTitle(rel.id) }}</span>
               <span
-                class="opacity-0 group-hover/rel:opacity-100 transition-opacity text-muted-foreground hover:text-destructive cursor-pointer"
+                class="ml-auto opacity-0 group-hover/rel:opacity-100 transition-opacity text-muted-foreground hover:text-destructive cursor-pointer shrink-0"
                 @click.stop="handleRemoveRelation(rel.id, rel.direction)"
               >
                 <X class="w-3 h-3" />
               </span>
-            </Badge>
+            </div>
           </div>
         </div>
       </div>
