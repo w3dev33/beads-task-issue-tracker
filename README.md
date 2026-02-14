@@ -44,7 +44,7 @@ The app uses a **native file watcher** on the `.beads` directory. When an AI age
 ### Core
 - **Dashboard**: Visual overview of issues by status, type, and priority
 - **Issue Management**: Create, edit, close, and comment on issues
-- **Epic Hierarchy**: Parent/child relationships with collapsible groups and progress tracking
+- **Epic Hierarchy**: Parent/child relationships with collapsible groups and inline progress bars
 - **Multi-Project Support**: Save favorite projects and switch between them instantly
 
 ### Attachments
@@ -54,6 +54,7 @@ The app uses a **native file watcher** on the `.beads` directory. When an AI age
 - **Gallery Navigation**: Browse multiple attached files with arrow keys or buttons
 
 ### Filtering & Display
+- **Extended Status Support**: All `bd` statuses handled — `deferred`, `pinned`, `hooked`, and `tombstone` (deleted) issues filtered from default view
 - **Advanced Filters**: Multi-select filters by type, status, priority, labels, and assignee
 - **Exclusion Filters**: Hide specific issues by criteria (inverse filtering)
 - **Search**: Find issues by title, ID, or description
