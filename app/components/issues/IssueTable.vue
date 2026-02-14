@@ -400,7 +400,8 @@ function getIssueField(issue: Issue, field: string): string {
                   multiSelectMode
                     ? (isSelected(group.epic.id) ? 'bg-accent/50 hover:bg-accent/70' : 'hover:bg-muted/50')
                     : (selectedId === group.epic.id ? 'bg-accent/50 hover:bg-accent/70' : 'hover:bg-muted/50'),
-                  group.childCount > 0 ? ['border-l-4', 'border-r-4', getEpicBorderColors(groupIndex).left, getEpicBorderColors(groupIndex).right] : ''
+                  group.childCount > 0 ? ['border-l-4', 'border-r-4', getEpicBorderColors(groupIndex).left, getEpicBorderColors(groupIndex).right] : '',
+                  !isExpanded(group.epic.id) && group.childCount > 0 && (group.epic.status === 'in_progress' || !!group.inProgressChild) ? 'border-b-0' : ''
                 ]"
                 @click="multiSelectMode ? toggleSelect(group.epic.id) : $emit('select', group.epic)"
                 @dblclick="!multiSelectMode && $emit('edit', group.epic)"
@@ -521,6 +522,35 @@ function getIssueField(issue: Issue, field: string): string {
                   <template v-else>
                     <span class="text-xs">{{ getIssueField(group.epic, col.id) }}</span>
                   </template>
+                </TableCell>
+              </TableRow>
+
+              <!-- Progress bar row (collapsed epics only) -->
+              <TableRow
+                v-if="!isExpanded(group.epic.id) && group.childCount > 0 && (group.epic.status === 'in_progress' || !!group.inProgressChild)"
+                class="border-l-4 border-r-4 border-t-0 bg-black/30 hover:bg-black/30"
+                :class="[getEpicBorderColors(groupIndex).left, getEpicBorderColors(groupIndex).right]"
+              >
+                <TableCell v-if="multiSelectMode" class="!py-1 !px-0" />
+                <!-- Progress bar + percentage spanning ID + Type columns -->
+                <TableCell :colspan="Math.min(2, visibleColumns.length)" class="!py-1 !px-3">
+                  <div class="flex items-center gap-2">
+                    <div class="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
+                      <div
+                        class="h-full bg-primary rounded-full transition-all"
+                        :style="{ width: Math.round(group.closedChildCount / group.childCount * 100) + '%' }"
+                      />
+                    </div>
+                    <span class="text-[10px] text-muted-foreground font-medium shrink-0">{{ Math.round(group.closedChildCount / group.childCount * 100) }}%</span>
+                  </div>
+                </TableCell>
+                <!-- In-progress child aligned under Title column -->
+                <TableCell v-if="visibleColumns.length > 2" :colspan="visibleColumns.length - 2" class="!py-1 !px-3">
+                  <div v-if="group.inProgressChild" class="flex items-center gap-1.5 text-[10px] text-muted-foreground min-w-0">
+                    <span class="text-primary">▸</span>
+                    <span class="font-mono font-medium" :style="{ color: `var(--color-priority-${group.inProgressChild.priority})` }">{{ getShortId(group.inProgressChild.id) }}</span>
+                    <span class="truncate">{{ group.inProgressChild.title }}</span>
+                  </div>
                 </TableCell>
               </TableRow>
 

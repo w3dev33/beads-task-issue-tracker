@@ -8,6 +8,7 @@ export interface IssueGroup {
   children: Issue[]   // child issues of the epic
   childCount: number
   closedChildCount: number
+  inProgressChild?: { id: string; title: string; priority: string }
 }
 
 // Shared state across all components (singleton pattern)
@@ -543,12 +544,14 @@ export function useIssues() {
         const filteredChildren = filteredEpicChildrenMap.get(issue.id) || []
         const allChildren = allEpicChildrenMap.get(issue.id) || []
         const closedCount = allChildren.filter(c => c.status === 'closed').length
+        const inProgressChild = allChildren.find(c => c.status === 'in_progress')
 
         groups.push({
           epic: issue,
           children: filteredChildren,
           childCount: allChildren.length,
           closedChildCount: closedCount,
+          inProgressChild: inProgressChild ? { id: inProgressChild.id, title: inProgressChild.title, priority: inProgressChild.priority } : undefined,
         })
         processedIds.add(issue.id)
         filteredChildren.forEach(c => processedIds.add(c.id))
