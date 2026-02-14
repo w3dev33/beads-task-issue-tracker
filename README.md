@@ -34,20 +34,12 @@ This project is a reimplementation of the Beads UI as a native desktop app using
 ### Live Updates — No Polling
 The app uses a **native file watcher** on the `.beads` directory. When an AI agent (or anyone) creates, updates, or closes an issue via `bd`, the change appears in real time — no refresh button, no polling interval. This is critical when monitoring AI-driven workflows where issues change rapidly.
 
-### Interactive Dependency Management
-Manage `blockedBy` / `blocks` relationships directly from the issue preview:
-- **Add blockers** via a modal dialog with priority-colored IDs, status badges, and search
-- **Remove blockers** with an inline X button and confirmation modal
-- **Navigate** by clicking any dependency badge to jump to that issue
-- **Blocked indicator** in the issue table — a red icon next to the status badge shows at a glance which issues have unresolved blockers
-
-### Relations Management
-Create and manage non-blocking relations (`relates-to`, `duplicates`, `supersedes`, `caused-by`, `discovered-from`, `related`, `replies-to`, and more) between issues:
-- **Add relations** via a modal dialog — select a relation type, search for any issue (open or closed), and create the link
-- **Remove relations** with an inline X button and confirmation modal
-- **Dynamic types** adapted to your CLI client (`bd` supports 10 types, `br` supports 7)
-- **Works on closed issues** — retroactively link duplicates, superseded issues, or related work
-- **Exclude closed filter** — toggle to show/hide closed issues when browsing, search always includes all
+### Dependencies & Relations
+- **Add/remove blockers** from the issue preview via a search modal
+- **Navigate** to any dependency by clicking its badge
+- **Blocked indicator** in the issue table for issues with unresolved blockers
+- **Add/remove relations** (`relates-to`, `duplicates`, `supersedes`, `caused-by`, etc.) between any issues, including closed ones
+- **Dynamic relation types** adapted to your CLI client (`bd` or `br`)
 
 ### Core
 - **Dashboard**: Visual overview of issues by status, type, and priority
