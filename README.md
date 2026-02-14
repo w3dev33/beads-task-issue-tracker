@@ -36,10 +36,18 @@ The app uses a **native file watcher** on the `.beads` directory. When an AI age
 
 ### Interactive Dependency Management
 Manage `blockedBy` / `blocks` relationships directly from the issue preview:
-- **Add blockers** with an autocomplete search (by ID or title)
+- **Add blockers** via a modal dialog with priority-colored IDs, status badges, and search
 - **Remove blockers** with an inline X button and confirmation modal
 - **Navigate** by clicking any dependency badge to jump to that issue
 - **Blocked indicator** in the issue table — a red icon next to the status badge shows at a glance which issues have unresolved blockers
+
+### Relations Management
+Create and manage non-blocking relations (`relates-to`, `duplicates`, `supersedes`, `caused-by`, `discovered-from`, `related`, `replies-to`, and more) between issues:
+- **Add relations** via a modal dialog — select a relation type, search for any issue (open or closed), and create the link
+- **Remove relations** with an inline X button and confirmation modal
+- **Dynamic types** adapted to your CLI client (`bd` supports 10 types, `br` supports 7)
+- **Works on closed issues** — retroactively link duplicates, superseded issues, or related work
+- **Exclude closed filter** — toggle to show/hide closed issues when browsing, search always includes all
 
 ### Core
 - **Dashboard**: Visual overview of issues by status, type, and priority
