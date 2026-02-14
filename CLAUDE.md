@@ -2,6 +2,11 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Codebase Map
+
+**Before starting any task**, consult the detailed codebase map for fast navigation:
+**[.claude/codebase-map.md](.claude/codebase-map.md)** — Complete map of all pages, components, composables, utils, Tauri commands, data structures, and data flow patterns.
+
 ## About Beads Task-Issue Tracker
 
 **Beads Task-Issue Tracker** is a desktop application for managing issues tracked with [Beads](https://beads.dev) (`bd`), the AI-native issue tracker that lives directly in your codebase.
