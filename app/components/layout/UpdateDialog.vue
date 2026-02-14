@@ -200,6 +200,11 @@ const handleViewOnGitHub = () => {
             <p class="mt-2 text-sm text-muted-foreground">
               Version v{{ updateInfo.currentVersion }} is the latest version.
             </p>
+            <div v-if="renderedChangelog" class="mt-4">
+              <div class="max-h-96 overflow-y-auto rounded border border-border p-3 text-sm markdown-base compact"
+                v-html="renderedChangelog"
+              />
+            </div>
           </div>
         </DialogDescription>
       </DialogHeader>
