@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.17.1] - 2026-02-14
+
+> Requires **bd 0.49.3+** for full feature support.
+
+### Improvements
+- **Short IDs in table column**: ID column now shows only the key suffix (e.g., "22g" instead of "task-issue-tracker-demo-22g"), replacing the unreliable common-prefix algorithm with direct suffix extraction
+
 ## [1.17.0] - 2026-02-14
 
 > Requires **bd 0.49.3+** for full feature support.
