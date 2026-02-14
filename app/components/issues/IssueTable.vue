@@ -228,48 +228,17 @@ const visibleColumns = computed(() =>
   props.columns.filter((col) => col.visible)
 )
 
-// Extract common prefix from all issue IDs to show short IDs
-const commonPrefix = computed(() => {
-  const ids = props.issues.map(i => i.id)
-  if (ids.length === 0) return ''
-
-  // Find common prefix by comparing all IDs
-  let prefix = ids[0] || ''
-  for (const id of ids) {
-    while (prefix && !id.startsWith(prefix)) {
-      // Trim prefix to the previous hyphen boundary
-      const lastHyphen = prefix.lastIndexOf('-')
-      if (lastHyphen > 0) {
-        const newPrefix = prefix.slice(0, lastHyphen + 1)
-        if (newPrefix === prefix) {
-          // prefix ends with '-': trimming keeps the same string → would loop forever.
-          // Remove the trailing hyphen to make progress.
-          prefix = prefix.slice(0, lastHyphen)
-          if (!prefix) break
-        } else {
-          prefix = newPrefix
-        }
-      } else {
-        prefix = ''
-        break
-      }
-    }
-  }
-  return prefix
-})
-
-// Get short display ID (without common prefix)
+// Get short display ID: extract the key suffix (last segment after final hyphen)
+// e.g., "task-issue-tracker-demo-22g" → "22g", "beads-demo-5tg.2" → "5tg.2"
 const getShortId = (id: string) => {
-  const prefix = commonPrefix.value
-  if (prefix && id.startsWith(prefix)) {
-    const short = id.slice(prefix.length)
-    if (!short) {
-      // ID equals prefix (e.g., EPIC ID "beads-demo-5tg" when prefix is "beads-demo-5tg")
-      // Return last segment after hyphen
-      const lastHyphen = id.lastIndexOf('-')
-      return lastHyphen > 0 ? id.slice(lastHyphen + 1) : id
-    }
-    return short
+  // Split off the .index suffix if present (e.g., "22g.1" → base "...22g", suffix ".1")
+  const dotIndex = id.indexOf('.')
+  const baseId = dotIndex > 0 ? id.slice(0, dotIndex) : id
+  const indexSuffix = dotIndex > 0 ? id.slice(dotIndex) : ''
+
+  const lastHyphen = baseId.lastIndexOf('-')
+  if (lastHyphen > 0) {
+    return baseId.slice(lastHyphen + 1) + indexSuffix
   }
   return id
 }
