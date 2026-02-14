@@ -139,7 +139,6 @@ const handleViewOnGitHub = () => {
 
               <!-- Changelog -->
               <div v-if="renderedChangelog" class="mt-4">
-                <p class="text-xs font-medium text-muted-foreground mb-2">What's new</p>
                 <div
                   class="max-h-96 overflow-y-auto rounded border border-border p-3 text-sm markdown-base compact"
                   v-html="renderedChangelog"
