@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.17.0] - 2026-02-14
+
+> Requires **bd 0.49.3+** for full feature support.
+
+### New Features
+- **Epic progress bar**: Collapsed epics show a completion progress bar with percentage and current in-progress child task when the epic or a child is actively being worked on
+- **Short IDs in preview panel**: Children, dependencies (blockers), and relations now display short IDs without the project prefix for better readability
+
+### Improvements
+- **Dependencies & relations line layout**: Replace compact badges with full-width clickable rows showing ID (colored by priority) + title for dependencies and relations
+- **Always show changelog**: Update dialog now always displays the full changelog instead of requiring a click
+
+### Bug Fixes
+- **Redundant label removed**: Remove duplicate "What's new" label above changelog in update dialog
+
 ## [1.16.0] - 2026-02-13
 
 > Requires **bd 0.49.3+** for full feature support.

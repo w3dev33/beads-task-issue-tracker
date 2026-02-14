@@ -36,7 +36,7 @@ The app uses a **native file watcher** on the `.beads` directory. When an AI age
 
 ### Dependencies & Relations
 - **Add/remove blockers** from the issue preview via a search modal
-- **Navigate** to any dependency by clicking its badge
+- **Navigate** to any dependency or relation by clicking its row (short ID + title)
 - **Blocked indicator** in the issue table for issues with unresolved blockers
 - **Add/remove relations** (`relates-to`, `duplicates`, `supersedes`, `caused-by`, etc.) between any issues, including closed ones
 - **Dynamic relation types** adapted to your CLI client (`bd` or `br`)
