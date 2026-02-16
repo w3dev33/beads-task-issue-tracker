@@ -364,7 +364,7 @@ function getIssueField(issue: Issue, field: string): string {
             <!-- Epic row with expand/collapse -->
             <template v-if="group.epic">
               <TableRow
-                class="cursor-pointer bg-black/30"
+                class="cursor-pointer bg-muted/40"
                 :class="[
                   multiSelectMode
                     ? (isSelected(group.epic.id) ? 'bg-accent/50 hover:bg-accent/70' : 'hover:bg-muted/50')
@@ -497,7 +497,7 @@ function getIssueField(issue: Issue, field: string): string {
               <!-- Progress bar row (collapsed epics only) -->
               <TableRow
                 v-if="!isExpanded(group.epic.id) && group.childCount > 0 && (group.epic.status === 'in_progress' || !!group.inProgressChild)"
-                class="border-l-4 border-r-4 border-t-0 bg-black/30 hover:bg-black/30"
+                class="border-l-4 border-r-4 border-t-0 bg-muted/40 hover:bg-muted/40"
                 :class="[getEpicBorderColors(groupIndex).left, getEpicBorderColors(groupIndex).right]"
               >
                 <TableCell v-if="multiSelectMode" class="!py-1 !px-0" />

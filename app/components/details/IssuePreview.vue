@@ -10,6 +10,9 @@ import PriorityBadge from '~/components/issues/PriorityBadge.vue'
 import ImageThumbnail from '~/components/ui/image-preview/ImageThumbnail.vue'
 import { extractImagesFromExternalRef, extractMarkdownFromExternalRef, extractNonImageRefs, isUrl } from '~/utils/markdown'
 
+const { currentTheme } = useTheme()
+const isNeon = computed(() => currentTheme.value.id === 'neon')
+
 const props = defineProps<{
   issue: Issue
   readonly?: boolean
@@ -164,6 +167,16 @@ const depBorderColor = (id: string) => {
 
 const depTextColor = (priority?: string) => {
   if (!priority) return 'text-sky-400'
+  if (isNeon.value) {
+    const neonColors: Record<string, string> = {
+      p0: 'text-[#ff3366]',
+      p1: 'text-[#ff3366]',
+      p2: 'text-[#ffaa00]',
+      p3: 'text-[#00ff87]',
+      p4: 'text-[#8892a0]',
+    }
+    return neonColors[priority] || 'text-[#00d4ff]'
+  }
   const colors: Record<string, string> = {
     p0: 'text-[#ef4444]',
     p1: 'text-[#ef4444]',
@@ -172,6 +185,24 @@ const depTextColor = (priority?: string) => {
     p4: 'text-[#6b7280]',
   }
   return colors[priority] || 'text-sky-400'
+}
+
+// Neon inline style for dep/relation items: transparent bg + inset glow, no border
+const depNeonStyle = (priority?: string) => {
+  if (!isNeon.value) return {}
+  const colorMap: Record<string, string> = {
+    p0: '255, 51, 102',
+    p1: '255, 51, 102',
+    p2: '255, 170, 0',
+    p3: '0, 255, 135',
+    p4: '136, 146, 160',
+  }
+  const rgb = (priority && colorMap[priority]) || '0, 212, 255'
+  return {
+    background: `rgba(${rgb}, 0.08)`,
+    border: 'none',
+    boxShadow: `inset 0 0 10px rgba(${rgb}, 0.06)`,
+  }
 }
 
 const handleRemoveDependency = (id: string, section: 'blockedBy' | 'blocks') => {
@@ -635,11 +666,13 @@ const formatEstimate = (minutes: number) => {
             <div
               v-for="id in sortedBlockedBy"
               :key="id"
-              class="group/dep flex items-center gap-2 py-1 cursor-pointer bg-muted hover:bg-muted/80 rounded border border-border/40 px-2 -mx-1"
+              class="group/dep flex items-center gap-2 py-1 cursor-pointer rounded px-2 -mx-1"
+              :class="isNeon ? 'hover:brightness-125' : 'bg-muted hover:bg-muted/80 border border-border/40'"
+              :style="depNeonStyle(availableIssues?.find(i => i.id === id)?.priority)"
               @click="emit('navigate-to-issue', id)"
             >
               <span :class="['text-xs font-mono shrink-0 hover:underline', depTextColor(availableIssues?.find(i => i.id === id)?.priority)]">{{ getShortId(id) }}</span>
-              <span v-if="getIssueTitle(id)" class="text-xs truncate text-muted-foreground">{{ getIssueTitle(id) }}</span>
+              <span v-if="getIssueTitle(id)" :class="['text-xs truncate', isNeon ? depTextColor(availableIssues?.find(i => i.id === id)?.priority) + ' opacity-60' : 'text-muted-foreground']">{{ getIssueTitle(id) }}</span>
               <span
                 v-if="!readonly"
                 class="ml-auto opacity-0 group-hover/dep:opacity-100 transition-opacity text-muted-foreground hover:text-destructive cursor-pointer shrink-0"
@@ -658,11 +691,13 @@ const formatEstimate = (minutes: number) => {
             <div
               v-for="id in sortedBlocks"
               :key="id"
-              class="group/dep flex items-center gap-2 py-1 cursor-pointer bg-muted hover:bg-muted/80 rounded border border-border/40 px-2 -mx-1"
+              class="group/dep flex items-center gap-2 py-1 cursor-pointer rounded px-2 -mx-1"
+              :class="isNeon ? 'hover:brightness-125' : 'bg-muted hover:bg-muted/80 border border-border/40'"
+              :style="depNeonStyle(availableIssues?.find(i => i.id === id)?.priority)"
               @click="emit('navigate-to-issue', id)"
             >
               <span :class="['text-xs font-mono shrink-0 hover:underline', depTextColor(availableIssues?.find(i => i.id === id)?.priority)]">{{ getShortId(id) }}</span>
-              <span v-if="getIssueTitle(id)" class="text-xs truncate text-muted-foreground">{{ getIssueTitle(id) }}</span>
+              <span v-if="getIssueTitle(id)" :class="['text-xs truncate', isNeon ? depTextColor(availableIssues?.find(i => i.id === id)?.priority) + ' opacity-60' : 'text-muted-foreground']">{{ getIssueTitle(id) }}</span>
               <span
                 v-if="!readonly"
                 class="ml-auto opacity-0 group-hover/dep:opacity-100 transition-opacity text-muted-foreground hover:text-destructive cursor-pointer shrink-0"
@@ -716,11 +751,13 @@ const formatEstimate = (minutes: number) => {
             <div
               v-for="rel in group.items"
               :key="rel.id"
-              class="group/rel flex items-center gap-2 py-1 cursor-pointer bg-muted hover:bg-muted/80 rounded border border-border/40 px-2 -mx-1"
+              class="group/rel flex items-center gap-2 py-1 cursor-pointer rounded px-2 -mx-1"
+              :class="isNeon ? 'hover:brightness-125' : 'bg-muted hover:bg-muted/80 border border-border/40'"
+              :style="depNeonStyle(rel.priority || availableIssues?.find(i => i.id === rel.id)?.priority)"
               @click="emit('navigate-to-issue', rel.id)"
             >
               <span :class="['text-xs font-mono shrink-0 hover:underline', depTextColor(rel.priority || availableIssues?.find(i => i.id === rel.id)?.priority)]">{{ getShortId(rel.id) }}</span>
-              <span v-if="rel.title || getIssueTitle(rel.id)" class="text-xs truncate text-muted-foreground">{{ rel.title || getIssueTitle(rel.id) }}</span>
+              <span v-if="rel.title || getIssueTitle(rel.id)" :class="['text-xs truncate', isNeon ? depTextColor(rel.priority || availableIssues?.find(i => i.id === rel.id)?.priority) + ' opacity-60' : 'text-muted-foreground']">{{ rel.title || getIssueTitle(rel.id) }}</span>
               <span
                 class="ml-auto opacity-0 group-hover/rel:opacity-100 transition-opacity text-muted-foreground hover:text-destructive cursor-pointer shrink-0"
                 @click.stop="handleRemoveRelation(rel.id, rel.direction)"

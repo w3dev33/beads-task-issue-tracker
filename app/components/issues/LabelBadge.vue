@@ -4,6 +4,8 @@ const props = defineProps<{
   size?: 'sm' | 'md'
 }>()
 
+const { currentTheme } = useTheme()
+
 // Generate a consistent color based on the label text using djb2 hash
 const getColorFromLabel = (label: string) => {
   // djb2 hash algorithm - produces better distribution
@@ -33,7 +35,34 @@ const getColorFromLabel = (label: string) => {
   return colors[index] ?? '#7e22ce'
 }
 
+// Neon-brightened palette for neon theme
+const getNeonColorFromLabel = (label: string) => {
+  let hash = 5381
+  for (let i = 0; i < label.length; i++) {
+    hash = ((hash << 5) + hash) ^ label.charCodeAt(i)
+  }
+
+  const colors = [
+    '#ff69b4', // hot pink
+    '#e040fb', // bright fuchsia
+    '#b388ff', // bright purple
+    '#7c4dff', // bright violet
+    '#536dfe', // bright indigo
+    '#40c4ff', // bright sky
+    '#64ffda', // bright teal
+    '#ea80fc', // light fuchsia
+    '#ff4081', // pink accent
+    '#b47cff', // light violet
+    '#18ffff', // bright cyan
+    '#d500f9', // vivid purple
+  ]
+
+  const index = Math.abs(hash) % colors.length
+  return colors[index] ?? '#b388ff'
+}
+
 const bgColor = computed(() => getColorFromLabel(props.label))
+const neonColor = computed(() => getNeonColorFromLabel(props.label))
 
 // Darken a hex color by mixing with black
 const darkenColor = (hex: string, factor = 0.45) => {
@@ -46,9 +75,39 @@ const darkenColor = (hex: string, factor = 0.45) => {
   return `#${dr.toString(16).padStart(2, '0')}${dg.toString(16).padStart(2, '0')}${db.toString(16).padStart(2, '0')}`
 }
 
-const gradientStyle = computed(() => ({
-  background: `linear-gradient(135deg, ${bgColor.value}, ${darkenColor(bgColor.value)})`,
-}))
+// Convert hex to rgba
+const hexToRgba = (hex: string, alpha: number) => {
+  const r = parseInt(hex.slice(1, 3), 16)
+  const g = parseInt(hex.slice(3, 5), 16)
+  const b = parseInt(hex.slice(5, 7), 16)
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`
+}
+
+const badgeStyle = computed(() => {
+  const isNeon = currentTheme.value.id === 'neon'
+  const isFlat = currentTheme.value.id === 'flat' || currentTheme.value.id === 'light'
+  const color = isNeon ? neonColor.value : bgColor.value
+
+  if (isNeon) {
+    return {
+      background: hexToRgba(color, 0.12),
+      color: color,
+      border: `1px solid ${hexToRgba(color, 0.5)}`,
+      boxShadow: `inset 0 0 12px ${hexToRgba(color, 0.1)}, 0 0 8px ${hexToRgba(color, 0.15)}`,
+    }
+  }
+
+  if (isFlat) {
+    return {
+      background: color,
+    }
+  }
+
+  // Classic gradient (light + dark)
+  return {
+    background: `linear-gradient(135deg, ${color}, ${darkenColor(color)})`,
+  }
+})
 
 const sizeClasses = computed(() => {
   return props.size === 'sm'
@@ -59,9 +118,9 @@ const sizeClasses = computed(() => {
 
 <template>
   <span
-    class="badge-gradient inline-flex items-center rounded font-medium whitespace-nowrap text-white"
-    :class="sizeClasses"
-    :style="gradientStyle"
+    class="badge-gradient inline-flex items-center rounded font-medium whitespace-nowrap"
+    :class="[sizeClasses, currentTheme.id === 'neon' ? '' : 'text-white']"
+    :style="badgeStyle"
   >
     {{ label }}
   </span>

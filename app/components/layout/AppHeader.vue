@@ -20,7 +20,7 @@ const emit = defineEmits<{
 // Title: show favorite name if selected, otherwise default app title
 const displayTitle = computed(() => props.favoriteName || 'Beads Task-Issue Tracker')
 
-const { isDark, toggleTheme } = useTheme()
+const { isDark, currentTheme, cycleTheme } = useTheme()
 const { zoomLevel, zoomIn, zoomOut, resetZoom, canZoomIn, canZoomOut } = useZoom()
 const { startDragging } = useTauriWindow()
 
@@ -167,18 +167,18 @@ const handleZoomIn = (event: MouseEvent) => {
         <TooltipContent>Refresh</TooltipContent>
       </Tooltip>
 
-      <!-- Theme toggle -->
+      <!-- Theme toggle (cycles through themes) -->
       <Tooltip>
         <TooltipTrigger as-child>
           <Button
             variant="ghost"
             size="icon"
             class="h-8 w-8"
-            @click="toggleTheme"
+            @click="cycleTheme"
           >
-            <!-- Sun icon (shown in dark mode) -->
+            <!-- Sun icon (light theme) -->
             <svg
-              v-if="isDark"
+              v-if="currentTheme.icon === 'sun'"
               class="w-4 h-4"
               viewBox="0 0 24 24"
               fill="none"
@@ -195,9 +195,9 @@ const handleZoomIn = (event: MouseEvent) => {
               <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" />
               <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
             </svg>
-            <!-- Moon icon (shown in light mode) -->
+            <!-- Moon icon (dark theme) -->
             <svg
-              v-else
+              v-else-if="currentTheme.icon === 'moon'"
               class="w-4 h-4"
               viewBox="0 0 24 24"
               fill="none"
@@ -206,9 +206,35 @@ const handleZoomIn = (event: MouseEvent) => {
             >
               <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
             </svg>
+            <!-- Square icon (flat theme) -->
+            <svg
+              v-else-if="currentTheme.icon === 'square'"
+              class="w-4 h-4"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <rect x="3" y="3" width="18" height="18" rx="2" />
+            </svg>
+            <!-- Zap icon (neon theme) -->
+            <svg
+              v-else
+              class="w-4 h-4"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path d="M13 2L3 14h9l-1 10 10-12h-9l1-10z" />
+            </svg>
           </Button>
         </TooltipTrigger>
-        <TooltipContent>{{ isDark ? 'Light mode' : 'Dark mode' }}</TooltipContent>
+        <TooltipContent>{{ currentTheme.label }}</TooltipContent>
       </Tooltip>
     </div>
   </header>
