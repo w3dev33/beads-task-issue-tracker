@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.18.2] - 2026-02-16
+
+> Requires **bd 0.49.3+** for full feature support.
+
+### Bug Fixes
+- **Dashboard short IDs**: Show key suffixes (e.g., `d6rp`) instead of full IDs in Ready to Work and In Progress panels
+- **Scroll to selected row**: Clicking an issue in dashboard panels now smooth-scrolls the table to the corresponding row
+- **Logo green circle**: Restore hardcoded green color on first logo circle after accidental override
+- **Changelog caching**: Bypass GitHub CDN cache when fetching changelog for accurate update checks
+
 ## [1.18.1] - 2026-02-16
 
 > Requires **bd 0.49.3+** for full feature support.

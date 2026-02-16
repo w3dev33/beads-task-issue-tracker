@@ -1,6 +1,6 @@
 [package]
 name = "beads-issue-tracker"
-version = "1.18.1"
+version = "1.18.2"
 description = "Beads Task-Issue Tracker - Desktop app for managing bd Beads issues"
 authors = ["Laurent Chapin <laurent.chapin@w3dev.fr>"]
 license = "MIT"
