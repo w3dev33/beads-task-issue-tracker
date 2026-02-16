@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.18.3] - 2026-02-16
+
+> Requires **bd 0.49.3+** for full feature support.
+
+### Bug Fixes
+- **Changelog fetch caching**: Use GitHub Contents API instead of raw.githubusercontent.com CDN which ignores cache-busting query params, causing stale changelog in update checker
+
 ## [1.18.2] - 2026-02-16
 
 > Requires **bd 0.49.3+** for full feature support.
