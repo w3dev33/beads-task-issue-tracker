@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.18.1] - 2026-02-16
+
+> Requires **bd 0.49.3+** for full feature support.
+
+### Improvements
+- **Badge color semantics**: Swap Open (now blue) and In Progress (now green) status badge colors — green consistently means active work
+- **Epic badge color**: Changed from green to indigo to avoid confusion with active status
+- **P3 priority color**: Changed from green to dark goldenrod for better contrast with P2 amber
+- **Epic progress bar**: Now uses in-progress green instead of primary blue
+- All changes applied across Classic, Dark Flat, Light Flat, and Neon themes
+
 ## [1.18.0] - 2026-02-16
 
 > Requires **bd 0.49.3+** for full feature support.
