@@ -41,8 +41,8 @@
   --color-sidebar-ring: var(--sidebar-ring);
 
   /* Status colors */
-  --color-status-open: #15803d;
-  --color-status-in-progress: #3b82f6;
+  --color-status-open: #3b82f6;
+  --color-status-in-progress: #15803d;
   --color-status-blocked: #ef4444;
   --color-status-closed: #6b7280;
 
@@ -50,25 +50,25 @@
   --color-type-bug: #ef4444;
   --color-type-task: #3b82f6;
   --color-type-feature: #8b5cf6;
-  --color-type-epic: #166534;
+  --color-type-epic: #4338ca;
   --color-type-chore: #6b7280;
 
   /* Priority colors */
   --color-priority-p0: #ef4444;
   --color-priority-p1: #ef4444;
   --color-priority-p2: #f59e0b;
-  --color-priority-p3: #22c55e;
+  --color-priority-p3: #b8860b;
   --color-priority-p4: #6b7280;
 }
 
 /* ── Badge CSS variables (default = classic theme) ──────────────────────────── */
 :root {
   /* Status badges */
-  --badge-status-open: #15803d;
-  --badge-status-open-deep: #052e16;
+  --badge-status-open: #3b82f6;
+  --badge-status-open-deep: #1e3a5f;
   --badge-status-open-glow: transparent;
-  --badge-status-in-progress: #3b82f6;
-  --badge-status-in-progress-deep: #1e3a5f;
+  --badge-status-in-progress: #15803d;
+  --badge-status-in-progress-deep: #052e16;
   --badge-status-in-progress-glow: transparent;
   --badge-status-blocked: #ef4444;
   --badge-status-blocked-deep: #7f1d1d;
@@ -99,8 +99,8 @@
   --badge-type-feature: #8b5cf6;
   --badge-type-feature-deep: #3b0764;
   --badge-type-feature-glow: transparent;
-  --badge-type-epic: #16a34a;
-  --badge-type-epic-deep: #052e16;
+  --badge-type-epic: #6366f1;
+  --badge-type-epic-deep: #312e81;
   --badge-type-epic-glow: transparent;
   --badge-type-chore: #6b7280;
   --badge-type-chore-deep: #1f2937;
@@ -116,8 +116,8 @@
   --badge-priority-p2: #f59e0b;
   --badge-priority-p2-deep: #78350f;
   --badge-priority-p2-glow: transparent;
-  --badge-priority-p3: #22c55e;
-  --badge-priority-p3-deep: #14532d;
+  --badge-priority-p3: #b8860b;
+  --badge-priority-p3-deep: #6b4f08;
   --badge-priority-p3-glow: transparent;
   --badge-priority-p4: #6b7280;
   --badge-priority-p4-deep: #1f2937;
@@ -127,12 +127,12 @@
 /* ── Neon theme ─────────────────────────────────────────────────────────────── */
 [data-theme="neon"] {
   /* Status badges */
-  --badge-status-open: #00ff87;
-  --badge-status-open-deep: #00cc6a;
-  --badge-status-open-glow: rgba(0, 255, 135, 0.4);
-  --badge-status-in-progress: #00d4ff;
-  --badge-status-in-progress-deep: #0099cc;
-  --badge-status-in-progress-glow: rgba(0, 212, 255, 0.4);
+  --badge-status-open: #00d4ff;
+  --badge-status-open-deep: #0099cc;
+  --badge-status-open-glow: rgba(0, 212, 255, 0.4);
+  --badge-status-in-progress: #00ff87;
+  --badge-status-in-progress-deep: #00cc6a;
+  --badge-status-in-progress-glow: rgba(0, 255, 135, 0.4);
   --badge-status-blocked: #ff3366;
   --badge-status-blocked-deep: #cc1a4a;
   --badge-status-blocked-glow: rgba(255, 51, 102, 0.4);
@@ -162,9 +162,9 @@
   --badge-type-feature: #bf5fff;
   --badge-type-feature-deep: #9933cc;
   --badge-type-feature-glow: rgba(191, 95, 255, 0.4);
-  --badge-type-epic: #00ff87;
-  --badge-type-epic-deep: #00cc6a;
-  --badge-type-epic-glow: rgba(0, 255, 135, 0.4);
+  --badge-type-epic: #818cf8;
+  --badge-type-epic-deep: #6366f1;
+  --badge-type-epic-glow: rgba(129, 140, 248, 0.4);
   --badge-type-chore: #8892a0;
   --badge-type-chore-deep: #5a6270;
   --badge-type-chore-glow: transparent;
@@ -179,29 +179,29 @@
   --badge-priority-p2: #ffaa00;
   --badge-priority-p2-deep: #cc8800;
   --badge-priority-p2-glow: rgba(255, 170, 0, 0.4);
-  --badge-priority-p3: #00ff87;
-  --badge-priority-p3-deep: #00cc6a;
-  --badge-priority-p3-glow: rgba(0, 255, 135, 0.4);
+  --badge-priority-p3: #e0a500;
+  --badge-priority-p3-deep: #b8860b;
+  --badge-priority-p3-glow: rgba(224, 165, 0, 0.4);
   --badge-priority-p4: #8892a0;
   --badge-priority-p4-deep: #5a6270;
   --badge-priority-p4-glow: transparent;
 
   /* Status/Type/Priority theme colors for KPI cards, charts, etc. */
-  --color-status-open: #00ff87;
-  --color-status-in-progress: #00d4ff;
+  --color-status-open: #00d4ff;
+  --color-status-in-progress: #00ff87;
   --color-status-blocked: #ff3366;
   --color-status-closed: #8892a0;
 
   --color-type-bug: #ff3366;
   --color-type-task: #3399ff;
   --color-type-feature: #bf5fff;
-  --color-type-epic: #00ff87;
+  --color-type-epic: #818cf8;
   --color-type-chore: #8892a0;
 
   --color-priority-p0: #ff3366;
   --color-priority-p1: #ff3366;
   --color-priority-p2: #ffaa00;
-  --color-priority-p3: #00ff87;
+  --color-priority-p3: #fbbf24;
   --color-priority-p4: #8892a0;
 
   /* UI overrides — deep dark with neon accents */
@@ -502,16 +502,16 @@ body {
 
 /* Status badges — neon style */
 [data-theme="neon"] .bg-status-open-gradient {
-  background: rgba(0, 255, 135, 0.12) !important;
-  color: #00ff87 !important;
-  border-color: rgba(0, 255, 135, 0.5) !important;
-  box-shadow: inset 0 0 12px rgba(0, 255, 135, 0.1), 0 0 8px rgba(0, 255, 135, 0.15);
-}
-[data-theme="neon"] .bg-status-in-progress-gradient {
   background: rgba(0, 212, 255, 0.12) !important;
   color: #00d4ff !important;
   border-color: rgba(0, 212, 255, 0.5) !important;
   box-shadow: inset 0 0 12px rgba(0, 212, 255, 0.1), 0 0 8px rgba(0, 212, 255, 0.15);
+}
+[data-theme="neon"] .bg-status-in-progress-gradient {
+  background: rgba(0, 255, 135, 0.12) !important;
+  color: #00ff87 !important;
+  border-color: rgba(0, 255, 135, 0.5) !important;
+  box-shadow: inset 0 0 12px rgba(0, 255, 135, 0.1), 0 0 8px rgba(0, 255, 135, 0.15);
 }
 [data-theme="neon"] .bg-status-blocked-gradient {
   background: rgba(255, 51, 102, 0.12) !important;
@@ -570,10 +570,10 @@ body {
   box-shadow: inset 0 0 12px rgba(191, 95, 255, 0.1), 0 0 8px rgba(191, 95, 255, 0.15);
 }
 [data-theme="neon"] .bg-type-epic-gradient {
-  background: rgba(0, 255, 135, 0.12) !important;
-  color: #00ff87 !important;
-  border-color: rgba(0, 255, 135, 0.5) !important;
-  box-shadow: inset 0 0 12px rgba(0, 255, 135, 0.1), 0 0 8px rgba(0, 255, 135, 0.15);
+  background: rgba(129, 140, 248, 0.12) !important;
+  color: #818cf8 !important;
+  border-color: rgba(129, 140, 248, 0.5) !important;
+  box-shadow: inset 0 0 12px rgba(129, 140, 248, 0.1), 0 0 8px rgba(129, 140, 248, 0.15);
 }
 [data-theme="neon"] .bg-type-chore-gradient {
   background: rgba(136, 146, 160, 0.1) !important;
@@ -602,10 +602,10 @@ body {
   box-shadow: inset 0 0 12px rgba(255, 170, 0, 0.1), 0 0 8px rgba(255, 170, 0, 0.15);
 }
 [data-theme="neon"] .bg-priority-p3-gradient {
-  background: rgba(0, 255, 135, 0.12) !important;
-  color: #00ff87 !important;
-  border-color: rgba(0, 255, 135, 0.5) !important;
-  box-shadow: inset 0 0 12px rgba(0, 255, 135, 0.1), 0 0 8px rgba(0, 255, 135, 0.15);
+  background: rgba(224, 165, 0, 0.12) !important;
+  color: #e0a500 !important;
+  border-color: rgba(224, 165, 0, 0.5) !important;
+  box-shadow: inset 0 0 12px rgba(224, 165, 0, 0.1), 0 0 8px rgba(224, 165, 0, 0.15);
 }
 [data-theme="neon"] .bg-priority-p4-gradient {
   background: rgba(136, 146, 160, 0.1) !important;

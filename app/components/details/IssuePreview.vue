@@ -159,7 +159,7 @@ const depBorderColor = (id: string) => {
     p0: 'border-[#ef4444]',
     p1: 'border-[#ef4444]',
     p2: 'border-[#f59e0b]',
-    p3: 'border-[#22c55e]',
+    p3: 'border-[#b8860b]',
     p4: 'border-[#6b7280]',
   }
   return colors[issue.priority] || 'border-muted-foreground/50'
@@ -172,7 +172,7 @@ const depTextColor = (priority?: string) => {
       p0: 'text-[#ff3366]',
       p1: 'text-[#ff3366]',
       p2: 'text-[#ffaa00]',
-      p3: 'text-[#00ff87]',
+      p3: 'text-[#e0a500]',
       p4: 'text-[#8892a0]',
     }
     return neonColors[priority] || 'text-[#00d4ff]'
@@ -181,7 +181,7 @@ const depTextColor = (priority?: string) => {
     p0: 'text-[#ef4444]',
     p1: 'text-[#ef4444]',
     p2: 'text-[#f59e0b]',
-    p3: 'text-[#22c55e]',
+    p3: 'text-[#b8860b]',
     p4: 'text-[#6b7280]',
   }
   return colors[priority] || 'text-sky-400'
@@ -194,7 +194,7 @@ const depNeonStyle = (priority?: string) => {
     p0: '255, 51, 102',
     p1: '255, 51, 102',
     p2: '255, 170, 0',
-    p3: '0, 255, 135',
+    p3: '224, 165, 0',
     p4: '136, 146, 160',
   }
   const rgb = (priority && colorMap[priority]) || '0, 212, 255'
@@ -328,7 +328,7 @@ const relationBorderColor = (rel: { id: string; priority: string }) => {
     p0: 'border-[#ef4444]',
     p1: 'border-[#ef4444]',
     p2: 'border-[#f59e0b]',
-    p3: 'border-[#22c55e]',
+    p3: 'border-[#b8860b]',
     p4: 'border-[#6b7280]',
   }
   return colors[priority] || 'border-muted-foreground/50'

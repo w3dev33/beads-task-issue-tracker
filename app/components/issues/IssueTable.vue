@@ -506,7 +506,7 @@ function getIssueField(issue: Issue, field: string): string {
                   <div class="flex items-center gap-2">
                     <div class="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
                       <div
-                        class="h-full bg-primary rounded-full transition-all"
+                        class="h-full rounded-full transition-all bg-[var(--color-status-in-progress)]"
                         :style="{ width: Math.round(group.closedChildCount / group.childCount * 100) + '%' }"
                       />
                     </div>

@@ -699,7 +699,7 @@ const priorityTextColor = (priority?: string) => {
     p0: 'text-[#ef4444]',
     p1: 'text-[#ef4444]',
     p2: 'text-[#f59e0b]',
-    p3: 'text-[#22c55e]',
+    p3: 'text-[#b8860b]',
     p4: 'text-[#6b7280]',
   }
   return colors[priority] || 'text-sky-400'

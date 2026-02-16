@@ -72,7 +72,7 @@ const handleZoomIn = (event: MouseEvent) => {
         <path d="M 4 5 Q 3 12 12 18" stroke="currentColor" class="text-muted-foreground" />
         <path d="M 12 18 Q 21 12 20 5" stroke="currentColor" class="text-muted-foreground" />
         <path d="M 20 5 Q 12 1 4 5" stroke="currentColor" class="text-muted-foreground" />
-        <circle cx="4" cy="5" r="3" fill="#22c55e" />
+        <circle cx="4" cy="5" r="3" fill="#b8860b" />
         <circle cx="20" cy="5" r="3" fill="#eab308" />
         <circle cx="12" cy="18" r="3" fill="#ef4444" />
       </svg>

@@ -12,7 +12,7 @@ const priorities: { key: IssuePriority; label: string; color: string; rgb: strin
   { key: 'p0', label: 'P0', color: 'var(--color-priority-p0)', rgb: '255, 51, 102' },
   { key: 'p1', label: 'P1', color: 'var(--color-priority-p1)', rgb: '255, 51, 102' },
   { key: 'p2', label: 'P2', color: 'var(--color-priority-p2)', rgb: '255, 170, 0' },
-  { key: 'p3', label: 'P3', color: 'var(--color-priority-p3)', rgb: '0, 255, 135' },
+  { key: 'p3', label: 'P3', color: 'var(--color-priority-p3)', rgb: '224, 165, 0' },
   { key: 'p4', label: 'P4', color: 'var(--color-priority-p4)', rgb: '136, 146, 160' },
 ]
 

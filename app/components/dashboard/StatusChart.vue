@@ -34,7 +34,7 @@ const neonBarStyle = (rgb: string, percent: number) => {
         <div class="flex-1 h-2 rounded overflow-hidden" :class="isNeon ? 'bg-white/5' : 'bg-secondary'">
           <div
             class="h-full bg-status-open transition-all rounded"
-            :style="{ width: `${openPercent}%`, ...neonBarStyle('0, 255, 135', openPercent) }"
+            :style="{ width: `${openPercent}%`, ...neonBarStyle('0, 212, 255', openPercent) }"
           />
         </div>
         <span class="w-8 text-xs text-right" :class="isNeon ? 'text-[var(--color-status-open)]' : ''">{{ open }}</span>
