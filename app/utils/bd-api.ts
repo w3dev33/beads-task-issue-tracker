@@ -549,10 +549,12 @@ export async function checkForUpdates(): Promise<UpdateInfo> {
     return false
   }
 
-  // Fetch CHANGELOG.md for full release notes
+  // Fetch CHANGELOG.md via GitHub API (raw.githubusercontent CDN ignores query params for caching)
   let releaseNotes: string | null = release.body || null
   try {
-    const changelogResponse = await fetch(`https://raw.githubusercontent.com/w3dev33/beads-task-issue-tracker/master/CHANGELOG.md?t=${Date.now()}`)
+    const changelogResponse = await fetch('https://api.github.com/repos/w3dev33/beads-task-issue-tracker/contents/CHANGELOG.md', {
+      headers: { 'Accept': 'application/vnd.github.raw+json' },
+    })
     if (changelogResponse.ok) {
       releaseNotes = await changelogResponse.text()
     }

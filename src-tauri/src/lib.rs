@@ -8,7 +8,7 @@ use std::path::PathBuf;
 use std::process::Command;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{LazyLock, Mutex};
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant};
 
 // Global flags for logging
 static LOGGING_ENABLED: AtomicBool = AtomicBool::new(false);
@@ -1959,13 +1959,10 @@ async fn check_for_updates() -> Result<UpdateInfo, String> {
     let download_url = find_platform_asset(&release.assets)
         .map(|a| a.browser_download_url.clone());
 
-    // Fetch CHANGELOG.md from the repo for full release notes (cache-busted)
-    let cache_bust = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_millis();
+    // Fetch CHANGELOG.md via GitHub API (raw.githubusercontent CDN ignores query params for caching)
     let changelog = client
-        .get(format!("https://raw.githubusercontent.com/w3dev33/beads-task-issue-tracker/master/CHANGELOG.md?t={}", cache_bust))
+        .get("https://api.github.com/repos/w3dev33/beads-task-issue-tracker/contents/CHANGELOG.md")
+        .header("Accept", "application/vnd.github.raw+json")
         .send()
         .await
         .ok()
@@ -2013,13 +2010,10 @@ async fn check_for_updates_demo() -> Result<UpdateInfo, String> {
     let download_url = find_platform_asset(&release.assets)
         .map(|a| a.browser_download_url.clone());
 
-    // Fetch CHANGELOG.md from the repo for full release notes (cache-busted)
-    let cache_bust = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_millis();
+    // Fetch CHANGELOG.md via GitHub API (raw.githubusercontent CDN ignores query params for caching)
     let changelog = client
-        .get(format!("https://raw.githubusercontent.com/w3dev33/beads-task-issue-tracker/master/CHANGELOG.md?t={}", cache_bust))
+        .get("https://api.github.com/repos/w3dev33/beads-task-issue-tracker/contents/CHANGELOG.md")
+        .header("Accept", "application/vnd.github.raw+json")
         .send()
         .await
         .ok()
