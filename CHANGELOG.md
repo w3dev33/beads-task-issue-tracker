@@ -1,5 +1,24 @@
 # Changelog
 
+## [1.18.0] - 2026-02-16
+
+> Requires **bd 0.49.3+** for full feature support.
+
+### New Features
+- **Extensible theme system**: 4 built-in themes — Classic Light, Classic Dark, Dark Flat, and Neon
+- **Neon theme**: Deep dark UI with transparent glowing badges, neon-colored text, glow effects on KPI cards, charts, dependency links, and filter chips
+- **Dark Flat theme**: Clean solid-color badges without gradients for a minimal look
+- **Light Flat theme**: Same flat badge style adapted for light mode
+- **Theme selector**: New section in Settings dialog with visual theme cards
+- **Header theme cycling**: Click the theme icon to cycle through all themes
+- **Theme-aware Label badges**: Dynamic neon palette for labels in Neon mode
+
+### Improvements
+- **CSS custom properties architecture**: All badge colors driven by CSS variables — adding a new theme = one CSS block, zero component changes
+- **Auto-migration**: Existing users with `beads:darkMode` setting are automatically migrated to the new theme system
+- **Epic row backgrounds**: Fixed hardcoded dark background for proper light theme support
+- **Slimmer chart bars**: Progress bars reduced for a cleaner dashboard
+
 ## [1.17.2] - 2026-02-14
 
 > Requires **bd 0.49.3+** for full feature support.
