@@ -11,6 +11,17 @@ defineProps<{
 defineEmits<{
   select: [issue: Issue]
 }>()
+
+const getShortId = (id: string) => {
+  const dotIndex = id.indexOf('.')
+  const baseId = dotIndex > 0 ? id.slice(0, dotIndex) : id
+  const indexSuffix = dotIndex > 0 ? id.slice(dotIndex) : ''
+  const lastHyphen = baseId.lastIndexOf('-')
+  if (lastHyphen > 0) {
+    return baseId.slice(lastHyphen + 1) + indexSuffix
+  }
+  return id
+}
 </script>
 
 <template>
@@ -30,7 +41,7 @@ defineEmits<{
           <div class="flex items-center gap-1.5 mb-0.5">
             <TypeBadge :type="issue.type" size="sm" />
             <PriorityBadge :priority="issue.priority" size="sm" />
-            <span class="text-[10px] text-muted-foreground font-mono">{{ issue.id }}</span>
+            <span class="text-[10px] text-muted-foreground font-mono">{{ getShortId(issue.id) }}</span>
           </div>
           <p class="text-[11px] leading-tight line-clamp-2">{{ issue.title }}</p>
         </button>

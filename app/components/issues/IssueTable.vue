@@ -281,6 +281,15 @@ const getEpicBorderColors = (index: number): { left: string; right: string } => 
 function getIssueField(issue: Issue, field: string): string {
   return String((issue as unknown as Record<string, unknown>)[field] ?? '-')
 }
+
+// Scroll to the selected row when selectedId changes (e.g. from dashboard QuickList)
+watch(() => props.selectedId, (id) => {
+  if (!id) return
+  nextTick(() => {
+    const row = document.querySelector(`[data-issue-id="${CSS.escape(id)}"]`)
+    row?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+  })
+})
 </script>
 
 <template>
@@ -364,6 +373,7 @@ function getIssueField(issue: Issue, field: string): string {
             <!-- Epic row with expand/collapse -->
             <template v-if="group.epic">
               <TableRow
+                :data-issue-id="group.epic.id"
                 class="cursor-pointer bg-muted/40"
                 :class="[
                   multiSelectMode
@@ -528,6 +538,7 @@ function getIssueField(issue: Issue, field: string): string {
                 <TableRow
                   v-for="child in group.children"
                   :key="child.id"
+                  :data-issue-id="child.id"
                   class="cursor-pointer border-l-4 border-r-4"
                   :class="[
                     getEpicBorderColors(groupIndex).left,
@@ -633,6 +644,7 @@ function getIssueField(issue: Issue, field: string): string {
               <TableRow
                 v-for="issue in group.children"
                 :key="issue.id"
+                :data-issue-id="issue.id"
                 class="cursor-pointer"
                 :class="multiSelectMode
                   ? (isSelected(issue.id) ? 'bg-accent/50 hover:bg-accent/70' : 'hover:bg-muted/50')
@@ -735,6 +747,7 @@ function getIssueField(issue: Issue, field: string): string {
           <TableRow
             v-for="issue in sortedIssues"
             :key="issue.id"
+            :data-issue-id="issue.id"
             class="cursor-pointer"
             :class="multiSelectMode
               ? (isSelected(issue.id) ? 'bg-accent/50 hover:bg-accent/70' : 'hover:bg-muted/50')
