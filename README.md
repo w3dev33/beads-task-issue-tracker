@@ -70,7 +70,7 @@ The app uses a **native file watcher** on the `.beads` directory. When an AI age
 
 ### Settings & Tools
 - **CLI Client Selector**: Switch between [`bd`](https://github.com/steveyegge/beads) (Go) and [`br`](https://github.com/Dicklesworthstone/beads_rust) (Rust) via Settings (`Cmd/Ctrl+,`)
-- **Dark/Light Theme**: Toggle via settings
+- **Theme System**: 4 themes — Classic Light, Classic Dark, Dark Flat, and Neon — with per-theme badge styling, glow effects, and one-click cycling via the header icon
 - **Debug Panel**: Live log viewer with auto-refresh, accessible via `Cmd/Ctrl+Shift+L`
 - **Database Repair**: Automatic detection and repair of schema migration issues
 - **Keyboard Shortcuts**: `Cmd/Ctrl+,` (settings), `Cmd/Ctrl+F` (search in markdown), `Cmd/Ctrl+Shift+L` (debug logs), arrow keys (gallery navigation)
