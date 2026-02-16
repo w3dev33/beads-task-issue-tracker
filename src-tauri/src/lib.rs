@@ -8,7 +8,7 @@ use std::path::PathBuf;
 use std::process::Command;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{LazyLock, Mutex};
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 // Global flags for logging
 static LOGGING_ENABLED: AtomicBool = AtomicBool::new(false);
@@ -1959,9 +1959,13 @@ async fn check_for_updates() -> Result<UpdateInfo, String> {
     let download_url = find_platform_asset(&release.assets)
         .map(|a| a.browser_download_url.clone());
 
-    // Fetch CHANGELOG.md from the repo for full release notes
+    // Fetch CHANGELOG.md from the repo for full release notes (cache-busted)
+    let cache_bust = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis();
     let changelog = client
-        .get("https://raw.githubusercontent.com/w3dev33/beads-task-issue-tracker/master/CHANGELOG.md")
+        .get(format!("https://raw.githubusercontent.com/w3dev33/beads-task-issue-tracker/master/CHANGELOG.md?t={}", cache_bust))
         .send()
         .await
         .ok()
@@ -2009,9 +2013,13 @@ async fn check_for_updates_demo() -> Result<UpdateInfo, String> {
     let download_url = find_platform_asset(&release.assets)
         .map(|a| a.browser_download_url.clone());
 
-    // Fetch CHANGELOG.md from the repo for full release notes
+    // Fetch CHANGELOG.md from the repo for full release notes (cache-busted)
+    let cache_bust = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis();
     let changelog = client
-        .get("https://raw.githubusercontent.com/w3dev33/beads-task-issue-tracker/master/CHANGELOG.md")
+        .get(format!("https://raw.githubusercontent.com/w3dev33/beads-task-issue-tracker/master/CHANGELOG.md?t={}", cache_bust))
         .send()
         .await
         .ok()

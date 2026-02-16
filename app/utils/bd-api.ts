@@ -552,7 +552,7 @@ export async function checkForUpdates(): Promise<UpdateInfo> {
   // Fetch CHANGELOG.md for full release notes
   let releaseNotes: string | null = release.body || null
   try {
-    const changelogResponse = await fetch('https://raw.githubusercontent.com/w3dev33/beads-task-issue-tracker/master/CHANGELOG.md')
+    const changelogResponse = await fetch(`https://raw.githubusercontent.com/w3dev33/beads-task-issue-tracker/master/CHANGELOG.md?t=${Date.now()}`)
     if (changelogResponse.ok) {
       releaseNotes = await changelogResponse.text()
     }
