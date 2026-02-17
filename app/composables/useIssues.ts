@@ -25,8 +25,8 @@ const lastKnownUpdated = ref<string | null>(null)
 // Pagination state
 const pageSize = ref(50)
 const currentPage = ref(1)
-const sortField = ref<string | null>('updatedAt')
-const sortDirection = ref<'asc' | 'desc'>('desc')
+const sortField = useProjectStorage<string | null>('sortField', 'updatedAt')
+const sortDirection = useProjectStorage<'asc' | 'desc'>('sortDirection', 'desc')
 
 // Epic expand/collapse state (persisted per project) - default to expanded (true)
 const expandedEpics = useProjectStorage<Record<string, boolean>>('expandedEpics', {})
