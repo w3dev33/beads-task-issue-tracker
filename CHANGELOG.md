@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.18.4] - 2026-02-17
+
+> Requires **bd 0.49.3+** for full feature support.
+
+### New Features
+- **New issue flash animation**: Newly added issues highlight with a blue flash (status "open" color) that fades over 3 seconds, works for both in-app creation and external CLI additions detected via polling
+
+### Bug Fixes
+- **Column sort persistence**: Persist column sort preferences per project so sorting is remembered across sessions
+- **Issue preview auto-refresh**: Auto-refresh issue preview on any field change, not just status updates
+- **Epic child ordering**: Sort epic child issues by ID suffix for consistent ordering
+
 ## [1.18.3] - 2026-02-16
 
 > Requires **bd 0.49.3+** for full feature support.
