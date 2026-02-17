@@ -152,14 +152,18 @@ export function useIssues() {
 
       if (currentSignature !== newSignature) {
         issues.value = newIssues
+      }
 
-        // Sync selectedIssue with updated data (e.g., if closed externally via CLI)
-        if (selectedIssue.value) {
-          const updatedSelected = newIssues.find(i => i.id === selectedIssue.value!.id)
-          if (updatedSelected && updatedSelected.status !== selectedIssue.value.status) {
-            // Status changed - update selectedIssue to trigger watchers
-            selectedIssue.value = updatedSelected
-          }
+      // Sync selectedIssue with updated data (e.g., if modified externally via CLI)
+      // Check even if list signature unchanged — selectedIssue may be stale from a
+      // previous bdShow while the list was already updated by an earlier poll
+      if (selectedIssue.value) {
+        const updatedSelected = newIssues.find(i => i.id === selectedIssue.value!.id)
+        if (!updatedSelected) {
+          // Issue was deleted externally — close the preview
+          selectedIssue.value = null
+        } else if (updatedSelected.updatedAt !== selectedIssue.value.updatedAt) {
+          fetchIssue(updatedSelected.id)
         }
       }
 
@@ -191,7 +195,6 @@ export function useIssues() {
    */
   const fetchPollData = async (): Promise<Issue[] | null> => {
     error.value = null
-
     try {
       const path = getPath()
       const data = await bdPollData(path)
@@ -243,13 +246,17 @@ export function useIssues() {
 
       if (currentSignature !== newSignature) {
         issues.value = newIssues
+      }
 
-        // Sync selectedIssue with updated data
-        if (selectedIssue.value) {
-          const updatedSelected = newIssues.find(i => i.id === selectedIssue.value!.id)
-          if (updatedSelected && updatedSelected.status !== selectedIssue.value.status) {
-            selectedIssue.value = updatedSelected
-          }
+      // Sync selectedIssue with updated data (check even if list signature unchanged,
+      // because selectedIssue may be stale from a previous bdShow while the list was
+      // already updated by an earlier poll before the issue was selected)
+      if (selectedIssue.value) {
+        const updatedSelected = newIssues.find(i => i.id === selectedIssue.value!.id)
+        if (!updatedSelected) {
+          selectedIssue.value = null
+        } else if (updatedSelected.updatedAt !== selectedIssue.value.updatedAt) {
+          fetchIssue(updatedSelected.id)
         }
       }
 
