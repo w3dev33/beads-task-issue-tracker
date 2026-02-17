@@ -92,6 +92,7 @@ const {
   removeRelation,
   checkForChanges,
   clearIssues,
+  newlyAddedIds,
 } = useIssues()
 const { stats, readyIssues, fetchStats, updateFromPollData, clearStats } = useDashboard()
 const { check: checkForUpdates, startPeriodicCheck, stopPeriodicCheck } = useUpdateChecker()
@@ -1409,6 +1410,7 @@ watch(
             :total-count="filteredIssues.length"
             :external-sort-column="sortField"
             :external-sort-direction="sortDirection"
+            :newly-added-ids="newlyAddedIds"
             @select="handleSelectIssue"
             @edit="handleEditIssueFromTable"
             @deselect="handleDeselectIssue"
@@ -1775,6 +1777,7 @@ watch(
               :total-count="filteredIssues.length"
               :external-sort-column="sortField"
               :external-sort-direction="sortDirection"
+              :newly-added-ids="newlyAddedIds"
               @select="handleSelectIssue"
               @edit="handleEditIssueFromTable"
               @deselect="handleDeselectIssue"

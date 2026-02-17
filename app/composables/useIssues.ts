@@ -22,6 +22,18 @@ const error = ref<string | null>(null)
 const lastKnownCount = ref<number>(0)
 const lastKnownUpdated = ref<string | null>(null)
 
+// Track newly added issue IDs for flash animation
+const newlyAddedIds = ref<Set<string>>(new Set())
+
+const markAsNewlyAdded = (id: string) => {
+  newlyAddedIds.value = new Set(newlyAddedIds.value).add(id)
+  setTimeout(() => {
+    const next = new Set(newlyAddedIds.value)
+    next.delete(id)
+    newlyAddedIds.value = next
+  }, 3000)
+}
+
 // Pagination state
 const pageSize = ref(50)
 const currentPage = ref(1)
@@ -151,6 +163,15 @@ export function useIssues() {
       const newSignature = JSON.stringify(newIssues.map(i => i.id + i.updatedAt))
 
       if (currentSignature !== newSignature) {
+        // Detect newly added issues (skip initial load)
+        if (issues.value.length > 0) {
+          const existingIds = new Set(issues.value.map(i => i.id))
+          for (const issue of newIssues) {
+            if (!existingIds.has(issue.id)) {
+              markAsNewlyAdded(issue.id)
+            }
+          }
+        }
         issues.value = newIssues
       }
 
@@ -244,6 +265,15 @@ export function useIssues() {
       const newSignature = JSON.stringify(newIssues.map(i => i.id + i.updatedAt))
 
       if (currentSignature !== newSignature) {
+        // Detect newly added issues (skip initial load)
+        if (issues.value.length > 0) {
+          const existingIds = new Set(issues.value.map(i => i.id))
+          for (const issue of newIssues) {
+            if (!existingIds.has(issue.id)) {
+              markAsNewlyAdded(issue.id)
+            }
+          }
+        }
         issues.value = newIssues
       }
 
@@ -671,6 +701,7 @@ export function useIssues() {
 
     try {
       const data = await bdCreate(payload, getPath())
+      if (data?.id) markAsNewlyAdded(data.id)
       await fetchIssues()
       return data
     } catch (e) {
@@ -928,5 +959,6 @@ export function useIssues() {
     removeRelation,
     checkForChanges,
     clearIssues,
+    newlyAddedIds,
   }
 }

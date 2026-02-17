@@ -868,3 +868,13 @@ mark.search-highlight-current {
   padding-top: 0;
   padding-bottom: 0;
 }
+
+/* Flash animation for newly added issues */
+@keyframes issue-highlight-flash {
+  0%   { background-color: color-mix(in srgb, var(--color-status-open) 35%, transparent); }
+  15%  { background-color: color-mix(in srgb, var(--color-status-open) 35%, transparent); }
+  100% { background-color: transparent; }
+}
+.issue-highlight-new {
+  animation: issue-highlight-flash 3s ease-out forwards;
+}

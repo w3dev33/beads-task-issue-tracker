@@ -33,6 +33,7 @@ const props = defineProps<{
   totalCount?: number
   externalSortColumn?: string | null
   externalSortDirection?: 'asc' | 'desc'
+  newlyAddedIds?: Set<string>
 }>()
 
 const emit = defineEmits<{
@@ -196,6 +197,7 @@ const useHierarchicalDisplay = computed(() => {
 })
 
 const isSelected = (id: string) => props.selectedIds?.includes(id) ?? false
+const isNewlyAdded = (id: string) => props.newlyAddedIds?.has(id) ?? false
 
 const toggleSelect = (id: string) => {
   const current = props.selectedIds ?? []
@@ -380,7 +382,8 @@ watch(() => props.selectedId, (id) => {
                     ? (isSelected(group.epic.id) ? 'bg-accent/50 hover:bg-accent/70' : 'hover:bg-muted/50')
                     : (selectedId === group.epic.id ? 'bg-accent/50 hover:bg-accent/70' : 'hover:bg-muted/50'),
                   group.childCount > 0 ? ['border-l-4', 'border-r-4', getEpicBorderColors(groupIndex).left, getEpicBorderColors(groupIndex).right] : '',
-                  !isExpanded(group.epic.id) && group.childCount > 0 && (group.epic.status === 'in_progress' || !!group.inProgressChild) ? 'border-b-0' : ''
+                  !isExpanded(group.epic.id) && group.childCount > 0 && (group.epic.status === 'in_progress' || !!group.inProgressChild) ? 'border-b-0' : '',
+                  isNewlyAdded(group.epic.id) ? 'issue-highlight-new' : ''
                 ]"
                 @click="multiSelectMode ? toggleSelect(group.epic.id) : $emit('select', group.epic)"
                 @dblclick="!multiSelectMode && $emit('edit', group.epic)"
@@ -545,7 +548,8 @@ watch(() => props.selectedId, (id) => {
                     getEpicBorderColors(groupIndex).right,
                     multiSelectMode
                       ? (isSelected(child.id) ? 'bg-accent/50 hover:bg-accent/70' : 'hover:bg-muted/50')
-                      : (selectedId === child.id ? 'bg-accent/50 hover:bg-accent/70' : 'hover:bg-muted/50')
+                      : (selectedId === child.id ? 'bg-accent/50 hover:bg-accent/70' : 'hover:bg-muted/50'),
+                    isNewlyAdded(child.id) ? 'issue-highlight-new' : ''
                   ]"
                   @click="multiSelectMode ? toggleSelect(child.id) : $emit('select', child)"
                   @dblclick="!multiSelectMode && $emit('edit', child)"
@@ -646,9 +650,12 @@ watch(() => props.selectedId, (id) => {
                 :key="issue.id"
                 :data-issue-id="issue.id"
                 class="cursor-pointer"
-                :class="multiSelectMode
-                  ? (isSelected(issue.id) ? 'bg-accent/50 hover:bg-accent/70' : 'hover:bg-muted/50')
-                  : (selectedId === issue.id ? 'bg-accent/50 hover:bg-accent/70' : 'hover:bg-muted/50')"
+                :class="[
+                  multiSelectMode
+                    ? (isSelected(issue.id) ? 'bg-accent/50 hover:bg-accent/70' : 'hover:bg-muted/50')
+                    : (selectedId === issue.id ? 'bg-accent/50 hover:bg-accent/70' : 'hover:bg-muted/50'),
+                  isNewlyAdded(issue.id) ? 'issue-highlight-new' : ''
+                ]"
                 @click="multiSelectMode ? toggleSelect(issue.id) : $emit('select', issue)"
                 @dblclick="!multiSelectMode && $emit('edit', issue)"
               >
@@ -749,9 +756,12 @@ watch(() => props.selectedId, (id) => {
             :key="issue.id"
             :data-issue-id="issue.id"
             class="cursor-pointer"
-            :class="multiSelectMode
-              ? (isSelected(issue.id) ? 'bg-accent/50 hover:bg-accent/70' : 'hover:bg-muted/50')
-              : (selectedId === issue.id ? 'bg-accent/50 hover:bg-accent/70' : 'hover:bg-muted/50')"
+            :class="[
+              multiSelectMode
+                ? (isSelected(issue.id) ? 'bg-accent/50 hover:bg-accent/70' : 'hover:bg-muted/50')
+                : (selectedId === issue.id ? 'bg-accent/50 hover:bg-accent/70' : 'hover:bg-muted/50'),
+              isNewlyAdded(issue.id) ? 'issue-highlight-new' : ''
+            ]"
             @click="multiSelectMode ? toggleSelect(issue.id) : $emit('select', issue)"
             @dblclick="!multiSelectMode && $emit('edit', issue)"
           >
