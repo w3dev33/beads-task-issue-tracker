@@ -498,6 +498,26 @@ export function useIssues() {
     return null
   }
 
+  // Compare child issues by ID suffix (ascending), falling back to createdAt
+  const compareChildIssues = (a: Issue, b: Issue): number => {
+    const getSuffix = (id: string): number | null => {
+      const lastDotIndex = id.lastIndexOf('.')
+      if (lastDotIndex === -1) return null
+      const suffix = id.slice(lastDotIndex + 1)
+      return /^\d+$/.test(suffix) ? parseInt(suffix, 10) : null
+    }
+
+    const suffixA = getSuffix(a.id)
+    const suffixB = getSuffix(b.id)
+
+    if (suffixA !== null && suffixB !== null) return suffixA - suffixB
+    if (suffixA !== null) return -1
+    if (suffixB !== null) return 1
+
+    // Fall back to createdAt (oldest first)
+    return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+  }
+
   // Computed for hierarchical grouping of epics and their children
   const groupedIssues = computed((): IssueGroup[] => {
     const issueList = paginatedIssues.value
@@ -541,8 +561,8 @@ export function useIssues() {
     // First pass: Add all EPICs with their children
     for (const issue of issueList) {
       if (issue.type === 'epic' && !processedIds.has(issue.id)) {
-        const filteredChildren = filteredEpicChildrenMap.get(issue.id) || []
-        const allChildren = allEpicChildrenMap.get(issue.id) || []
+        const filteredChildren = (filteredEpicChildrenMap.get(issue.id) || []).sort(compareChildIssues)
+        const allChildren = (allEpicChildrenMap.get(issue.id) || []).sort(compareChildIssues)
         const closedCount = allChildren.filter(c => c.status === 'closed').length
         const inProgressChild = allChildren.find(c => c.status === 'in_progress')
 
