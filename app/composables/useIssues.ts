@@ -160,7 +160,6 @@ export function useIssues() {
       if (selectedIssue.value) {
         const updatedSelected = newIssues.find(i => i.id === selectedIssue.value!.id)
         if (!updatedSelected) {
-          // Issue was deleted externally — close the preview
           selectedIssue.value = null
         } else if (updatedSelected.updatedAt !== selectedIssue.value.updatedAt) {
           fetchIssue(updatedSelected.id)
