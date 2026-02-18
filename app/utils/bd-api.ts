@@ -40,6 +40,41 @@ export async function bdRepairDatabase(path?: string): Promise<RepairResult> {
   return invoke<RepairResult>('bd_repair_database', { cwd: path })
 }
 
+// Dolt migration result
+export interface MigrateResult {
+  success: boolean
+  message: string
+}
+
+// Migration status check result
+export interface MigrationStatus {
+  needsMigration: boolean
+  reason: string
+}
+
+// Check if error indicates Dolt migration is needed (bd >= 0.50 with SQLite project)
+export function isDoltMigrationError(error: unknown): boolean {
+  const msg = error instanceof Error ? error.message : String(error)
+  return msg.includes('Dolt backend configured but database not found')
+}
+
+// Proactively check if a project needs Dolt migration
+// (detects partial migrations and SQLite projects with bd >= 0.50)
+export async function bdCheckNeedsMigration(path?: string): Promise<MigrationStatus> {
+  if (!isTauri()) {
+    return { needsMigration: false, reason: 'web mode' }
+  }
+  return invoke<MigrationStatus>('bd_check_needs_migration', { cwd: path })
+}
+
+// Migrate a project from SQLite to Dolt backend
+export async function bdMigrateToDolt(path?: string): Promise<MigrateResult> {
+  if (!isTauri()) {
+    throw new Error('Database migration is only available in the desktop app')
+  }
+  return invoke<MigrateResult>('bd_migrate_to_dolt', { cwd: path })
+}
+
 // ============================================================================
 // Polling Optimization API
 // ============================================================================

@@ -98,6 +98,7 @@ const { stats, readyIssues, fetchStats, updateFromPollData, clearStats } = useDa
 const { check: checkForUpdates, startPeriodicCheck, stopPeriodicCheck } = useUpdateChecker()
 const { showDebugPanel, showSettingsDialog } = useAppMenu()
 const { needsRepair, affectedProject, isRepairing, repairError, repairProgress, repair: repairDatabase, repairAll, dismiss: dismissRepair } = useRepairDatabase()
+const { needsMigration, affectedProject: migrateAffectedProject, isMigrating, migrateError, migrate: migrateToDolt, checkProject: checkMigrationNeeded, dismiss: dismissMigration } = useMigrateToDolt()
 
 // Sidebar states (persisted)
 const isLeftSidebarOpen = useLocalStorage('beads:leftSidebar', true)
@@ -340,25 +341,34 @@ onMounted(async () => {
   if (import.meta.client) {
     window.addEventListener('resize', checkViewport)
 
-    // Start native file watcher (if project path available)
-    if (beadsPath.value && !showOnboarding.value) {
-      await startListening(beadsPath.value)
-    }
-
-    // Start adaptive polling (handles visibility, focus, idle internally)
-    // When watcher is active, polling uses 30s safety-net instead of 1s mtime checks
-    startPolling()
-
     // Check for updates after initial load + start periodic check (hourly)
+    // (these don't call bd CLI, safe to run before migration check)
     checkForUpdates()
     startPeriodicCheck()
-
-    // Fetch available relation types (based on CLI client)
-    bdAvailableRelationTypes().then(types => { availableRelationTypes.value = types }).catch(() => {})
   }
+
   // Only fetch data if not in onboarding mode
   if (!showOnboarding.value) {
-    fetchIssues().then(() => fetchStats(issues.value))
+    // Check migration BEFORE any bd command — bd >= 0.52 auto-migrates on any
+    // bd call (like `bd list`, `bd mtime`), which would bypass our migration modal
+    // that preserves labels, deps, comments, and attachments.
+    const migrationNeeded = await checkMigrationNeeded()
+    if (!migrationNeeded) {
+      if (import.meta.client) {
+        // Start native file watcher (if project path available)
+        if (beadsPath.value) {
+          await startListening(beadsPath.value)
+        }
+
+        // Start adaptive polling (handles visibility, focus, idle internally)
+        // When watcher is active, polling uses 30s safety-net instead of 1s mtime checks
+        startPolling()
+
+        // Fetch available relation types (based on CLI client)
+        bdAvailableRelationTypes().then(types => { availableRelationTypes.value = types }).catch(() => {})
+      }
+      fetchIssues().then(() => fetchStats(issues.value))
+    }
   }
 })
 
@@ -524,6 +534,26 @@ const handleRepairAll = async () => {
   }
 }
 
+const handleMigrateToDolt = async () => {
+  const success = await migrateToDolt()
+  if (success) {
+    notifySuccess('Migration complete', 'Project has been migrated to the Dolt backend.')
+
+    // Start watcher + polling that were deferred during migration
+    if (import.meta.client) {
+      if (beadsPath.value) {
+        await startListening(beadsPath.value)
+      }
+      startPolling()
+      bdAvailableRelationTypes().then(types => { availableRelationTypes.value = types }).catch(() => {})
+    }
+
+    // Reload data after migration
+    await fetchIssues()
+    await fetchStats(issues.value)
+  }
+}
+
 const handlePathChange = async () => {
   selectIssue(null)
   isEditMode.value = false
@@ -536,8 +566,12 @@ const handlePathChange = async () => {
   // Invalidate all cached mtimes so the next poll cycle detects the new project
   await bdResetMtime()
   // Per-project storage is automatically isolated via useProjectStorage
-  await fetchIssues()
-  await fetchStats(issues.value)
+  // Check migration BEFORE fetching issues to prevent bd auto-migration
+  const migrationNeeded = await checkMigrationNeeded()
+  if (!migrationNeeded) {
+    await fetchIssues()
+    await fetchStats(issues.value)
+  }
 }
 
 const handleReset = () => {
@@ -2380,6 +2414,52 @@ watch(
               {{ isRepairing && !repairProgress ? 'Repairing...' : 'Repair This Project' }}
             </Button>
           </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+
+    <!-- Dolt Migration Dialog -->
+    <Dialog :open="needsMigration" @update:open="(open) => !open && dismissMigration()">
+      <DialogContent class="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle class="flex items-center gap-2 text-amber-500">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+            Database Migration Required
+          </DialogTitle>
+          <DialogDescription class="text-left space-y-3 pt-2">
+            <p>
+              Your bd version (>= 0.50) can no longer read previous SQLite databases.
+              This project needs to be migrated to the new Dolt backend. This is a one-time operation.
+            </p>
+            <p v-if="migrateAffectedProject" class="text-sm bg-muted p-2 rounded font-mono break-all">
+              {{ migrateAffectedProject }}
+            </p>
+            <p>
+              <strong>What will happen:</strong>
+            </p>
+            <ul class="list-disc list-inside text-sm space-y-1 ml-2">
+              <li>A new Dolt database will be created (<code class="text-xs">bd init</code>)</li>
+              <li>Your issues will be imported from the JSONL backup file (<code class="text-xs">bd import</code>)</li>
+              <li>None of your issues will be lost — only previously deleted issues (tombstones) are skipped</li>
+            </ul>
+            <p v-if="migrateError" class="text-destructive text-sm">
+              Error: {{ migrateError }}
+            </p>
+          </DialogDescription>
+        </DialogHeader>
+        <div class="flex justify-end gap-2 mt-4">
+          <Button variant="outline" :disabled="isMigrating" @click="dismissMigration">
+            Later
+          </Button>
+          <Button :disabled="isMigrating" class="bg-[#29E3C1] hover:bg-[#22c9aa] text-black" @click="handleMigrateToDolt">
+            <svg v-if="isMigrating" class="animate-spin -ml-1 mr-2 h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            {{ isMigrating ? 'Migrating...' : 'Migrate Now' }}
+          </Button>
         </div>
       </DialogContent>
     </Dialog>

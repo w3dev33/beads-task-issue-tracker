@@ -97,6 +97,7 @@ export function useIssues() {
   const { filters } = useFilters()
   const { beadsPath } = useBeadsPath()
   const { checkError: checkRepairError } = useRepairDatabase()
+  const { checkError: checkMigrateError } = useMigrateToDolt()
   const { exclusions } = useExclusionFilters()
 
   // Helper to get the current path (for IPC or web)
@@ -195,8 +196,11 @@ export function useIssues() {
       lastKnownUpdated.value = maxUpdated || null
 
     } catch (e) {
+      // Check for Dolt migration error first (more specific)
+      if (checkMigrateError(e, beadsPath.value)) {
+        error.value = 'Database needs migration to Dolt backend.'
       // Check if this is a schema migration error that needs repair
-      if (checkRepairError(e)) {
+      } else if (checkRepairError(e)) {
         error.value = 'Database needs repair due to a schema migration issue.'
       } else {
         error.value = e instanceof Error ? e.message : 'Failed to fetch issues'
@@ -298,7 +302,9 @@ export function useIssues() {
 
       return data.readyIssues || []
     } catch (e) {
-      if (checkRepairError(e)) {
+      if (checkMigrateError(e, beadsPath.value)) {
+        error.value = 'Database needs migration to Dolt backend.'
+      } else if (checkRepairError(e)) {
         error.value = 'Database needs repair due to a schema migration issue.'
       } else {
         error.value = e instanceof Error ? e.message : 'Failed to fetch poll data'

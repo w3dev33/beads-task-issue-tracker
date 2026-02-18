@@ -12,7 +12,7 @@ import { Input } from '~/components/ui/input'
 import { ScrollArea } from '~/components/ui/scroll-area'
 import { Badge } from '~/components/ui/badge'
 import { Separator } from '~/components/ui/separator'
-import { fsList, type DirectoryEntry } from '~/utils/bd-api'
+import { fsList, bdCheckNeedsMigration, type DirectoryEntry } from '~/utils/bd-api'
 import { getParentPath, getFolderName } from '~/utils/path'
 
 const props = defineProps<{
@@ -26,6 +26,7 @@ const emit = defineEmits<{
 }>()
 
 const { favorites, addFavorite, isFavorite } = useFavorites()
+const { isMigrating, migrateError, migrate: migrateToDolt } = useMigrateToDolt()
 
 const currentPath = ref(props.currentPath || '~')
 const pathInput = ref('')
@@ -34,6 +35,9 @@ const hasBeads = ref(false)
 const usesDolt = ref(false)
 const isLoading = ref(false)
 const error = ref<string | null>(null)
+const projectNeedsMigration = ref(false) // detected via bd_check_needs_migration
+const showMigrateConfirm = ref(false)
+const migrateSuccess = ref(false)
 
 // Watch for dialog open to load initial path
 watch(() => props.open, (isOpen) => {
@@ -42,6 +46,7 @@ watch(() => props.open, (isOpen) => {
     const initialPath = props.currentPath && props.currentPath !== '.' ? props.currentPath : '~'
     currentPath.value = initialPath
     loadDirectory(initialPath)
+    migrateSuccess.value = false
   }
 })
 
@@ -61,6 +66,7 @@ watch(() => props.currentPath, (newPath) => {
 const loadDirectory = async (path: string) => {
   isLoading.value = true
   error.value = null
+  projectNeedsMigration.value = false
 
   try {
     const data = await fsList(path)
@@ -68,6 +74,16 @@ const loadDirectory = async (path: string) => {
     entries.value = data.entries
     hasBeads.value = data.hasBeads
     usesDolt.value = data.usesDolt
+
+    // Check if this beads project needs Dolt migration
+    if (data.hasBeads && !data.usesDolt) {
+      try {
+        const status = await bdCheckNeedsMigration(data.currentPath)
+        projectNeedsMigration.value = status.needsMigration
+      } catch {
+        // Silently fail
+      }
+    }
   } catch (e) {
     error.value = e instanceof Error ? e.message : 'Failed to load directory'
     entries.value = []
@@ -118,6 +134,19 @@ const currentFolderName = computed(() => {
 })
 
 const isCurrentFavorite = computed(() => isFavorite(currentPath.value))
+
+// Show migrate button when project needs migration (detected by backend)
+const canMigrate = computed(() => projectNeedsMigration.value && !migrateSuccess.value)
+
+const handleMigrate = async () => {
+  showMigrateConfirm.value = false
+  const success = await migrateToDolt(currentPath.value)
+  if (success) {
+    migrateSuccess.value = true
+    // Reload directory to refresh Dolt badge
+    await loadDirectory(currentPath.value)
+  }
+}
 </script>
 
 <template>
@@ -197,6 +226,23 @@ const isCurrentFavorite = computed(() => isFavorite(currentPath.value))
               </svg>
               Favorite
             </Badge>
+            <Button
+              v-if="canMigrate"
+              variant="outline"
+              size="sm"
+              class="text-[#29E3C1] border-[#29E3C1]/50 hover:bg-[#29E3C1]/10 h-6 text-xs"
+              :disabled="isMigrating"
+              @click="showMigrateConfirm = true"
+            >
+              <svg v-if="isMigrating" class="animate-spin -ml-0.5 mr-1 h-3 w-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+              {{ isMigrating ? 'Migrating...' : 'Migrate to Dolt' }}
+            </Button>
+            <Badge v-if="migrateSuccess" variant="outline" class="text-green-500 border-green-500/50 text-xs">
+              Migrated
+            </Badge>
           </div>
         </div>
 
@@ -257,6 +303,31 @@ const isCurrentFavorite = computed(() => isFavorite(currentPath.value))
           </ScrollArea>
         </div>
       </div>
+
+      <!-- Migration error -->
+      <div v-if="migrateError" class="px-3 py-2 text-sm text-destructive bg-destructive/10 rounded">
+        Migration error: {{ migrateError }}
+      </div>
+
+      <!-- Migration confirmation dialog -->
+      <Dialog :open="showMigrateConfirm" @update:open="showMigrateConfirm = $event">
+        <DialogContent class="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Migrate to Dolt?</DialogTitle>
+            <DialogDescription class="text-left space-y-2 pt-2">
+              <p>This will migrate the project database from SQLite to the Dolt backend.</p>
+              <p class="text-sm bg-muted p-2 rounded font-mono break-all">{{ currentPath }}</p>
+              <p class="text-sm">This is a one-time operation. All issues will be preserved.</p>
+            </DialogDescription>
+          </DialogHeader>
+          <div class="flex justify-end gap-2 mt-4">
+            <Button variant="outline" @click="showMigrateConfirm = false">Cancel</Button>
+            <Button class="bg-[#29E3C1] hover:bg-[#22c9aa] text-black" @click="handleMigrate">
+              Migrate Now
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <DialogFooter class="mt-4">
         <Button variant="outline" @click="handleCancel">
