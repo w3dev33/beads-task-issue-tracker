@@ -877,6 +877,20 @@ fn uses_jsonl_files() -> bool {
     }
 }
 
+/// Returns true if the CLI uses the Dolt backend (inverse of uses_jsonl_files).
+/// - br: NEVER (frozen on SQLite+JSONL architecture)
+/// - bd >= 0.50.0: YES (Dolt only)
+/// - bd < 0.50.0: NO (SQLite+JSONL)
+/// - unknown: NO (safe default)
+fn uses_dolt_backend() -> bool {
+    match get_cli_client_info() {
+        Some((CliClient::Br, _, _, _)) => false, // br never uses Dolt
+        Some((CliClient::Bd, major, minor, _)) => major > 0 || minor >= 50,
+        Some((CliClient::Unknown, _, _, _)) => false,
+        None => false,
+    }
+}
+
 /// Reset the cached client info (called when CLI binary path changes).
 fn reset_bd_version_cache() {
     let mut cached = CLI_CLIENT_INFO.lock().unwrap();
@@ -949,6 +963,12 @@ fn execute_bd(command: &str, args: &[String], cwd: Option<&str>) -> Result<Strin
 /// Uses bidirectional sync to preserve local changes while getting remote updates
 /// Has a cooldown to avoid redundant syncs within the same poll cycle
 fn sync_bd_database(cwd: Option<&str>) {
+    // Dolt backend handles its own sync via git — skip bd sync
+    if uses_dolt_backend() {
+        log_info!("[sync] Skipping — Dolt backend handles sync via git");
+        return;
+    }
+
     // Check cooldown — skip if synced recently
     {
         let last = LAST_SYNC_TIME.lock().unwrap();
@@ -1017,6 +1037,12 @@ async fn bd_sync(cwd: Option<String>) -> Result<(), String> {
                 .unwrap_or_else(|_| ".".to_string())
         });
 
+    // Dolt backend handles its own sync via git — skip bd sync
+    if uses_dolt_backend() {
+        log_info!("[bd_sync] Skipping — Dolt backend handles sync via git");
+        return Ok(());
+    }
+
     let binary = get_cli_binary();
     log_info!("[bd_sync] Manual sync requested for: {}", working_dir);
 
@@ -1065,14 +1091,43 @@ async fn bd_repair_database(cwd: Option<String>) -> Result<RepairResult, String>
     log_info!("[bd_repair] Starting database repair for: {}", working_dir);
 
     let beads_dir = std::path::Path::new(&working_dir).join(".beads");
-    let db_path = beads_dir.join("beads.db");
-    let jsonl_path = beads_dir.join("issues.jsonl");
-    let backup_path = beads_dir.join("beads.db.backup");
 
     // Check if .beads directory exists
     if !beads_dir.exists() {
         return Err("No .beads directory found in this project".to_string());
     }
+
+    // Dolt backend: use `bd doctor --fix --yes`
+    if uses_dolt_backend() {
+        log_info!("[bd_repair] Using Dolt-based repair strategy (bd >= 0.50.0): bd doctor --fix --yes");
+        let binary = get_cli_binary();
+        let output = new_command(&binary)
+            .args(&["doctor", "--fix", "--yes"])
+            .current_dir(&working_dir)
+            .env("PATH", get_extended_path())
+            .env("BEADS_PATH", &working_dir)
+            .output()
+            .map_err(|e| format!("Failed to run bd doctor: {}", e))?;
+
+        return if output.status.success() {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            log_info!("[bd_repair] Dolt repair successful: {}", stdout.trim());
+            Ok(RepairResult {
+                success: true,
+                message: format!("Database repaired via bd doctor. {}", stdout.trim()),
+                backup_path: None,
+            })
+        } else {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            log_error!("[bd_repair] Dolt repair failed: {}", stderr.trim());
+            Err(format!("Repair failed: {}", stderr.trim()))
+        };
+    }
+
+    // SQLite backend: original repair logic
+    let db_path = beads_dir.join("beads.db");
+    let jsonl_path = beads_dir.join("issues.jsonl");
+    let backup_path = beads_dir.join("beads.db.backup");
 
     // Check if database exists
     if !db_path.exists() {
@@ -1084,7 +1139,6 @@ async fn bd_repair_database(cwd: Option<String>) -> Result<RepairResult, String>
     }
 
     // For bd < 0.50.0: require issues.jsonl for repair (db is rebuilt from JSONL)
-    // For bd 0.50.0+: skip JSONL check (db is rebuilt from Dolt/git)
     if uses_jsonl_files() {
         let jsonl_size = std::fs::metadata(&jsonl_path)
             .map(|m| m.len())
@@ -1095,7 +1149,7 @@ async fn bd_repair_database(cwd: Option<String>) -> Result<RepairResult, String>
         }
         log_info!("[bd_repair] Using JSONL-based repair strategy (bd < 0.50.0)");
     } else {
-        log_info!("[bd_repair] Using Dolt-based repair strategy (bd >= 0.50.0 or unknown version)");
+        log_info!("[bd_repair] Using repair strategy for unknown version");
     }
 
     // Create backup of current database
@@ -1212,19 +1266,47 @@ async fn bd_poll_data(cwd: Option<String>) -> Result<PollData, String> {
     })
 }
 
-/// Get the latest mtime across all beads database files (db, WAL, and optionally jsonl).
-/// SQLite WAL mode writes to beads.db-wal, so the main .db file mtime may not change.
+/// Get the latest mtime across all beads database files.
+/// - Dolt backend (bd >= 0.50.0): checks .beads/ dir, .beads/.dolt/ dir, and manifest files
+/// - SQLite backend: checks beads.db, beads.db-wal, and optionally issues.jsonl
 fn get_beads_mtime(beads_dir: &std::path::Path) -> Option<std::time::SystemTime> {
-    let mut paths = vec![
-        beads_dir.join("beads.db"),
-        beads_dir.join("beads.db-wal"),
-    ];
-    if uses_jsonl_files() {
-        paths.push(beads_dir.join("issues.jsonl"));
+    if uses_dolt_backend() {
+        // Dolt backend: check directory mtimes and manifest files
+        let mut times: Vec<std::time::SystemTime> = Vec::new();
+
+        // .beads/ dir mtime
+        if let Ok(m) = fs::metadata(beads_dir) {
+            if let Ok(t) = m.modified() { times.push(t); }
+        }
+
+        // .beads/.dolt/ dir mtime
+        let dolt_dir = beads_dir.join(".dolt");
+        if let Ok(m) = fs::metadata(&dolt_dir) {
+            if let Ok(t) = m.modified() { times.push(t); }
+        }
+
+        // manifest files inside .dolt/
+        for name in &["manifest", "noms/manifest"] {
+            let p = dolt_dir.join(name);
+            if let Ok(m) = fs::metadata(&p) {
+                if let Ok(t) = m.modified() { times.push(t); }
+            }
+        }
+
+        times.into_iter().max()
+    } else {
+        // SQLite backend: check db, WAL, and optionally JSONL
+        let mut paths = vec![
+            beads_dir.join("beads.db"),
+            beads_dir.join("beads.db-wal"),
+        ];
+        if uses_jsonl_files() {
+            paths.push(beads_dir.join("issues.jsonl"));
+        }
+        paths.iter()
+            .filter_map(|p| fs::metadata(p).and_then(|m| m.modified()).ok())
+            .max()
     }
-    paths.iter()
-        .filter_map(|p| fs::metadata(p).and_then(|m| m.modified()).ok())
-        .max()
 }
 
 /// Check if the beads database has changed since last check (via filesystem mtime).
@@ -2314,6 +2396,8 @@ struct CompatibilityInfo {
     supports_daemon_flag: bool,
     #[serde(rename = "usesJsonlFiles")]
     uses_jsonl_files: bool,
+    #[serde(rename = "usesDoltBackend")]
+    uses_dolt_backend: bool,
     warnings: Vec<String>,
 }
 
@@ -2354,6 +2438,7 @@ async fn check_bd_compatibility() -> CompatibilityInfo {
         version_tuple: tuple.map(|(a, b, c)| vec![a, b, c]),
         supports_daemon_flag: supports_daemon_flag(),
         uses_jsonl_files: uses_jsonl_files(),
+        uses_dolt_backend: uses_dolt_backend(),
         warnings,
     }
 }
@@ -2947,10 +3032,17 @@ fn start_watching(
         },
     ).map_err(|e| format!("Failed to create watcher: {}", e))?;
 
-    // Watch .beads/ directory (non-recursive — all target files are at root level)
+    // Watch .beads/ directory
+    // Dolt backend: recursive (changes happen in .dolt/ subdirectories)
+    // SQLite backend: non-recursive (all target files are at root level)
+    let watch_mode = if uses_dolt_backend() {
+        notify::RecursiveMode::Recursive
+    } else {
+        notify::RecursiveMode::NonRecursive
+    };
     debouncer.watcher().watch(
         beads_dir.as_path(),
-        notify::RecursiveMode::NonRecursive,
+        watch_mode,
     ).map_err(|e| format!("Failed to watch .beads/: {}", e))?;
 
     log::info!("[watcher] Started watching: {}", beads_dir.display());

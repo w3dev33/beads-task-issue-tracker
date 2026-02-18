@@ -409,6 +409,7 @@ export interface BdCompatibilityInfo {
   versionTuple: number[] | null
   supportsDaemonFlag: boolean
   usesJsonlFiles: boolean
+  usesDoltBackend: boolean
   warnings: string[]
 }
 
@@ -422,6 +423,7 @@ export async function checkBdCompatibility(): Promise<BdCompatibilityInfo> {
     versionTuple: null,
     supportsDaemonFlag: false,
     usesJsonlFiles: false,
+    usesDoltBackend: false,
     warnings: [],
   }
 }
