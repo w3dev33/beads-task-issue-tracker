@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { Button } from '~/components/ui/button'
-import { readLogs, clearLogs, exportLogs as exportLogsApi, getLogPath, getBdVersion, getLoggingEnabled, setLoggingEnabled, getVerboseLogging, setVerboseLogging, checkBdCliUpdate, type BdCliUpdateInfo } from '~/utils/bd-api'
+import { readLogs, clearLogs, exportLogs as exportLogsApi, getLogPath, getBdVersion, getLoggingEnabled, setLoggingEnabled, getVerboseLogging, setVerboseLogging, checkBdCliUpdate, fsExists, type BdCliUpdateInfo } from '~/utils/bd-api'
 import { openUrl } from '~/utils/open-url'
 
 const { isSyncing: isForceSyncing, forceSync, syncMessage, lastSyncSuccess } = useSyncStatus()
+const { beadsPath } = useBeadsPath()
 
 const props = defineProps<{
   isOpen: boolean
@@ -16,6 +17,7 @@ const emit = defineEmits<{
 const logs = ref('')
 const logPath = ref('')
 const bdVersion = ref('')
+const projectUsesDolt = ref(false)
 const isAutoRefresh = ref(true)
 const isLoading = ref(false)
 const isVerbose = ref(false)
@@ -190,6 +192,12 @@ watch(() => props.isOpen, async (isOpen) => {
     bdVersion.value = await getBdVersion()
     logPath.value = await getLogPath()
     isVerbose.value = await getVerboseLogging()
+    // Check if current project uses Dolt backend
+    if (beadsPath.value && beadsPath.value !== '.') {
+      fsExists(`${beadsPath.value}/.beads/.dolt`).then((exists) => { projectUsesDolt.value = exists }).catch(() => { projectUsesDolt.value = false })
+    } else {
+      projectUsesDolt.value = false
+    }
     // Check for bd CLI updates (non-blocking)
     checkBdCliUpdate().then((info) => { bdCliUpdate.value = info }).catch(() => {})
     // Enable backend logging so log_info!/log_debug! macros produce output
@@ -336,6 +344,18 @@ onUnmounted(() => {
           {{ bdVersion }}
         </button>
         <span v-else class="text-xs font-medium text-foreground">{{ bdVersion }}</span>
+        <span v-if="projectUsesDolt" class="text-[#29E3C1] flex items-center" title="This project uses the Dolt backend">
+          <svg class="w-8 h-3" viewBox="0 0 163 56" fill="none">
+            <path d="M28.87 7.0459V45.8632C28.8654 46.7997 28.498 47.6965 27.8476 48.3591C27.1971 49.0217 26.316 49.3964 25.3957 49.402H10.4953C9.5713 49.402 8.68489 49.0298 8.0299 48.3666C7.3749 47.7035 7.00462 46.8034 7 45.8632V24.7722C7.00462 23.832 7.3749 22.9319 8.0299 22.2688C8.68489 21.6056 9.5713 21.2334 10.4953 21.2334H22.2115" stroke="currentColor" stroke-width="12.6599" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M156.3 49.4019H145.283" stroke="currentColor" stroke-width="12.6599" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M156.026 21.5259H134.174" stroke="currentColor" stroke-width="12.6599" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M145.336 7.0498V49.4024" stroke="currentColor" stroke-width="12.6599" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M72.2752 7.68311H59.049C56.6669 7.68311 54.7358 9.64808 54.7358 12.072V44.8074C54.7358 47.2313 56.6669 49.1963 59.049 49.1963H72.2752C74.6573 49.1963 76.5884 47.2313 76.5884 44.8074V12.072C76.5884 9.64808 74.6573 7.68311 72.2752 7.68311Z" stroke="currentColor" stroke-width="12.6599" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M119.586 49.4019H99.418" stroke="currentColor" stroke-width="12.6599" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M110.344 7.0498V49.4024" stroke="currentColor" stroke-width="12.6599" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M109.884 7H98.7939" stroke="currentColor" stroke-width="12.6599" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </span>
         <span class="text-muted-foreground">|</span>
         <span class="text-xs text-muted-foreground truncate max-w-[300px]">{{ logPath }}</span>
         <Button variant="outline" size="sm" class="h-7 w-7 p-0" @click="close">

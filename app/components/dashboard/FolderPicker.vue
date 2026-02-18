@@ -31,6 +31,7 @@ const currentPath = ref(props.currentPath || '~')
 const pathInput = ref('')
 const entries = ref<DirectoryEntry[]>([])
 const hasBeads = ref(false)
+const usesDolt = ref(false)
 const isLoading = ref(false)
 const error = ref<string | null>(null)
 
@@ -66,10 +67,12 @@ const loadDirectory = async (path: string) => {
     currentPath.value = data.currentPath
     entries.value = data.entries
     hasBeads.value = data.hasBeads
+    usesDolt.value = data.usesDolt
   } catch (e) {
     error.value = e instanceof Error ? e.message : 'Failed to load directory'
     entries.value = []
     hasBeads.value = false
+    usesDolt.value = false
   } finally {
     isLoading.value = false
   }
@@ -119,7 +122,7 @@ const isCurrentFavorite = computed(() => isFavorite(currentPath.value))
 
 <template>
   <Dialog :open="open" @update:open="$emit('update:open', $event)">
-    <DialogContent class="max-w-3xl max-h-[80vh] flex flex-col">
+    <DialogContent class="max-w-4xl max-h-[80vh] flex flex-col">
       <DialogHeader>
         <DialogTitle>Select Beads Project Folder</DialogTitle>
         <DialogDescription>
@@ -176,9 +179,18 @@ const isCurrentFavorite = computed(() => isFavorite(currentPath.value))
             <Badge v-if="hasBeads" class="bg-green-600 text-white shrink-0">
               Beads Project
             </Badge>
-            <span v-else class="text-xs text-muted-foreground shrink-0">
-              No .beads folder
-            </span>
+            <Badge v-if="usesDolt" variant="outline" class="text-[#29E3C1] border-[#29E3C1]/50 shrink-0 px-1.5">
+              <svg class="w-8 h-3" viewBox="0 0 163 56" fill="none">
+                <path d="M28.87 7.0459V45.8632C28.8654 46.7997 28.498 47.6965 27.8476 48.3591C27.1971 49.0217 26.316 49.3964 25.3957 49.402H10.4953C9.5713 49.402 8.68489 49.0298 8.0299 48.3666C7.3749 47.7035 7.00462 46.8034 7 45.8632V24.7722C7.00462 23.832 7.3749 22.9319 8.0299 22.2688C8.68489 21.6056 9.5713 21.2334 10.4953 21.2334H22.2115" stroke="currentColor" stroke-width="12.6599" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M156.3 49.4019H145.283" stroke="currentColor" stroke-width="12.6599" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M156.026 21.5259H134.174" stroke="currentColor" stroke-width="12.6599" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M145.336 7.0498V49.4024" stroke="currentColor" stroke-width="12.6599" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M72.2752 7.68311H59.049C56.6669 7.68311 54.7358 9.64808 54.7358 12.072V44.8074C54.7358 47.2313 56.6669 49.1963 59.049 49.1963H72.2752C74.6573 49.1963 76.5884 47.2313 76.5884 44.8074V12.072C76.5884 9.64808 74.6573 7.68311 72.2752 7.68311Z" stroke="currentColor" stroke-width="12.6599" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M119.586 49.4019H99.418" stroke="currentColor" stroke-width="12.6599" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M110.344 7.0498V49.4024" stroke="currentColor" stroke-width="12.6599" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M109.884 7H98.7939" stroke="currentColor" stroke-width="12.6599" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </Badge>
             <Badge v-if="isCurrentFavorite" variant="outline" class="text-yellow-500 border-yellow-500/50">
               <svg class="w-3 h-3 mr-1 fill-yellow-500" viewBox="0 0 24 24">
                 <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
@@ -224,6 +236,18 @@ const isCurrentFavorite = computed(() => isFavorite(currentPath.value))
                 <span class="flex-1 truncate">{{ entry.name }}</span>
                 <Badge v-if="entry.hasBeads" variant="outline" class="text-green-500 border-green-500/50 text-xs">
                   beads
+                </Badge>
+                <Badge v-if="entry.usesDolt" variant="outline" class="text-[#29E3C1] border-[#29E3C1]/50 text-xs px-1">
+                  <svg class="w-6 h-2.5" viewBox="0 0 163 56" fill="none">
+                    <path d="M28.87 7.0459V45.8632C28.8654 46.7997 28.498 47.6965 27.8476 48.3591C27.1971 49.0217 26.316 49.3964 25.3957 49.402H10.4953C9.5713 49.402 8.68489 49.0298 8.0299 48.3666C7.3749 47.7035 7.00462 46.8034 7 45.8632V24.7722C7.00462 23.832 7.3749 22.9319 8.0299 22.2688C8.68489 21.6056 9.5713 21.2334 10.4953 21.2334H22.2115" stroke="currentColor" stroke-width="12.6599" stroke-linecap="round" stroke-linejoin="round"/>
+                    <path d="M156.3 49.4019H145.283" stroke="currentColor" stroke-width="12.6599" stroke-linecap="round" stroke-linejoin="round"/>
+                    <path d="M156.026 21.5259H134.174" stroke="currentColor" stroke-width="12.6599" stroke-linecap="round" stroke-linejoin="round"/>
+                    <path d="M145.336 7.0498V49.4024" stroke="currentColor" stroke-width="12.6599" stroke-linecap="round" stroke-linejoin="round"/>
+                    <path d="M72.2752 7.68311H59.049C56.6669 7.68311 54.7358 9.64808 54.7358 12.072V44.8074C54.7358 47.2313 56.6669 49.1963 59.049 49.1963H72.2752C74.6573 49.1963 76.5884 47.2313 76.5884 44.8074V12.072C76.5884 9.64808 74.6573 7.68311 72.2752 7.68311Z" stroke="currentColor" stroke-width="12.6599" stroke-linecap="round" stroke-linejoin="round"/>
+                    <path d="M119.586 49.4019H99.418" stroke="currentColor" stroke-width="12.6599" stroke-linecap="round" stroke-linejoin="round"/>
+                    <path d="M110.344 7.0498V49.4024" stroke="currentColor" stroke-width="12.6599" stroke-linecap="round" stroke-linejoin="round"/>
+                    <path d="M109.884 7H98.7939" stroke="currentColor" stroke-width="12.6599" stroke-linecap="round" stroke-linejoin="round"/>
+                  </svg>
                 </Badge>
                 <svg class="w-4 h-4 text-muted-foreground shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <polyline points="9 18 15 12 9 6" />

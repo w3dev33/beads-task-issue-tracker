@@ -315,6 +315,8 @@ pub struct DirectoryEntry {
     pub is_directory: bool,
     #[serde(rename = "hasBeads")]
     pub has_beads: bool,
+    #[serde(rename = "usesDolt")]
+    pub uses_dolt: bool,
 }
 
 #[derive(Debug, Serialize)]
@@ -331,6 +333,8 @@ pub struct FsListResult {
     pub current_path: String,
     #[serde(rename = "hasBeads")]
     pub has_beads: bool,
+    #[serde(rename = "usesDolt")]
+    pub uses_dolt: bool,
     pub entries: Vec<DirectoryEntry>,
 }
 
@@ -891,6 +895,19 @@ fn uses_dolt_backend() -> bool {
     }
 }
 
+/// Returns true if a specific project uses the Dolt backend.
+/// Checks for the presence of `.beads/.dolt/` directory in the project.
+/// - br: NEVER (frozen on SQLite+JSONL architecture)
+/// - bd < 0.50.0: NEVER (CLI doesn't support Dolt)
+/// - bd >= 0.50.0: checks if `.dolt/` directory exists inside the beads dir
+fn project_uses_dolt(beads_dir: &std::path::Path) -> bool {
+    match get_cli_client_info() {
+        Some((CliClient::Br, _, _, _)) => false,
+        Some((CliClient::Bd, major, minor, _)) if major == 0 && minor < 50 => false,
+        _ => beads_dir.join(".dolt").is_dir(),
+    }
+}
+
 /// Reset the cached client info (called when CLI binary path changes).
 fn reset_bd_version_cache() {
     let mut cached = CLI_CLIENT_INFO.lock().unwrap();
@@ -963,8 +980,18 @@ fn execute_bd(command: &str, args: &[String], cwd: Option<&str>) -> Result<Strin
 /// Uses bidirectional sync to preserve local changes while getting remote updates
 /// Has a cooldown to avoid redundant syncs within the same poll cycle
 fn sync_bd_database(cwd: Option<&str>) {
+    let working_dir = cwd
+        .map(String::from)
+        .or_else(|| env::var("BEADS_PATH").ok())
+        .unwrap_or_else(|| {
+            env::current_dir()
+                .map(|p| p.to_string_lossy().to_string())
+                .unwrap_or_else(|_| ".".to_string())
+        });
+
     // Dolt backend handles its own sync via git — skip bd sync
-    if uses_dolt_backend() {
+    let beads_dir = std::path::Path::new(&working_dir).join(".beads");
+    if project_uses_dolt(&beads_dir) {
         log_info!("[sync] Skipping — Dolt backend handles sync via git");
         return;
     }
@@ -979,15 +1006,6 @@ fn sync_bd_database(cwd: Option<&str>) {
             }
         }
     }
-
-    let working_dir = cwd
-        .map(String::from)
-        .or_else(|| env::var("BEADS_PATH").ok())
-        .unwrap_or_else(|| {
-            env::current_dir()
-                .map(|p| p.to_string_lossy().to_string())
-                .unwrap_or_else(|_| ".".to_string())
-        });
 
     log_info!("[sync] Starting bidirectional sync for: {}", working_dir);
 
@@ -1038,7 +1056,8 @@ async fn bd_sync(cwd: Option<String>) -> Result<(), String> {
         });
 
     // Dolt backend handles its own sync via git — skip bd sync
-    if uses_dolt_backend() {
+    let beads_dir = std::path::Path::new(&working_dir).join(".beads");
+    if project_uses_dolt(&beads_dir) {
         log_info!("[bd_sync] Skipping — Dolt backend handles sync via git");
         return Ok(());
     }
@@ -1098,7 +1117,7 @@ async fn bd_repair_database(cwd: Option<String>) -> Result<RepairResult, String>
     }
 
     // Dolt backend: use `bd doctor --fix --yes`
-    if uses_dolt_backend() {
+    if project_uses_dolt(&beads_dir) {
         log_info!("[bd_repair] Using Dolt-based repair strategy (bd >= 0.50.0): bd doctor --fix --yes");
         let binary = get_cli_binary();
         let output = new_command(&binary)
@@ -1270,7 +1289,7 @@ async fn bd_poll_data(cwd: Option<String>) -> Result<PollData, String> {
 /// - Dolt backend (bd >= 0.50.0): checks .beads/ dir, .beads/.dolt/ dir, and manifest files
 /// - SQLite backend: checks beads.db, beads.db-wal, and optionally issues.jsonl
 fn get_beads_mtime(beads_dir: &std::path::Path) -> Option<std::time::SystemTime> {
-    if uses_dolt_backend() {
+    if project_uses_dolt(beads_dir) {
         // Dolt backend: check directory mtimes and manifest files
         let mut times: Vec<std::time::SystemTime> = Vec::new();
 
@@ -1910,12 +1929,14 @@ async fn fs_list(path: Option<String>) -> Result<FsListResult, String> {
             let full_path = entry.path();
             let beads_path = full_path.join(".beads");
             let has_beads = beads_path.is_dir();
+            let uses_dolt = has_beads && project_uses_dolt(&beads_path);
 
             directories.push(DirectoryEntry {
                 name,
                 path: full_path.to_string_lossy().to_string(),
                 is_directory: true,
                 has_beads,
+                uses_dolt,
             });
         }
     }
@@ -1929,11 +1950,14 @@ async fn fs_list(path: Option<String>) -> Result<FsListResult, String> {
         }
     });
 
-    let current_has_beads = target_path.join(".beads").is_dir();
+    let current_beads_path = target_path.join(".beads");
+    let current_has_beads = current_beads_path.is_dir();
+    let current_uses_dolt = current_has_beads && project_uses_dolt(&current_beads_path);
 
     Ok(FsListResult {
         current_path: target_path.to_string_lossy().to_string(),
         has_beads: current_has_beads,
+        uses_dolt: current_uses_dolt,
         entries: directories,
     })
 }
@@ -3035,7 +3059,7 @@ fn start_watching(
     // Watch .beads/ directory
     // Dolt backend: recursive (changes happen in .dolt/ subdirectories)
     // SQLite backend: non-recursive (all target files are at root level)
-    let watch_mode = if uses_dolt_backend() {
+    let watch_mode = if project_uses_dolt(&beads_dir) {
         notify::RecursiveMode::Recursive
     } else {
         notify::RecursiveMode::NonRecursive

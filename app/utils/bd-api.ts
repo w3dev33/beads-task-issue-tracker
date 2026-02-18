@@ -456,11 +456,13 @@ export interface DirectoryEntry {
   path: string
   isDirectory: boolean
   hasBeads: boolean
+  usesDolt: boolean
 }
 
 export interface FsListResult {
   currentPath: string
   hasBeads: boolean
+  usesDolt: boolean
   entries: DirectoryEntry[]
 }
 
