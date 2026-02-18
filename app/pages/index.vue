@@ -528,6 +528,7 @@ const handlePathChange = async () => {
   selectIssue(null)
   isEditMode.value = false
   isCreatingNew.value = false
+  clearIssues()  // Reset issue list so new-issue detection doesn't flash all rows
   // Switch file watcher to new project path
   if (beadsPath.value) {
     await switchProject(beadsPath.value)

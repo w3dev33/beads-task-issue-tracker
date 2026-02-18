@@ -917,6 +917,7 @@ export function useIssues() {
     lastKnownCount.value = 0
     lastKnownUpdated.value = null
     error.value = null
+    newlyAddedIds.value = new Set()
   }
 
   return {
