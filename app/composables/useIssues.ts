@@ -187,8 +187,12 @@ export function useIssues() {
         // Detect newly added issues (skip initial load)
         if (issues.value.length > 0) {
           const existingIds = new Set(issues.value.map(i => i.id))
-          for (const issue of newIssues) {
-            if (!existingIds.has(issue.id)) {
+          const addedIds = newIssues.filter(i => !existingIds.has(i.id))
+
+          // If most IDs changed, this is a project switch — don't flash
+          const isProjectSwitch = addedIds.length > issues.value.length * 0.5
+          if (!isProjectSwitch) {
+            for (const issue of addedIds) {
               markAsNewlyAdded(issue.id)
             }
           }
@@ -305,9 +309,14 @@ export function useIssues() {
         // Detect newly added issues (skip initial load)
         if (issues.value.length > 0) {
           const existingIds = new Set(issues.value.map(i => i.id))
-          for (const issue of newIssues) {
-            if (!existingIds.has(issue.id)) {
-              markAsNewlyAdded(issue.id)
+          const newIds = newIssues.map(i => i.id)
+          const addedIds = newIds.filter(id => !existingIds.has(id))
+
+          // If most IDs changed, this is a project switch — don't flash
+          const isProjectSwitch = addedIds.length > issues.value.length * 0.5
+          if (!isProjectSwitch) {
+            for (const id of addedIds) {
+              markAsNewlyAdded(id)
             }
           }
         }

@@ -4,15 +4,15 @@
 
 > **bd 0.50+ compatibility** — This release adds full support for the Dolt backend introduced in bd 0.50.
 > The app remains fully compatible with earlier bd versions (SQLite backend).
-> If you upgrade bd to 0.50+, projects using the legacy SQLite backend will be automatically migrated on first open — all data is preserved.
+> If you upgrade bd to 0.50+, projects still using the legacy SQLite backend will be detected and a migration modal will prompt you to migrate on first open — all data is preserved.
 
 ### bd 0.50+ Compatibility
 - **Backward compatible**: The application continues to work with bd versions prior to 0.50 (SQLite backend) without any changes.
-- **Automatic Dolt migration**: When using bd >= 0.50, projects still on SQLite are detected and a migration modal guides the user through a one-time migration. All data (issues, labels, dependencies, comments, attachments) is preserved.
+- **Dolt migration modal**: When using bd >= 0.50, projects still on SQLite are detected and a migration modal prompts the user to run a one-time migration. All data (issues, labels, dependencies, comments, attachments) is preserved.
 - **Parent-child is now structural (bd >= 0.50 only)**: Parent-child relationships are determined by dot notation in issue IDs (e.g., `abc.1` is a child of `abc`). The parent selector is hidden in the issue form for bd >= 0.50. **Known limitation**: it is no longer possible to attach an existing issue to an epic after creation — children can only be created from the parent issue (via "Create child"), which assigns the correct ID prefix automatically. This does not affect users on earlier bd versions, where the parent selector remains available.
 
 ### New Features
-- **Automatic Dolt migration modal**: Detects SQLite projects on open and displays a mandatory migration dialog with progress feedback
+- **Dolt migration modal**: Detects SQLite projects on open and prompts the user to run the migration with progress feedback
 - **7-step migration process**: Export JSONL → backup → init Dolt → import → restore labels, dependencies, comments → convert attachment paths to absolute
 - **Empty project migration**: Projects with zero issues are handled gracefully (init-only migration)
 - **Dot notation parent-child derivation**: Parent and children relationships are derived from the loaded issues list based on ID structure
