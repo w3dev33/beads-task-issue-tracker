@@ -1,5 +1,34 @@
 # Changelog
 
+## [1.20.0] - 2026-02-19
+
+> **bd 0.50+ compatibility** — This release adds full support for the Dolt backend introduced in bd 0.50.
+> The app remains fully compatible with earlier bd versions (SQLite backend).
+> If you upgrade bd to 0.50+, projects using the legacy SQLite backend will be automatically migrated on first open — all data is preserved.
+
+### bd 0.50+ Compatibility
+- **Backward compatible**: The application continues to work with bd versions prior to 0.50 (SQLite backend) without any changes.
+- **Automatic Dolt migration**: When using bd >= 0.50, projects still on SQLite are detected and a migration modal guides the user through a one-time migration. All data (issues, labels, dependencies, comments, attachments) is preserved.
+- **Parent-child is now structural (bd >= 0.50 only)**: Parent-child relationships are determined by dot notation in issue IDs (e.g., `abc.1` is a child of `abc`). The parent selector is hidden in the issue form for bd >= 0.50. **Known limitation**: it is no longer possible to attach an existing issue to an epic after creation — children can only be created from the parent issue (via "Create child"), which assigns the correct ID prefix automatically. This does not affect users on earlier bd versions, where the parent selector remains available.
+
+### New Features
+- **Automatic Dolt migration modal**: Detects SQLite projects on open and displays a mandatory migration dialog with progress feedback
+- **7-step migration process**: Export JSONL → backup → init Dolt → import → restore labels, dependencies, comments → convert attachment paths to absolute
+- **Empty project migration**: Projects with zero issues are handled gracefully (init-only migration)
+- **Dot notation parent-child derivation**: Parent and children relationships are derived from the loaded issues list based on ID structure
+- **Short ID in preview header**: Issue preview shows the short suffix (e.g., `d6rp`) instead of the full ID, while still copying the full ID to clipboard
+- **Per-project Dolt detection**: Dolt logo badge displayed in project browser and debug panel for migrated projects
+
+### Improvements
+- **Dolt logo readability**: Enlarged Dolt SVG logo in FolderPicker badges for better visibility
+- **FolderPicker cleanup**: Removed manual "Migrate to Dolt" button — migration is now handled automatically by the mandatory modal
+- **Migration error handling**: Reset error messages when switching between projects
+- **Race condition prevention**: Migration check runs before any bd CLI command to prevent bd auto-migration from bypassing the custom 7-step process
+
+### Bug Fixes
+- **Blue flash animation**: Prevent flash on all rows when switching projects (only flash newly added issues)
+- **bd --version isolation**: Run `bd --version` from temp directory to avoid triggering auto-migration in project directories
+
 ## [1.18.4] - 2026-02-17
 
 > Requires **bd 0.49.3+** for full feature support.
