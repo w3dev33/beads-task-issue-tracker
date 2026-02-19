@@ -14,6 +14,7 @@ export function useMigrateToDolt() {
     if (isDoltMigrationError(error)) {
       needsMigration.value = true
       affectedProject.value = projectPath || beadsPath.value
+      migrateError.value = null // Reset previous error when opening for a new project
       return true
     }
     return false
@@ -28,6 +29,7 @@ export function useMigrateToDolt() {
       if (status.needsMigration) {
         needsMigration.value = true
         affectedProject.value = path
+        migrateError.value = null // Reset previous error when opening for a new project
         return true
       }
     } catch {
@@ -54,7 +56,9 @@ export function useMigrateToDolt() {
         return false
       }
     } catch (e) {
-      migrateError.value = e instanceof Error ? e.message : 'Migration failed'
+      const msg = e instanceof Error ? e.message : String(e)
+      console.error('[useMigrateToDolt] migrate error:', msg, e)
+      migrateError.value = msg || 'Migration failed'
       return false
     } finally {
       isMigrating.value = false
@@ -65,6 +69,7 @@ export function useMigrateToDolt() {
   const dismiss = () => {
     needsMigration.value = false
     affectedProject.value = null
+    migrateError.value = null
   }
 
   return {

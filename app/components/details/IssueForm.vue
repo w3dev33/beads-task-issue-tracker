@@ -28,6 +28,8 @@ const props = defineProps<{
   availableEpics?: EpicOption[]
   availableLabels?: string[]
   defaultParent?: string
+  /** bd >= 0.50: parent-child is structural (dot notation), hide parent selector */
+  dotNotationParent?: boolean
 }>()
 
 const { beadsPath } = useBeadsPath()
@@ -295,7 +297,7 @@ const attachFile = async () => {
           </Select>
         </div>
 
-        <div v-if="filteredEpics.length > 0 && form.type !== 'epic'" class="flex items-center gap-1.5">
+        <div v-if="filteredEpics.length > 0 && form.type !== 'epic' && !dotNotationParent" class="flex items-center gap-1.5">
           <Label for="parent" class="text-[10px] uppercase tracking-wide text-sky-400 whitespace-nowrap">Parent</Label>
           <Select v-model="parentSelectValue">
             <SelectTrigger class="h-7 text-xs w-40">

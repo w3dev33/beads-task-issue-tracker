@@ -366,6 +366,10 @@ onMounted(async () => {
 
         // Fetch available relation types (based on CLI client)
         bdAvailableRelationTypes().then(types => { availableRelationTypes.value = types }).catch(() => {})
+        // Detect bd >= 0.50 for dot-notation parent-child
+        checkBdCompatibility().then(info => {
+          bdDotNotationParent.value = info.usesDoltBackend
+        }).catch(() => {})
       }
       fetchIssues().then(() => fetchStats(issues.value))
     }
@@ -433,6 +437,8 @@ const isRemovingDep = ref(false)
 
 // Relation types (fetched once on mount)
 const availableRelationTypes = ref<Array<{ value: string; label: string }>>([])
+// bd >= 0.50: parent-child is structural via dot notation (not explicit field)
+const bdDotNotationParent = ref(false)
 
 // Add relation dialog
 const isAddRelDialogOpen = ref(false)
@@ -546,6 +552,7 @@ const handleMigrateToDolt = async () => {
       }
       startPolling()
       bdAvailableRelationTypes().then(types => { availableRelationTypes.value = types }).catch(() => {})
+      checkBdCompatibility().then(info => { bdDotNotationParent.value = info.usesDoltBackend }).catch(() => {})
     }
 
     // Reload data after migration
@@ -1508,7 +1515,7 @@ watch(
           <div v-if="selectedIssue && !isEditMode && !isCreatingNew" class="p-4 pb-0 space-y-3 border-b border-border">
             <!-- Badges row -->
             <div class="flex items-center gap-1.5 flex-wrap">
-              <CopyableId :value="selectedIssue.id" />
+              <CopyableId :value="selectedIssue.id" :display-value="selectedIssue.id.includes('-') ? selectedIssue.id.slice(selectedIssue.id.lastIndexOf('-') + 1) : selectedIssue.id" />
               <TypeBadge :type="selectedIssue.type" size="sm" />
               <StatusBadge :status="selectedIssue.status" size="sm" />
               <PriorityBadge :priority="selectedIssue.priority" size="sm" />
@@ -1581,6 +1588,7 @@ watch(
               :available-epics="availableEpics"
               :available-labels="availableLabels"
               :default-parent="defaultParent"
+              :dot-notation-parent="bdDotNotationParent"
               @save="handleSaveIssue"
               @cancel="handleCancelEdit"
             />
@@ -1829,7 +1837,7 @@ watch(
         <div v-if="selectedIssue && !isEditMode && !isCreatingNew" class="p-4 pb-0 space-y-3 border-b border-border">
           <!-- Badges row -->
           <div class="flex items-center gap-1.5 flex-wrap">
-            <CopyableId :value="selectedIssue.id" />
+            <CopyableId :value="selectedIssue.id" :display-value="selectedIssue.id.includes('-') ? selectedIssue.id.slice(selectedIssue.id.lastIndexOf('-') + 1) : selectedIssue.id" />
             <TypeBadge :type="selectedIssue.type" size="sm" />
             <StatusBadge :status="selectedIssue.status" size="sm" />
             <PriorityBadge :priority="selectedIssue.priority" size="sm" />

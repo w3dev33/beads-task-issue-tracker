@@ -1430,9 +1430,42 @@ async fn bd_migrate_to_dolt(cwd: Option<String>) -> Result<MigrateResult, String
 
     let jsonl_path = beads_dir.join("issues.jsonl");
     if !jsonl_path.exists() || std::fs::metadata(&jsonl_path).map(|m| m.len()).unwrap_or(0) == 0 {
+        // Empty project — no JSONL data to import, just run bd init
+        log_info!("[bd_migrate] No issues.jsonl data — empty project, attempting init-only migration");
+        // Rename existing .db files to .db.backup so bd init doesn't refuse
+        if let Ok(entries) = std::fs::read_dir(&beads_dir) {
+            for entry in entries.flatten() {
+                let name = entry.file_name().to_string_lossy().to_string();
+                if name.ends_with(".db") && !name.ends_with(".db.backup") {
+                    let src = entry.path();
+                    let dst = beads_dir.join(format!("{}.backup", name));
+                    log_info!("[bd_migrate] Renaming {} -> {}", src.display(), dst.display());
+                    std::fs::rename(&src, &dst).ok();
+                }
+                // Also remove .db-shm and .db-wal
+                if name.ends_with(".db-shm") || name.ends_with(".db-wal") {
+                    std::fs::remove_file(entry.path()).ok();
+                }
+            }
+        }
+        let init_output = new_command(&binary)
+            .args(&["init", "--prefix", "project"])
+            .current_dir(&working_dir)
+            .env("PATH", get_extended_path())
+            .env("BEADS_PATH", &working_dir)
+            .output()
+            .map_err(|e| format!("Failed to run bd init: {}", e))?;
+        if init_output.status.success() {
+            log_info!("[bd_migrate] Empty project initialized with Dolt backend");
+            return Ok(MigrateResult {
+                success: true,
+                message: "Migration complete (empty project — initialized with Dolt backend)".to_string(),
+            });
+        }
+        let init_stderr = String::from_utf8_lossy(&init_output.stderr);
         return Err(format!(
-            "Migration failed and no issues.jsonl backup found. Original error: {}",
-            stderr_migrate.trim()
+            "Migration failed (empty project, bd init also failed): {}. Original error: {}",
+            init_stderr.trim(), stderr_migrate.trim()
         ));
     }
 
@@ -1614,6 +1647,16 @@ async fn bd_migrate_to_dolt(cwd: Option<String>) -> Result<MigrateResult, String
             clean_lines.len(),
             skipped
         );
+
+        // Empty project — no issues to import, just init is enough
+        if clean_lines.is_empty() {
+            log_info!("[bd_migrate] No issues to import — empty project, init-only migration");
+            return Ok(MigrateResult {
+                success: true,
+                message: "Migration complete (empty project — initialized with Dolt backend)".to_string(),
+            });
+        }
+
         std::fs::write(&temp_jsonl, clean_lines.join("\n") + "\n")
             .map_err(|e| format!("Failed to write cleaned JSONL: {}", e))?;
     }

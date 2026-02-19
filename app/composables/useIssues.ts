@@ -127,10 +127,30 @@ export function useIssues() {
       // Build parent-child relationships from the data we already have (no bdShow needed)
       const issueMap = new Map(newIssues.map(i => [i.id, i]))
 
-      // 1. Fill in parent details: Rust sets parent.id from bd list, but title/status/priority are defaults
-      //    We have all issues in the map, so we can look up the real values
+      // 1. Fill in parent details
+      //    - Use explicit parent.id from bd list if available (bd < 0.50)
+      //    - Derive from dot notation in ID for bd >= 0.50 (e.g., "abc.1" → parent "abc")
       for (const issue of newIssues) {
-        if (issue.parent?.id) {
+        // Derive parent from ID pattern if not already set
+        if (!issue.parent?.id) {
+          const lastDot = issue.id.lastIndexOf('.')
+          if (lastDot !== -1) {
+            const suffix = issue.id.slice(lastDot + 1)
+            if (/^\d+$/.test(suffix)) {
+              const derivedParentId = issue.id.slice(0, lastDot)
+              const parentIssue = issueMap.get(derivedParentId)
+              if (parentIssue) {
+                issue.parent = {
+                  id: parentIssue.id,
+                  title: parentIssue.title,
+                  status: parentIssue.status,
+                  priority: parentIssue.priority,
+                }
+              }
+            }
+          }
+        } else {
+          // Enrich explicit parent with full details from loaded data
           const parentIssue = issueMap.get(issue.parent.id)
           if (parentIssue) {
             issue.parent = {
@@ -154,7 +174,7 @@ export function useIssues() {
       }
       for (const [epicId, children] of childrenByParent) {
         const epic = issueMap.get(epicId)
-        if (epic && !epic.children?.length) {
+        if (epic) {
           epic.children = children
         }
       }
@@ -229,8 +249,21 @@ export function useIssues() {
       // Build parent-child relationships from the data we already have (no bdShow needed)
       const issueMap = new Map(newIssues.map(i => [i.id, i]))
 
+      // Derive parent from dot notation if not set (bd >= 0.50)
       for (const issue of newIssues) {
-        if (issue.parent?.id) {
+        if (!issue.parent?.id) {
+          const lastDot = issue.id.lastIndexOf('.')
+          if (lastDot !== -1) {
+            const suffix = issue.id.slice(lastDot + 1)
+            if (/^\d+$/.test(suffix)) {
+              const derivedParentId = issue.id.slice(0, lastDot)
+              const parentIssue = issueMap.get(derivedParentId)
+              if (parentIssue) {
+                issue.parent = { id: parentIssue.id, title: parentIssue.title, status: parentIssue.status, priority: parentIssue.priority }
+              }
+            }
+          }
+        } else {
           const parentIssue = issueMap.get(issue.parent.id)
           if (parentIssue) {
             issue.parent = { id: parentIssue.id, title: parentIssue.title, status: parentIssue.status, priority: parentIssue.priority }
@@ -248,7 +281,7 @@ export function useIssues() {
       }
       for (const [epicId, children] of childrenByParent) {
         const epic = issueMap.get(epicId)
-        if (epic && !epic.children?.length) {
+        if (epic) {
           epic.children = children
         }
       }
@@ -685,10 +718,29 @@ export function useIssues() {
         return null
       }
 
+      // Enrich parent/children from loaded issues list (bd >= 0.50 doesn't return these)
+      if (!data.parent?.id) {
+        const lastDot = data.id.lastIndexOf('.')
+        if (lastDot !== -1 && /^\d+$/.test(data.id.slice(lastDot + 1))) {
+          const parentIssue = issues.value.find(i => i.id === data.id.slice(0, lastDot))
+          if (parentIssue) {
+            data.parent = { id: parentIssue.id, title: parentIssue.title, status: parentIssue.status, priority: parentIssue.priority }
+          }
+        }
+      }
+      if (!data.children?.length) {
+        const prefix = data.id + '.'
+        const children = issues.value
+          .filter(i => i.id.startsWith(prefix) && !i.id.slice(prefix.length).includes('.'))
+          .map(i => ({ id: i.id, title: i.title, status: i.status, priority: i.priority }))
+        if (children.length) {
+          data.children = children
+        }
+      }
+
       selectedIssue.value = data
 
-      // Also update the issue in the issues array to preserve parent/children info
-      // (bd list doesn't return parent field, but bd show does)
+      // Also update the issue in the issues array to keep in sync
       const index = issues.value.findIndex(i => i.id === id)
       if (index !== -1) {
         issues.value[index] = data
