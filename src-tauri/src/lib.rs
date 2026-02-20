@@ -25,6 +25,12 @@ static LAST_KNOWN_MTIME: LazyLock<Mutex<HashMap<String, std::time::SystemTime>>>
 // Configurable CLI binary name (default: "bd")
 static CLI_BINARY: LazyLock<Mutex<String>> = LazyLock::new(|| Mutex::new("bd".to_string()));
 
+// Per-project mutex to prevent concurrent bd/Dolt access.
+// bd 0.55 uses embedded Dolt which crashes (SIGSEGV) when two bd processes
+// access the same database simultaneously. This serializes all bd calls per project.
+static BD_PROJECT_LOCKS: LazyLock<Mutex<HashMap<String, std::sync::Arc<Mutex<()>>>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
+
 // Cached CLI client info — detected once on first use
 // Stores: (client_type, major, minor, patch)
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -883,6 +889,19 @@ fn uses_jsonl_files() -> bool {
     }
 }
 
+/// Returns true if `bd list --all` works correctly.
+/// The --all flag was buggy before bd 0.55.0 (returned incorrect results).
+/// - br: NO
+/// - bd >= 0.55.0: YES
+/// - bd < 0.55.0: NO (use 2 separate calls instead)
+/// - unknown: NO (safe default)
+fn supports_list_all_flag() -> bool {
+    match get_cli_client_info() {
+        Some((CliClient::Bd, major, minor, _)) => major > 0 || minor >= 55,
+        _ => false,
+    }
+}
+
 /// Returns true if the CLI uses the Dolt backend (inverse of uses_jsonl_files).
 /// - br: NEVER (frozen on SQLite+JSONL architecture)
 /// - bd >= 0.50.0: YES (Dolt only)
@@ -962,6 +981,15 @@ fn execute_bd(command: &str, args: &[String], cwd: Option<&str>) -> Result<Strin
 
     let binary = get_cli_binary();
     log_info!("[bd] {} {} | cwd: {}", binary, full_args.join(" "), working_dir);
+
+    // Acquire per-project lock to prevent concurrent Dolt access (causes SIGSEGV).
+    let project_lock = {
+        let mut locks = BD_PROJECT_LOCKS.lock().unwrap();
+        locks.entry(working_dir.clone())
+            .or_insert_with(|| std::sync::Arc::new(Mutex::new(())))
+            .clone()
+    };
+    let _guard = project_lock.lock().unwrap();
 
     let output = new_command(&binary)
         .args(&full_args)
@@ -1252,6 +1280,36 @@ async fn bd_repair_database(cwd: Option<String>) -> Result<RepairResult, String>
 struct MigrateResult {
     success: bool,
     message: String,
+}
+
+/// Remove orphaned Dolt lock files that block database access.
+///
+/// Uses `lsof` to check if any process actually holds the lock file open.
+/// - If no process has it open → orphaned lock from a crashed/finished bd → safe to remove.
+/// - If a process has it open → active agent (Claude Code, Gastown, etc.) → leave it alone.
+///
+/// This is the only reliable way to distinguish a stale lock from an active one,
+/// regardless of timing. bd 0.55+ in embedded Dolt mode leaves noms/LOCK behind
+/// after every command, so these accumulate and block subsequent operations.
+
+#[derive(Debug, serde::Serialize)]
+struct CleanupResult {
+    removed: Vec<String>,
+}
+
+/// Stale lock cleanup — currently a no-op.
+///
+/// bd 0.55 in embedded Dolt mode leaves lock files (dolt-access.lock, noms/LOCK)
+/// after every command. These locks are NOT safe to remove externally:
+/// - Removing noms/LOCK causes Dolt SIGSEGV (nil pointer dereference) on next bd call
+/// - Removing dolt-access.lock also triggers the same Dolt crash
+///
+/// This is a bd/Dolt bug that needs to be fixed upstream. The command is kept as a
+/// no-op so the frontend call doesn't need to change when a fix becomes available.
+#[tauri::command]
+async fn bd_cleanup_stale_locks(cwd: Option<String>) -> Result<CleanupResult, String> {
+    let _ = cwd; // suppress unused warning
+    Ok(CleanupResult { removed: vec![] })
 }
 
 /// Check if a project needs Dolt migration.
@@ -1988,7 +2046,7 @@ pub struct PollData {
     pub ready_issues: Vec<Issue>,
 }
 
-/// Batched poll: sync once, then fetch open + closed + ready issues in sequence.
+/// Batched poll: sync once, then fetch all issues + ready in 2 commands (was 3).
 /// Replaces 3 separate IPC calls (bd_list + bd_list(closed) + bd_ready) with one.
 #[tauri::command]
 async fn bd_poll_data(cwd: Option<String>) -> Result<PollData, String> {
@@ -1999,13 +2057,21 @@ async fn bd_poll_data(cwd: Option<String>) -> Result<PollData, String> {
     // Single sync for the entire poll cycle
     sync_bd_database(cwd_ref);
 
-    // Fetch open issues (no --status flag = non-closed)
-    let open_output = execute_bd("list", &["--limit=0".to_string()], cwd_ref)?;
-    let raw_open = parse_issues_tolerant(&open_output, "bd_poll_data_open")?;
-
-    // Fetch closed issues
-    let closed_output = execute_bd("list", &["--status=closed".to_string(), "--limit=0".to_string()], cwd_ref)?;
-    let raw_closed = parse_issues_tolerant(&closed_output, "bd_poll_data_closed")?;
+    // Fetch issues: single --all call for bd >= 0.55, fallback to 2 calls for older versions
+    let (raw_open, raw_closed) = if supports_list_all_flag() {
+        let all_output = execute_bd("list", &["--all".to_string(), "--limit=0".to_string()], cwd_ref)?;
+        let raw_all = parse_issues_tolerant(&all_output, "bd_poll_data_all")?;
+        let (open, closed): (Vec<_>, Vec<_>) = raw_all.into_iter()
+            .partition(|issue: &BdRawIssue| issue.status != "closed");
+        (open, closed)
+    } else {
+        let open_output = execute_bd("list", &["--limit=0".to_string()], cwd_ref)?;
+        let closed_output = execute_bd("list", &["--status=closed".to_string(), "--limit=0".to_string()], cwd_ref)?;
+        (
+            parse_issues_tolerant(&open_output, "bd_poll_data_open")?,
+            parse_issues_tolerant(&closed_output, "bd_poll_data_closed")?,
+        )
+    };
 
     // Fetch ready issues
     let ready_output = execute_bd("ready", &[], cwd_ref)?;
@@ -2041,7 +2107,8 @@ async fn bd_poll_data(cwd: Option<String>) -> Result<PollData, String> {
 }
 
 /// Get the latest mtime across all beads database files.
-/// - Dolt backend (bd >= 0.50.0): checks .beads/ dir, .beads/.dolt/ dir, and manifest files
+/// - Dolt backend (bd >= 0.50.0): checks .beads/ dir, .beads/.dolt/ (legacy) or
+///   .beads/dolt/<name>/.dolt/ (bd 0.52+ nested layout), and manifest files
 /// - SQLite backend: checks beads.db, beads.db-wal, and optionally issues.jsonl
 fn get_beads_mtime(beads_dir: &std::path::Path) -> Option<std::time::SystemTime> {
     if project_uses_dolt(beads_dir) {
@@ -2053,18 +2120,45 @@ fn get_beads_mtime(beads_dir: &std::path::Path) -> Option<std::time::SystemTime>
             if let Ok(t) = m.modified() { times.push(t); }
         }
 
-        // .beads/.dolt/ dir mtime
-        let dolt_dir = beads_dir.join(".dolt");
-        if let Ok(m) = fs::metadata(&dolt_dir) {
-            if let Ok(t) = m.modified() { times.push(t); }
+        // Collect all .dolt/ directories to check:
+        // - Legacy layout: .beads/.dolt/
+        // - Nested layout (bd 0.52+): .beads/dolt/<name>/.dolt/
+        let mut dolt_dirs: Vec<std::path::PathBuf> = Vec::new();
+
+        let legacy_dolt = beads_dir.join(".dolt");
+        if legacy_dolt.is_dir() {
+            dolt_dirs.push(legacy_dolt);
         }
 
-        // manifest files inside .dolt/
-        for name in &["manifest", "noms/manifest"] {
-            let p = dolt_dir.join(name);
-            if let Ok(m) = fs::metadata(&p) {
+        let nested_dolt = beads_dir.join("dolt");
+        if nested_dolt.is_dir() {
+            if let Ok(entries) = std::fs::read_dir(&nested_dolt) {
+                for entry in entries.flatten() {
+                    let sub_dolt = entry.path().join(".dolt");
+                    if sub_dolt.is_dir() {
+                        dolt_dirs.push(sub_dolt);
+                    }
+                }
+            }
+        }
+
+        // Check mtime of each .dolt/ dir and its manifest files
+        for dolt_dir in &dolt_dirs {
+            if let Ok(m) = fs::metadata(dolt_dir) {
                 if let Ok(t) = m.modified() { times.push(t); }
             }
+            for name in &["manifest", "noms/manifest"] {
+                let p = dolt_dir.join(name);
+                if let Ok(m) = fs::metadata(&p) {
+                    if let Ok(t) = m.modified() { times.push(t); }
+                }
+            }
+        }
+
+        // Also check issues.jsonl (Dolt exports to it for git sync)
+        let jsonl_path = beads_dir.join("issues.jsonl");
+        if let Ok(m) = fs::metadata(&jsonl_path) {
+            if let Ok(t) = m.modified() { times.push(t); }
         }
 
         times.into_iter().max()
@@ -2150,7 +2244,28 @@ async fn bd_list(options: ListOptions) -> Result<Vec<Issue>, String> {
 
     let mut args: Vec<String> = Vec::new();
 
-    if options.include_all.unwrap_or(false) {
+    // --all flag only works correctly on bd >= 0.55; for older versions, fallback to 2 calls
+    let use_all = options.include_all.unwrap_or(false);
+    if use_all && !supports_list_all_flag() {
+        // Fallback: fetch open + closed separately and merge
+        log_info!("[bd_list] --all requested but bd < 0.55 — falling back to 2 calls");
+        let mut fallback_args = args.clone();
+        fallback_args.push("--limit=0".to_string());
+
+        let open_output = execute_bd("list", &fallback_args, options.cwd.as_deref())?;
+        let open_issues = parse_issues_tolerant(&open_output, "bd_list_open")?;
+
+        fallback_args.push("--status=closed".to_string());
+        let closed_output = execute_bd("list", &fallback_args, options.cwd.as_deref())?;
+        let closed_issues = parse_issues_tolerant(&closed_output, "bd_list_closed")?;
+
+        let mut all_issues = open_issues;
+        all_issues.extend(closed_issues);
+        log_info!("[bd_list] Found {} issues (fallback)", all_issues.len());
+        return Ok(all_issues.into_iter().map(transform_issue).collect());
+    }
+
+    if use_all {
         args.push("--all".to_string());
     }
     if let Some(ref statuses) = options.status {
@@ -2189,17 +2304,17 @@ async fn bd_count(options: CwdOptions) -> Result<CountResult, String> {
     // Sync database before reading to ensure data is up-to-date
     sync_bd_database(options.cwd.as_deref());
 
-    // Fetch both open and closed issues to match fetchIssues behavior
-    // Use --limit=0 to get all issues (bd defaults to 50)
-    let open_output = execute_bd("list", &["--limit=0".to_string()], options.cwd.as_deref())?;
-    let closed_output = execute_bd("list", &["--status=closed".to_string(), "--limit=0".to_string()], options.cwd.as_deref())?;
-
-    let open_issues = parse_issues_tolerant(&open_output, "bd_count_open")?;
-    let closed_issues = parse_issues_tolerant(&closed_output, "bd_count_closed")?;
-
-    // Combine all issues
-    let mut raw_issues = open_issues;
-    raw_issues.extend(closed_issues);
+    // Fetch all issues: single --all call for bd >= 0.55, fallback to 2 calls for older versions
+    let raw_issues = if supports_list_all_flag() {
+        let all_output = execute_bd("list", &["--all".to_string(), "--limit=0".to_string()], options.cwd.as_deref())?;
+        parse_issues_tolerant(&all_output, "bd_count_all")?
+    } else {
+        let open_output = execute_bd("list", &["--limit=0".to_string()], options.cwd.as_deref())?;
+        let closed_output = execute_bd("list", &["--status=closed".to_string(), "--limit=0".to_string()], options.cwd.as_deref())?;
+        let mut issues = parse_issues_tolerant(&open_output, "bd_count_open")?;
+        issues.extend(parse_issues_tolerant(&closed_output, "bd_count_closed")?);
+        issues
+    };
 
     let mut by_type: HashMap<String, usize> = HashMap::new();
     by_type.insert("bug".to_string(), 0);
@@ -3177,6 +3292,8 @@ struct CompatibilityInfo {
     uses_jsonl_files: bool,
     #[serde(rename = "usesDoltBackend")]
     uses_dolt_backend: bool,
+    #[serde(rename = "supportsListAllFlag")]
+    supports_list_all_flag: bool,
     warnings: Vec<String>,
 }
 
@@ -3218,6 +3335,7 @@ async fn check_bd_compatibility() -> CompatibilityInfo {
         supports_daemon_flag: supports_daemon_flag(),
         uses_jsonl_files: uses_jsonl_files(),
         uses_dolt_backend: uses_dolt_backend(),
+        supports_list_all_flag: supports_list_all_flag(),
         warnings,
     }
 }
@@ -3935,6 +4053,7 @@ pub fn run() {
             bd_repair_database,
             bd_migrate_to_dolt,
             bd_check_needs_migration,
+            bd_cleanup_stale_locks,
             bd_check_changed,
             bd_reset_mtime,
             bd_poll_data,

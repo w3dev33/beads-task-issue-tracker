@@ -110,19 +110,11 @@ export function useIssues() {
     error.value = null
 
     try {
-      // Workaround for bd CLI bug: --all flag returns incorrect results
-      // Instead, we make two parallel calls and merge the results:
-      // 1. bd list (returns non-closed issues correctly)
-      // 2. bd list --status=closed (returns closed issues)
+      // Single call with --all to get all issues (bd >= 0.55 fixed the --all flag)
       const path = getPath()
 
-      const [openIssues, closedIssues] = await Promise.all([
-        bdList({ path }),
-        bdList({ path, status: ['closed'] }),
-      ])
-
-      const mergedIssues = [...(openIssues || []), ...(closedIssues || [])]
-      const newIssues = deduplicateIssues(mergedIssues)
+      const allIssues = await bdList({ path, includeAll: true })
+      const newIssues = deduplicateIssues(allIssues || [])
 
       // Build parent-child relationships from the data we already have (no bdShow needed)
       const issueMap = new Map(newIssues.map(i => [i.id, i]))

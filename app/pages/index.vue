@@ -214,7 +214,7 @@ const openFolderPicker = () => {
 const handleOnboardingFolderSelect = async (path: string) => {
   setPath(path)
   await fetchIssues()
-  await fetchStats(issues.value)
+  fetchStats(issues.value)
 }
 
 // Edit context for header
@@ -355,9 +355,9 @@ onMounted(async () => {
     const migrationNeeded = await checkMigrationNeeded()
     if (!migrationNeeded) {
       if (import.meta.client) {
-        // Start native file watcher (if project path available)
+        // Start native file watcher (fire-and-forget — doesn't block data loading)
         if (beadsPath.value) {
-          await startListening(beadsPath.value)
+          startListening(beadsPath.value)
         }
 
         // Start adaptive polling (handles visibility, focus, idle internally)
@@ -371,6 +371,7 @@ onMounted(async () => {
           bdDotNotationParent.value = info.usesDoltBackend
         }).catch(() => {})
       }
+      // Sequential: bd commands can't run concurrently (Dolt SIGSEGV on parallel access)
       fetchIssues().then(() => fetchStats(issues.value))
     }
   }
@@ -566,19 +567,30 @@ const handlePathChange = async () => {
   isEditMode.value = false
   isCreatingNew.value = false
   clearIssues()  // Reset issue list so new-issue detection doesn't flash all rows
-  // Switch file watcher to new project path
-  if (beadsPath.value) {
-    await switchProject(beadsPath.value)
-  }
-  // Invalidate all cached mtimes so the next poll cycle detects the new project
-  await bdResetMtime()
-  // Per-project storage is automatically isolated via useProjectStorage
-  // Check migration BEFORE fetching issues to prevent bd auto-migration
-  const migrationNeeded = await checkMigrationNeeded()
+  // Stop polling + watcher during project switch to prevent:
+  // 1. Concurrent bd calls from old project's poll cycle
+  // 2. Watcher detecting bd writes during fetchIssues and triggering cascade polls
+  stopPolling()
+  await stopListening()
+  // Pre-flight checks in parallel: cleanup stale locks + migration check + mtime reset
+  const [, , migrationNeeded] = await Promise.all([
+    bdCleanupStaleLocks(beadsPath.value),
+    bdResetMtime(),
+    checkMigrationNeeded(),
+  ])
   if (!migrationNeeded) {
+    // IMPORTANT: bd commands must run sequentially — concurrent Dolt embedded access
+    // causes SIGSEGV crashes (nil pointer dereference in dolthub/driver).
     await fetchIssues()
-    await fetchStats(issues.value)
+    // Fire-and-forget: stats update doesn't block issue list display
+    fetchStats(issues.value)
   }
+  // Resume watcher + polling AFTER data is loaded (avoids self-triggered cascade)
+  if (beadsPath.value) {
+    await startListening(beadsPath.value)
+    notifySelfWrite()  // Arm cooldown so watcher ignores bd's recent .beads/ writes
+  }
+  startPolling()
 }
 
 const handleReset = () => {

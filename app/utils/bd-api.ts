@@ -75,6 +75,14 @@ export async function bdMigrateToDolt(path?: string): Promise<MigrateResult> {
   return invoke<MigrateResult>('bd_migrate_to_dolt', { cwd: path })
 }
 
+// Remove stale Dolt lock files that block database access (left by crashed processes)
+export async function bdCleanupStaleLocks(path?: string): Promise<{ removed: string[] }> {
+  if (!isTauri()) {
+    return { removed: [] }
+  }
+  return invoke<{ removed: string[] }>('bd_cleanup_stale_locks', { cwd: path })
+}
+
 // ============================================================================
 // Polling Optimization API
 // ============================================================================
@@ -445,6 +453,8 @@ export interface BdCompatibilityInfo {
   supportsDaemonFlag: boolean
   usesJsonlFiles: boolean
   usesDoltBackend: boolean
+  /** bd >= 0.55: --all flag works correctly for bd list */
+  supportsListAllFlag: boolean
   warnings: string[]
 }
 
@@ -459,6 +469,7 @@ export async function checkBdCompatibility(): Promise<BdCompatibilityInfo> {
     supportsDaemonFlag: false,
     usesJsonlFiles: false,
     usesDoltBackend: false,
+    supportsListAllFlag: false,
     warnings: [],
   }
 }

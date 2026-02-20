@@ -85,6 +85,10 @@ const statusOrder: Record<IssueStatus, number> = {
   open: 1,
   blocked: 2,
   closed: 3,
+  deferred: 4,
+  pinned: 5,
+  hooked: 6,
+  tombstone: 7,
 }
 
 const priorityOrder: Record<IssuePriority, number> = {

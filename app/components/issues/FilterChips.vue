@@ -45,6 +45,10 @@ const statusLabels: Record<IssueStatus, string> = {
   in_progress: 'In Progress',
   blocked: 'Blocked',
   closed: 'Closed',
+  deferred: 'Deferred',
+  tombstone: 'Tombstone',
+  pinned: 'Pinned',
+  hooked: 'Hooked',
 }
 
 const priorityLabels: Record<IssuePriority, string> = {

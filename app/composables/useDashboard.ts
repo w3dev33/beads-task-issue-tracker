@@ -75,14 +75,16 @@ export function useDashboard() {
     return stats
   }
 
+  // Prefetch bdReady data — call this before fetchIssues to overlap the two API calls
+  const prefetchReady = () => bdReady(getPath()).catch(() => [] as Issue[])
+
   // Fetch stats - now accepts issues to avoid extra API calls
-  const fetchStats = async (issues?: Issue[]) => {
+  // Optional prefetchedReady: a Promise<Issue[]> from prefetchReady() already in flight
+  const fetchStats = async (issues?: Issue[], prefetchedReady?: Promise<Issue[]>) => {
     isLoading.value = true
     error.value = null
 
     try {
-      const path = getPath()
-
       // Preserve current ready count to avoid flash
       const currentReady = stats.value?.ready ?? 0
 
@@ -97,8 +99,10 @@ export function useDashboard() {
       // Restore ready count while waiting for bdReady
       stats.value.ready = currentReady
 
-      // Only fetch ready issues from API (specific filtering logic)
-      const readyData = await bdReady(path)
+      // Use prefetched ready data if available, otherwise fetch now
+      const readyData = prefetchedReady
+        ? await prefetchedReady
+        : await bdReady(getPath())
       readyIssues.value = readyData || []
 
       // Update ready count in stats
@@ -132,6 +136,7 @@ export function useDashboard() {
     readyIssues,
     isLoading,
     error,
+    prefetchReady,
     fetchStats,
     computeStatsFromIssues,
     updateFromPollData,
