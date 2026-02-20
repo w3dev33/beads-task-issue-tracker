@@ -206,32 +206,34 @@ const currentIsFavorite = computed(() => isFavorite(beadsPath.value))
         Select Project
       </Button>
 
-      <TooltipProvider v-if="isCustomPath">
-        <Tooltip>
-          <TooltipTrigger as-child>
-            <Button
-              variant="ghost"
-              size="icon"
-              class="h-7 w-7"
-              @click="handleToggleFavorite"
-            >
-              <svg
-                class="w-3 h-3"
-                :class="currentIsFavorite ? 'text-yellow-500 fill-yellow-500' : 'text-muted-foreground'"
-                viewBox="0 0 24 24"
-                :fill="currentIsFavorite ? 'currentColor' : 'none'"
-                stroke="currentColor"
-                stroke-width="2"
+      <template v-if="isCustomPath">
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger as-child>
+              <Button
+                variant="ghost"
+                size="icon"
+                class="h-7 w-7"
+                @click="handleToggleFavorite"
               >
-                <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
-              </svg>
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>
-            {{ currentIsFavorite ? 'Remove selected from favorites' : 'Add to favorites' }}
-          </TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
+                <svg
+                  class="w-3 h-3"
+                  :class="currentIsFavorite ? 'text-yellow-500 fill-yellow-500' : 'text-muted-foreground'"
+                  viewBox="0 0 24 24"
+                  :fill="currentIsFavorite ? 'currentColor' : 'none'"
+                  stroke="currentColor"
+                  stroke-width="2"
+                >
+                  <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+                </svg>
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              {{ currentIsFavorite ? 'Remove selected from favorites' : 'Add to favorites' }}
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      </template>
 
     </div>
 
@@ -259,52 +261,56 @@ const currentIsFavorite = computed(() => isFavorite(beadsPath.value))
           <span class="ml-auto">({{ favorites.length }})</span>
         </button>
         <!-- Sort mode toggle (hidden when collapsed) -->
-        <TooltipProvider v-show="!isFavoritesCollapsed">
-          <Tooltip>
-            <TooltipTrigger as-child>
-              <button
-                class="text-muted-foreground hover:text-foreground transition-colors p-0.5 rounded"
-                @click.stop="toggleSortMode"
-              >
-                <!-- A-Z ascending icon -->
-                <svg v-if="sortMode === 'alpha'" class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M3 6h7" /><path d="M3 12h5" /><path d="M3 18h3" />
-                  <path d="M17 18V6" /><path d="M14 9l3-3 3 3" />
-                </svg>
-                <!-- Z-A descending icon -->
-                <svg v-else-if="sortMode === 'alpha-desc'" class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M3 6h3" /><path d="M3 12h5" /><path d="M3 18h7" />
-                  <path d="M17 6v12" /><path d="M14 15l3 3 3-3" />
-                </svg>
-                <!-- Grip icon for manual mode -->
-                <svg v-else class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <circle cx="9" cy="6" r="1" fill="currentColor" /><circle cx="15" cy="6" r="1" fill="currentColor" />
-                  <circle cx="9" cy="12" r="1" fill="currentColor" /><circle cx="15" cy="12" r="1" fill="currentColor" />
-                  <circle cx="9" cy="18" r="1" fill="currentColor" /><circle cx="15" cy="18" r="1" fill="currentColor" />
-                </svg>
-              </button>
-            </TooltipTrigger>
-            <TooltipContent>
-              {{ sortMode === 'alpha' ? 'A-Z (click for Z-A)' : sortMode === 'alpha-desc' ? 'Z-A (click for manual)' : 'Manual (click for A-Z)' }}
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
+        <template v-if="!isFavoritesCollapsed">
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger as-child>
+                <button
+                  class="text-muted-foreground hover:text-foreground transition-colors p-0.5 rounded"
+                  @click.stop="toggleSortMode"
+                >
+                  <!-- A-Z ascending icon -->
+                  <svg v-if="sortMode === 'alpha'" class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M3 6h7" /><path d="M3 12h5" /><path d="M3 18h3" />
+                    <path d="M17 18V6" /><path d="M14 9l3-3 3 3" />
+                  </svg>
+                  <!-- Z-A descending icon -->
+                  <svg v-else-if="sortMode === 'alpha-desc'" class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M3 6h3" /><path d="M3 12h5" /><path d="M3 18h7" />
+                    <path d="M17 6v12" /><path d="M14 15l3 3 3-3" />
+                  </svg>
+                  <!-- Grip icon for manual mode -->
+                  <svg v-else class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="9" cy="6" r="1" fill="currentColor" /><circle cx="15" cy="6" r="1" fill="currentColor" />
+                    <circle cx="9" cy="12" r="1" fill="currentColor" /><circle cx="15" cy="12" r="1" fill="currentColor" />
+                    <circle cx="9" cy="18" r="1" fill="currentColor" /><circle cx="15" cy="18" r="1" fill="currentColor" />
+                  </svg>
+                </button>
+              </TooltipTrigger>
+              <TooltipContent>
+                {{ sortMode === 'alpha' ? 'A-Z (click for Z-A)' : sortMode === 'alpha-desc' ? 'Z-A (click for manual)' : 'Manual (click for A-Z)' }}
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        </template>
         <!-- Reset to A-Z (hidden when collapsed) -->
-        <TooltipProvider v-if="hasReordered && !isFavoritesCollapsed">
-          <Tooltip>
-            <TooltipTrigger as-child>
-              <button
-                class="text-muted-foreground hover:text-foreground transition-colors p-0.5 rounded"
-                @click.stop="resetSortOrder"
-              >
-                <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M3 12a9 9 0 1 0 9-9" /><polyline points="3 3 3 7 7 7" /><path d="M3 3l4 4" />
-                </svg>
-              </button>
-            </TooltipTrigger>
-            <TooltipContent>Reset to A-Z</TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
+        <template v-if="hasReordered && !isFavoritesCollapsed">
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger as-child>
+                <button
+                  class="text-muted-foreground hover:text-foreground transition-colors p-0.5 rounded"
+                  @click.stop="resetSortOrder"
+                >
+                  <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M3 12a9 9 0 1 0 9-9" /><polyline points="3 3 3 7 7 7" /><path d="M3 3l4 4" />
+                  </svg>
+                </button>
+              </TooltipTrigger>
+              <TooltipContent>Reset to A-Z</TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        </template>
       </div>
       <div v-show="!isFavoritesCollapsed" ref="favoritesListRef" class="flex flex-col gap-1">
         <div v-for="fav in sortedFavorites" :key="fav.path" :data-path="fav.path" class="relative group">
