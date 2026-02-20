@@ -18,12 +18,18 @@ export interface Favorite {
   addedAt: string
 }
 
+// Normalize path by stripping trailing slashes for consistent comparison
+function normalizePath(p: string): string {
+  return p.replace(/\/+$/, '')
+}
+
 // Shared state across all components
 const favorites = ref<Favorite[]>([])
 const sortMode = ref<FavoritesSortMode>('alpha')
 const hasReordered = ref(false)
 let isInitialized = false
 let isValidating = false
+let watcherRegistered = false
 
 function initSortModeFromStorage() {
   if (import.meta.client) {
@@ -40,7 +46,15 @@ function initFromStorage() {
     if (stored) {
       try {
         const parsedFavorites = JSON.parse(stored) as Favorite[]
-        favorites.value = parsedFavorites
+        // Deduplicate by normalized path (keep first occurrence)
+        const seen = new Set<string>()
+        const deduped = parsedFavorites.filter((fav) => {
+          const key = normalizePath(fav.path)
+          if (seen.has(key)) return false
+          seen.add(key)
+          return true
+        })
+        favorites.value = deduped
 
         // Validate favorites paths exist asynchronously
         if (parsedFavorites.length > 0 && !isValidating) {
@@ -87,8 +101,9 @@ export function useFavorites() {
   // Initialize from localStorage
   initFromStorage()
 
-  // Watch for changes and persist to localStorage
-  if (import.meta.client) {
+  // Watch for changes and persist to localStorage (register only once)
+  if (import.meta.client && !watcherRegistered) {
+    watcherRegistered = true
     watch(
       favorites,
       (newValue) => {
@@ -109,8 +124,9 @@ export function useFavorites() {
   })
 
   const addFavorite = (path: string, name?: string) => {
-    // Don't add duplicates
-    if (favorites.value.some((f) => f.path === path)) {
+    const normalized = normalizePath(path)
+    // Don't add duplicates (compare normalized paths)
+    if (favorites.value.some((f) => normalizePath(f.path) === normalized)) {
       return false
     }
 
@@ -119,7 +135,7 @@ export function useFavorites() {
 
     // Use array reassignment instead of push() for guaranteed reactivity
     favorites.value = [...favorites.value, {
-      path,
+      path: normalized,
       name: folderName,
       addedAt: new Date().toISOString(),
     }]
@@ -127,16 +143,19 @@ export function useFavorites() {
   }
 
   const removeFavorite = (path: string) => {
-    const index = favorites.value.findIndex((f) => f.path === path)
+    const normalized = normalizePath(path)
+    const index = favorites.value.findIndex((f) => normalizePath(f.path) === normalized)
     if (index !== -1) {
-      favorites.value.splice(index, 1)
+      // Use array reassignment (filter) instead of splice for guaranteed reactivity
+      favorites.value = favorites.value.filter((_, i) => i !== index)
       return true
     }
     return false
   }
 
   const isFavorite = (path: string) => {
-    return favorites.value.some((f) => f.path === path)
+    const normalized = normalizePath(path)
+    return favorites.value.some((f) => normalizePath(f.path) === normalized)
   }
 
   const renameFavorite = (path: string, newName: string) => {

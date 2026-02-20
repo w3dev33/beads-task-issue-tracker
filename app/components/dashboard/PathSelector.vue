@@ -279,11 +279,11 @@ const currentIsFavorite = computed(() => isFavorite(beadsPath.value))
         </TooltipProvider>
       </div>
       <div v-show="!isFavoritesCollapsed" ref="favoritesListRef" class="flex flex-col gap-1">
-        <div v-for="fav in sortedFavorites" :key="fav.path" :data-path="fav.path">
+        <div v-for="fav in sortedFavorites" :key="fav.path" :data-path="fav.path" class="relative group">
           <Button
             :variant="beadsPath === fav.path ? 'default' : 'ghost'"
             size="sm"
-            class="h-7 justify-start text-xs gap-0 group w-full"
+            class="h-7 justify-start text-xs gap-0 w-full pr-6"
             :class="{ 'opacity-50 cursor-wait': isLoading && beadsPath !== fav.path }"
             :disabled="isLoading"
             @click="handleSelectFavorite(fav.path)"
@@ -321,19 +321,24 @@ const currentIsFavorite = computed(() => isFavorite(beadsPath.value))
               <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
             </svg>
             <span class="truncate flex-1 text-left">{{ fav.name }}</span>
+          </Button>
+          <!-- Remove button - outside Button to avoid click capture -->
+          <button
+            v-if="!isLoading"
+            class="absolute right-0.5 top-1/2 -translate-y-1/2 p-1 rounded opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
+            @click.stop.prevent="handleRemoveFavorite(fav.path, $event)"
+          >
             <svg
-              v-if="!isLoading"
-              class="w-3 h-3 shrink-0 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity"
+              class="w-3.5 h-3.5"
               viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"
               stroke-width="2"
-              @click="handleRemoveFavorite(fav.path, $event)"
             >
               <line x1="18" y1="6" x2="6" y2="18" />
               <line x1="6" y1="6" x2="18" y2="18" />
             </svg>
-          </Button>
+          </button>
         </div>
       </div>
     </div>
