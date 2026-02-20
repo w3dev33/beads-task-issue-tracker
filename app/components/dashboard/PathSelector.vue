@@ -22,12 +22,35 @@ const { favorites, sortedFavorites, sortMode, hasReordered, addFavorite, removeF
 const favoritesListRef = ref<HTMLElement | null>(null)
 let sortableInstance: Sortable | null = null
 
+// Apply counter-zoom on favorites list before SortableJS calculates coordinates
+const resetZoomOnPointerDown = (e: PointerEvent) => {
+  const target = e.target as HTMLElement
+  if (!target.closest('.drag-handle') || !favoritesListRef.value) return
+  const zoomableContent = document.getElementById('zoomable-content')
+  const parentZoom = parseFloat(zoomableContent?.style.zoom || '100')
+  if (parentZoom !== 100) {
+    favoritesListRef.value.style.zoom = `${10000 / parentZoom}%`
+  }
+}
+
+const restoreZoom = () => {
+  if (favoritesListRef.value) {
+    favoritesListRef.value.style.zoom = ''
+  }
+}
+
 const initSortable = () => {
   if (sortableInstance) {
     sortableInstance.destroy()
     sortableInstance = null
   }
   if (!favoritesListRef.value) return
+
+  // Listen on pointerdown to reset zoom before SortableJS kicks in
+  favoritesListRef.value.addEventListener('pointerdown', resetZoomOnPointerDown)
+  // Restore zoom if user releases without dragging
+  favoritesListRef.value.addEventListener('pointerup', restoreZoom)
+
   sortableInstance = Sortable.create(favoritesListRef.value, {
     handle: '.drag-handle',
     animation: 200,
@@ -37,6 +60,7 @@ const initSortable = () => {
     fallbackOnBody: true,
     disabled: !!props.isLoading,
     onEnd: (evt) => {
+      restoreZoom()
       if (evt.oldIndex == null || evt.newIndex == null || evt.oldIndex === evt.newIndex) return
       // Read new order from DOM data attributes before reverting
       const container = evt.from
@@ -64,7 +88,11 @@ const initSortable = () => {
 const isFavoritesCollapsed = useLocalStorage('beads:favoritesCollapsed', false)
 
 onMounted(initSortable)
-onBeforeUnmount(() => sortableInstance?.destroy())
+onBeforeUnmount(() => {
+  favoritesListRef.value?.removeEventListener('pointerdown', resetZoomOnPointerDown)
+  favoritesListRef.value?.removeEventListener('pointerup', restoreZoom)
+  sortableInstance?.destroy()
+})
 
 // Re-init when list becomes visible, update disabled state
 watch(() => props.isLoading, () => {
