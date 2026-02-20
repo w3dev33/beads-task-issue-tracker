@@ -2841,6 +2841,45 @@ async fn fs_list(path: Option<String>) -> Result<FsListResult, String> {
 const CURRENT_VERSION: &str = env!("CARGO_PKG_VERSION");
 const GITHUB_RELEASES_URL: &str = "https://api.github.com/repos/w3dev33/beads-task-issue-tracker/releases/latest";
 
+/// Get a GitHub token from `gh auth token` (if gh CLI is installed and authenticated).
+/// Raises the API rate limit from 60/hour (anonymous) to 5,000/hour (authenticated).
+fn get_github_token() -> Option<String> {
+    // Check GITHUB_TOKEN env var first
+    if let Ok(token) = env::var("GITHUB_TOKEN") {
+        if !token.is_empty() {
+            return Some(token);
+        }
+    }
+    // Fall back to gh CLI
+    let output = new_command("gh")
+        .args(&["auth", "token"])
+        .output()
+        .ok()?;
+    if output.status.success() {
+        let token = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        if !token.is_empty() {
+            return Some(token);
+        }
+    }
+    None
+}
+
+/// Build a reqwest client with GitHub auth if available.
+fn github_client() -> Result<reqwest::Client, String> {
+    reqwest::Client::builder()
+        .user_agent("beads-task-issue-tracker")
+        .build()
+        .map_err(|e| format!("Failed to create HTTP client: {}", e))
+}
+
+/// Add GitHub auth header to a request if a token is available.
+fn with_github_auth(req: reqwest::RequestBuilder) -> reqwest::RequestBuilder {
+    match get_github_token() {
+        Some(token) => req.bearer_auth(token),
+        None => req,
+    }
+}
+
 fn get_platform_string() -> &'static str {
     if cfg!(target_os = "macos") {
         "macos"
@@ -2896,13 +2935,9 @@ fn compare_versions(current: &str, latest: &str) -> bool {
 
 #[tauri::command]
 async fn check_for_updates() -> Result<UpdateInfo, String> {
-    let client = reqwest::Client::builder()
-        .user_agent("beads-task-issue-tracker")
-        .build()
-        .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
+    let client = github_client()?;
 
-    let response = client
-        .get(GITHUB_RELEASES_URL)
+    let response = with_github_auth(client.get(GITHUB_RELEASES_URL))
         .send()
         .await
         .map_err(|e| format!("Failed to fetch releases: {}", e))?;
@@ -2936,9 +2971,11 @@ async fn check_for_updates() -> Result<UpdateInfo, String> {
         .map(|a| a.browser_download_url.clone());
 
     // Fetch CHANGELOG.md via GitHub API (raw.githubusercontent CDN ignores query params for caching)
-    let changelog = client
-        .get("https://api.github.com/repos/w3dev33/beads-task-issue-tracker/contents/CHANGELOG.md")
-        .header("Accept", "application/vnd.github.raw+json")
+    let changelog = with_github_auth(
+        client
+            .get("https://api.github.com/repos/w3dev33/beads-task-issue-tracker/contents/CHANGELOG.md")
+            .header("Accept", "application/vnd.github.raw+json")
+    )
         .send()
         .await
         .ok()
@@ -2961,13 +2998,9 @@ async fn check_for_updates() -> Result<UpdateInfo, String> {
 
 #[tauri::command]
 async fn check_for_updates_demo() -> Result<UpdateInfo, String> {
-    let client = reqwest::Client::builder()
-        .user_agent("beads-task-issue-tracker")
-        .build()
-        .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
+    let client = github_client()?;
 
-    let response = client
-        .get(GITHUB_RELEASES_URL)
+    let response = with_github_auth(client.get(GITHUB_RELEASES_URL))
         .send()
         .await
         .map_err(|e| format!("Failed to fetch releases: {}", e))?;
@@ -2987,9 +3020,11 @@ async fn check_for_updates_demo() -> Result<UpdateInfo, String> {
         .map(|a| a.browser_download_url.clone());
 
     // Fetch CHANGELOG.md via GitHub API (raw.githubusercontent CDN ignores query params for caching)
-    let changelog = client
-        .get("https://api.github.com/repos/w3dev33/beads-task-issue-tracker/contents/CHANGELOG.md")
-        .header("Accept", "application/vnd.github.raw+json")
+    let changelog = with_github_auth(
+        client
+            .get("https://api.github.com/repos/w3dev33/beads-task-issue-tracker/contents/CHANGELOG.md")
+            .header("Accept", "application/vnd.github.raw+json")
+    )
         .send()
         .await
         .ok()
@@ -3035,13 +3070,9 @@ async fn check_bd_cli_update() -> Result<BdCliUpdateInfo, String> {
         _ => "https://github.com/steveyegge/beads/releases",
     };
 
-    let client = reqwest::Client::builder()
-        .user_agent("beads-task-issue-tracker")
-        .build()
-        .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
+    let client = github_client()?;
 
-    let response = client
-        .get(api_url)
+    let response = with_github_auth(client.get(api_url))
         .send()
         .await
         .map_err(|e| format!("Failed to fetch releases: {}", e))?;
