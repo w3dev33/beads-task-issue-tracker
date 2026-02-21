@@ -2,7 +2,7 @@
  * Pure helper functions for issue data manipulation.
  * Extracted from useIssues composable for testability.
  */
-import type { Issue } from '~/types/issue'
+import type { Issue, DashboardStats, IssueType, IssuePriority } from '~/types/issue'
 import type { IssueGroup } from '~/composables/useIssues'
 
 /**
@@ -322,4 +322,54 @@ export function groupIssues(
   }
 
   return groups
+}
+
+/**
+ * Compute dashboard stats from an issues array.
+ * Excludes tombstone issues. Groups open/deferred/pinned/hooked as "open".
+ */
+export function computeStatsFromIssues(issues: Issue[]): DashboardStats {
+  const stats: DashboardStats = {
+    total: issues.length,
+    open: 0,
+    inProgress: 0,
+    blocked: 0,
+    closed: 0,
+    ready: 0,
+    byType: { bug: 0, task: 0, feature: 0, epic: 0, chore: 0 },
+    byPriority: { p0: 0, p1: 0, p2: 0, p3: 0, p4: 0 },
+  }
+
+  const activeIssues = issues.filter((issue) => issue.status !== 'tombstone')
+  stats.total = activeIssues.length
+
+  for (const issue of activeIssues) {
+    switch (issue.status) {
+      case 'open':
+      case 'deferred':
+      case 'pinned':
+      case 'hooked':
+        stats.open++
+        break
+      case 'in_progress':
+        stats.inProgress++
+        break
+      case 'blocked':
+        stats.blocked++
+        break
+      case 'closed':
+        stats.closed++
+        break
+    }
+
+    if (issue.type in stats.byType) {
+      stats.byType[issue.type]++
+    }
+
+    if (issue.priority in stats.byPriority) {
+      stats.byPriority[issue.priority]++
+    }
+  }
+
+  return stats
 }
