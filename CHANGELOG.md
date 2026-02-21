@@ -1,5 +1,31 @@
 # Changelog
 
+## [1.21.0] - 2026-02-21
+
+> Requires **bd 0.55+** for optimal performance. Compatible with bd 0.50+ (with fallback).
+
+### Code Quality & Maintainability
+- **Refactor `index.vue`**: Reduced from 2533 to ~1250 lines (~51%) by extracting 2 composables and 4 components
+  - `useSidebarResize` composable — sidebar state and resize handlers
+  - `useIssueDialogs` composable — dialog state and 20+ handlers
+  - `IssueDetailHeader` component — deduplicates desktop/mobile detail header
+  - `DashboardContent` component — deduplicates desktop/mobile dashboard
+  - `IssueListPanel` component — deduplicates desktop/mobile issue list
+  - `DialogsLayer` component — groups 8 dialogs + image/markdown preview
+- **Extract pure logic** from composables into testable utility modules
+  - `issue-helpers.ts` — deduplication, natural sort, filtering, sorting, grouping, dashboard stats
+  - `favorites-helpers.ts` — path normalization, dedup, sorting
+
+### Testing
+- **Vitest setup** with jsdom environment, path aliases, and test/test:watch scripts
+- **179 unit tests** across 7 test files covering all pure utility functions
+  - `markdown.ts` — image/ref extraction, rendering, XSS sanitization
+  - `issue-helpers.ts` — deduplication, natural sort, filtering, sorting, epic grouping, dashboard stats
+  - `favorites-helpers.ts` — path normalization, dedup, sort modes
+  - `path.ts` — cross-platform path splitting and separator detection
+  - `open-url.ts` — URL validation, local path detection, URL normalization
+  - `hash.ts` — DJB2 hash determinism
+
 ## [1.20.1] - 2026-02-20
 
 > Requires **bd 0.55+** for optimal performance. Compatible with bd 0.50+ (with fallback).
