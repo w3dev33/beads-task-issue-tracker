@@ -1,35 +1,29 @@
 <script setup lang="ts">
-import type { Issue, ChildIssue, UpdateIssuePayload, IssueStatus, IssueType, IssuePriority } from '~/types/issue'
+import type { Issue, UpdateIssuePayload } from '~/types/issue'
 
 // Layout components
 import AppHeader from '~/components/layout/AppHeader.vue'
 import UpdateIndicator from '~/components/layout/UpdateIndicator.vue'
 import DebugPanel from '~/components/layout/DebugPanel.vue'
+import DialogsLayer from '~/components/layout/DialogsLayer.vue'
 
 // Dashboard components
 import PathSelector from '~/components/dashboard/PathSelector.vue'
 import FolderPicker from '~/components/dashboard/FolderPicker.vue'
 import KpiCard from '~/components/dashboard/KpiCard.vue'
-import StatusChart from '~/components/dashboard/StatusChart.vue'
-import PriorityChart from '~/components/dashboard/PriorityChart.vue'
-import QuickList from '~/components/dashboard/QuickList.vue'
+import DashboardContent from '~/components/dashboard/DashboardContent.vue'
 import OnboardingCard from '~/components/dashboard/OnboardingCard.vue'
 import PrerequisitesCard from '~/components/dashboard/PrerequisitesCard.vue'
 
-// Issues components
-import IssuesToolbar from '~/components/issues/IssuesToolbar.vue'
-import FilterChips from '~/components/issues/FilterChips.vue'
-import IssueTable from '~/components/issues/IssueTable.vue'
 
 // Details components
+import IssueDetailHeader from '~/components/details/IssueDetailHeader.vue'
 import IssuePreview from '~/components/details/IssuePreview.vue'
 import IssueForm from '~/components/details/IssueForm.vue'
 import CommentSection from '~/components/details/CommentSection.vue'
 
-// Badge components
-import TypeBadge from '~/components/issues/TypeBadge.vue'
-import StatusBadge from '~/components/issues/StatusBadge.vue'
-import PriorityBadge from '~/components/issues/PriorityBadge.vue'
+// Issues components
+import IssueListPanel from '~/components/issues/IssueListPanel.vue'
 
 // UI components
 import { Button } from '~/components/ui/button'
@@ -48,16 +42,12 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '~/components/ui/tooltip'
-import ImagePreviewDialog from '~/components/ui/image-preview/ImagePreviewDialog.vue'
-import MarkdownPreviewDialog from '~/components/ui/markdown-preview/MarkdownPreviewDialog.vue'
 
 // Composables
 const { filters, toggleStatus, toggleType, togglePriority, toggleAssignee, clearFilters, setStatusFilter, setSearch, toggleLabelFilter } = useFilters()
-const imagePreview = useImagePreview()
-const markdownPreview = useMarkdownPreview()
 const { columns, toggleColumn, setColumns, resetColumns } = useColumnConfig()
 const { beadsPath, hasStoredPath } = useBeadsPath()
-const { notify, success: notifySuccess, error: notifyError } = useNotification()
+const { success: notifySuccess, error: notifyError } = useNotification()
 const { favorites } = useFavorites()
 const {
   issues,
@@ -67,7 +57,6 @@ const {
   selectedIssue,
   isLoading,
   isUpdating,
-  error: issueError,
   // Pagination
   hasMore,
   loadMore,
@@ -82,15 +71,8 @@ const {
   fetchIssue,
   createIssue,
   updateIssue,
-  closeIssue,
-  deleteIssue,
   selectIssue,
   addComment,
-  addDependency,
-  removeDependency,
-  addRelation,
-  removeRelation,
-  checkForChanges,
   clearIssues,
   newlyAddedIds,
 } = useIssues()
@@ -100,87 +82,13 @@ const { showDebugPanel, showSettingsDialog } = useAppMenu()
 const { needsRepair, affectedProject, isRepairing, repairError, repairProgress, repair: repairDatabase, repairAll, dismiss: dismissRepair } = useRepairDatabase()
 const { needsMigration, affectedProject: migrateAffectedProject, isMigrating, migrateError, migrate: migrateToDolt, checkProject: checkMigrationNeeded, dismiss: dismissMigration } = useMigrateToDolt()
 
-// Sidebar states (persisted)
-const isLeftSidebarOpen = useLocalStorage('beads:leftSidebar', true)
-const isRightSidebarOpen = useLocalStorage('beads:rightSidebar', true)
+// Sidebar resize
+const { isLeftSidebarOpen, isRightSidebarOpen, leftSidebarWidth, rightSidebarWidth, isResizing, startResizeLeft, startResizeRight } = useSidebarResize()
 
 // Close right sidebar on init if no issue selected
 if (import.meta.client && !selectedIssue.value) {
   isRightSidebarOpen.value = false
 }
-const isChartsCollapsed = useProjectStorage('chartsCollapsed', true)
-const isInProgressCollapsed = useProjectStorage('inProgressCollapsed', true)
-const isReadyCollapsed = useProjectStorage('readyCollapsed', true)
-const leftSidebarWidth = useLocalStorage('beads:leftSidebarWidth', 360)
-const rightSidebarWidth = useLocalStorage('beads:rightSidebarWidth', 484)
-
-// Sidebar resize
-const isResizingLeft = ref(false)
-const isResizingRight = ref(false)
-const startX = ref(0)
-const startWidth = ref(0)
-
-const startResizeLeft = (e: MouseEvent) => {
-  e.preventDefault()
-  // Clear any existing text selection
-  window.getSelection()?.removeAllRanges()
-  isResizingLeft.value = true
-  startX.value = e.clientX
-  startWidth.value = leftSidebarWidth.value
-  document.addEventListener('mousemove', onResizeLeft)
-  document.addEventListener('mouseup', stopResizeLeft)
-  document.body.style.cursor = 'col-resize'
-  document.body.style.userSelect = 'none'
-  document.body.style.webkitUserSelect = 'none'
-}
-
-const onResizeLeft = (e: MouseEvent) => {
-  if (!isResizingLeft.value) return
-  const diff = e.clientX - startX.value
-  const newWidth = Math.min(Math.max(startWidth.value + diff, 280), 500)
-  leftSidebarWidth.value = newWidth
-}
-
-const stopResizeLeft = () => {
-  isResizingLeft.value = false
-  document.removeEventListener('mousemove', onResizeLeft)
-  document.removeEventListener('mouseup', stopResizeLeft)
-  document.body.style.cursor = ''
-  document.body.style.userSelect = ''
-  document.body.style.webkitUserSelect = ''
-}
-
-const startResizeRight = (e: MouseEvent) => {
-  e.preventDefault()
-  // Clear any existing text selection
-  window.getSelection()?.removeAllRanges()
-  isResizingRight.value = true
-  startX.value = e.clientX
-  startWidth.value = rightSidebarWidth.value
-  document.addEventListener('mousemove', onResizeRight)
-  document.addEventListener('mouseup', stopResizeRight)
-  document.body.style.cursor = 'col-resize'
-  document.body.style.userSelect = 'none'
-  document.body.style.webkitUserSelect = 'none'
-}
-
-const onResizeRight = (e: MouseEvent) => {
-  if (!isResizingRight.value) return
-  const diff = startX.value - e.clientX
-  const newWidth = Math.min(Math.max(startWidth.value + diff, 300), 800)
-  rightSidebarWidth.value = newWidth
-}
-
-const stopResizeRight = () => {
-  isResizingRight.value = false
-  document.removeEventListener('mousemove', onResizeRight)
-  document.removeEventListener('mouseup', stopResizeRight)
-  document.body.style.cursor = ''
-  document.body.style.userSelect = ''
-  document.body.style.webkitUserSelect = ''
-}
-
-const isResizing = computed(() => isResizingLeft.value || isResizingRight.value)
 
 // Current favorite name for header subtitle
 const currentFavoriteName = computed(() => {
@@ -364,12 +272,8 @@ onMounted(async () => {
         // When watcher is active, polling uses 30s safety-net instead of 1s mtime checks
         startPolling()
 
-        // Fetch available relation types (based on CLI client)
-        bdAvailableRelationTypes().then(types => { availableRelationTypes.value = types }).catch(() => {})
-        // Detect bd >= 0.50 for dot-notation parent-child
-        checkBdCompatibility().then(info => {
-          bdDotNotationParent.value = info.usesDoltBackend
-        }).catch(() => {})
+        // Fetch available relation types + detect bd >= 0.50 for dot-notation parent-child
+        initRelationTypes()
       }
       // Sequential: bd commands can't run concurrently (Dolt SIGSEGV on parallel access)
       fetchIssues().then(() => fetchStats(issues.value))
@@ -386,11 +290,15 @@ onUnmounted(() => {
   }
 })
 
-// Local state
-const isEditMode = ref(false)
-const isCreatingNew = ref(false)
-const multiSelectMode = ref(false)
-const selectedIds = ref<string[]>([])
+// Issue dialogs composable (dialog-only state lives in DialogsLayer via singleton)
+const {
+  isEditMode, isCreatingNew, multiSelectMode, selectedIds, toggleMultiSelect,
+  handleDeleteIssue, handleCloseIssue, handleReopenIssue,
+  handleAttachImage, confirmDetachImage,
+  confirmRemoveDependency, openAddBlockerDialog, openAddRelationDialog, confirmRemoveRelation,
+  bdDotNotationParent, availableIssuesForDeps, initRelationTypes,
+} = useIssueDialogs()
+
 const leftSidebarStateBeforeEdit = ref<boolean | null>(null)
 
 // Watch edit mode to manage left sidebar state
@@ -409,89 +317,6 @@ watch(
   }
 )
 
-// Delete confirmation dialog
-const isDeleteDialogOpen = ref(false)
-const deleteTargetTitles = ref<string[]>([])
-const isDeleting = ref(false)
-
-// Epic delete dialog state (for issues with children)
-const isEpicDeleteDialogOpen = ref(false)
-const epicToDelete = ref<Issue | null>(null)
-const epicChildren = ref<ChildIssue[]>([])
-const isDeletingEpic = ref(false)
-// Track remaining issues to delete after epic processing (for multi-select)
-const remainingDeleteIds = ref<string[]>([])
-
-// Close confirmation dialog
-const isCloseDialogOpen = ref(false)
-const isClosing = ref(false)
-
-// Detach image confirmation dialog
-const isDetachDialogOpen = ref(false)
-const detachImagePath = ref<string | null>(null)
-const isDetaching = ref(false)
-
-// Remove dependency confirmation dialog
-const isRemoveDepDialogOpen = ref(false)
-const pendingDepRemoval = ref<{ issueId: string; blockerId: string } | null>(null)
-const isRemovingDep = ref(false)
-
-// Relation types (fetched once on mount)
-const availableRelationTypes = ref<Array<{ value: string; label: string }>>([])
-// bd >= 0.50: parent-child is structural via dot notation (not explicit field)
-const bdDotNotationParent = ref(false)
-
-// Add relation dialog
-const isAddRelDialogOpen = ref(false)
-const addRelIssueId = ref('')
-const addRelSelectedType = ref('')
-const addRelSearchQuery = ref('')
-const addRelSelectedTarget = ref('')
-const addRelFilterClosed = ref(true)
-const isAddingRel = ref(false)
-
-const addRelFilteredOptions = computed(() => {
-  if (!addRelIssueId.value) return []
-  const issue = issues.value.find(i => i.id === addRelIssueId.value)
-  const existingRelated = new Set([
-    addRelIssueId.value,
-    ...(issue?.relations?.map(r => r.id) || []),
-  ])
-  const query = addRelSearchQuery.value.toLowerCase()
-  // When searching, include all issues (open + closed); when browsing, respect the filter
-  const showClosed = query || !addRelFilterClosed.value
-  return availableIssuesForDeps.value
-    .filter(i => !existingRelated.has(i.id))
-    .filter(i => showClosed || i.status !== 'closed')
-    .filter(i => !query || i.id.toLowerCase().includes(query) || i.title.toLowerCase().includes(query))
-    .slice(0, 15)
-})
-
-// Add blocker dialog
-const isAddBlockerDialogOpen = ref(false)
-const addBlockerIssueId = ref('')
-const addBlockerSearchQuery = ref('')
-const addBlockerSelectedTarget = ref('')
-const isAddingBlocker = ref(false)
-
-const addBlockerFilteredOptions = computed(() => {
-  if (!addBlockerIssueId.value) return []
-  const existing = new Set([
-    addBlockerIssueId.value,
-    ...(issues.value.find(i => i.id === addBlockerIssueId.value)?.blockedBy || []),
-  ])
-  const query = addBlockerSearchQuery.value.toLowerCase()
-  return availableIssuesForDeps.value
-    .filter(i => !existing.has(i.id) && i.status !== 'closed')
-    .filter(i => !query || i.id.toLowerCase().includes(query) || i.title.toLowerCase().includes(query))
-    .slice(0, 15)
-})
-
-// Remove relation confirmation dialog
-const isRemoveRelDialogOpen = ref(false)
-const pendingRelRemoval = ref<{ issueId: string; targetId: string } | null>(null)
-const isRemovingRel = ref(false)
-
 // Close and clear panel when issue transitions to closed (not when selecting an already closed issue)
 watch(
   () => selectedIssue.value?.status,
@@ -503,13 +328,6 @@ watch(
     }
   }
 )
-
-const toggleMultiSelect = () => {
-  multiSelectMode.value = !multiSelectMode.value
-  if (!multiSelectMode.value) {
-    selectedIds.value = []
-  }
-}
 
 // Handlers
 const handleRefresh = () => {
@@ -552,8 +370,7 @@ const handleMigrateToDolt = async () => {
         await startListening(beadsPath.value)
       }
       startPolling()
-      bdAvailableRelationTypes().then(types => { availableRelationTypes.value = types }).catch(() => {})
-      checkBdCompatibility().then(info => { bdDotNotationParent.value = info.usesDoltBackend }).catch(() => {})
+      initRelationTypes()
     }
 
     // Reload data after migration
@@ -702,41 +519,6 @@ const handleSaveIssue = async (payload: UpdateIssuePayload) => {
   }
 }
 
-const handleCloseIssue = () => {
-  if (selectedIssue.value) {
-    isCloseDialogOpen.value = true
-  }
-}
-
-const confirmClose = async () => {
-  if (!selectedIssue.value) return
-  const issueId = selectedIssue.value.id
-  const issueTitle = selectedIssue.value.title
-  isClosing.value = true
-  try {
-    await closeIssue(issueId)
-    await fetchStats(issues.value)
-    notifySuccess(`Issue ${issueId} closed`, issueTitle)
-  } catch {
-    notifyError(`Failed to close ${issueId}`, issueTitle)
-  } finally {
-    isClosing.value = false
-    isCloseDialogOpen.value = false
-  }
-}
-
-const handleReopenIssue = async () => {
-  if (!selectedIssue.value) return
-  const issueId = selectedIssue.value.id
-  const issueTitle = selectedIssue.value.title
-  try {
-    await updateIssue(issueId, { status: 'open' })
-    await fetchStats(issues.value)
-    notifySuccess(`Issue ${issueId} reopened`, issueTitle)
-  } catch {
-    notifyError(`Failed to reopen ${issueId}`, issueTitle)
-  }
-}
 
 const handleAddComment = async (content: string) => {
   if (!selectedIssue.value) return
@@ -748,106 +530,6 @@ const handleAddComment = async (content: string) => {
   }
 }
 
-const priorityTextColor = (priority?: string) => {
-  if (!priority) return 'text-sky-400'
-  const colors: Record<string, string> = {
-    p0: 'text-[#ef4444]',
-    p1: 'text-[#ef4444]',
-    p2: 'text-[#f59e0b]',
-    p3: 'text-[#b8860b]',
-    p4: 'text-[#6b7280]',
-  }
-  return colors[priority] || 'text-sky-400'
-}
-
-const availableIssuesForDeps = computed(() =>
-  issues.value.map(i => ({ id: i.id, title: i.title, priority: i.priority, status: i.status })),
-)
-
-const openAddBlockerDialog = (issueId: string) => {
-  addBlockerIssueId.value = issueId
-  addBlockerSearchQuery.value = ''
-  addBlockerSelectedTarget.value = ''
-  isAddBlockerDialogOpen.value = true
-}
-
-const handleAddBlocker = async () => {
-  if (!addBlockerIssueId.value || !addBlockerSelectedTarget.value) return
-  isAddingBlocker.value = true
-  try {
-    await addDependency(addBlockerIssueId.value, addBlockerSelectedTarget.value)
-    notifySuccess('Dependency added', `${addBlockerIssueId.value} is now blocked by ${addBlockerSelectedTarget.value}`)
-    isAddBlockerDialogOpen.value = false
-  } catch {
-    notifyError('Failed to add dependency')
-  } finally {
-    isAddingBlocker.value = false
-  }
-}
-
-const confirmRemoveDependency = (issueId: string, blockerId: string) => {
-  pendingDepRemoval.value = { issueId, blockerId }
-  isRemoveDepDialogOpen.value = true
-}
-
-const handleRemoveDependency = async () => {
-  if (!pendingDepRemoval.value) return
-  isRemovingDep.value = true
-  try {
-    await removeDependency(pendingDepRemoval.value.issueId, pendingDepRemoval.value.blockerId)
-    notifySuccess('Dependency removed')
-  } catch {
-    notifyError('Failed to remove dependency')
-  } finally {
-    isRemovingDep.value = false
-    isRemoveDepDialogOpen.value = false
-    pendingDepRemoval.value = null
-  }
-}
-
-const openAddRelationDialog = (issueId: string) => {
-  addRelIssueId.value = issueId
-  addRelSelectedType.value = availableRelationTypes.value[0]?.value || 'relates-to'
-  addRelSearchQuery.value = ''
-  addRelSelectedTarget.value = ''
-  addRelFilterClosed.value = true
-  isAddRelDialogOpen.value = true
-}
-
-const handleAddRelation = async () => {
-  if (!addRelIssueId.value || !addRelSelectedTarget.value || !addRelSelectedType.value) return
-  isAddingRel.value = true
-  try {
-    await addRelation(addRelIssueId.value, addRelSelectedTarget.value, addRelSelectedType.value)
-    const typeLabel = availableRelationTypes.value.find(t => t.value === addRelSelectedType.value)?.label || addRelSelectedType.value
-    notifySuccess('Relation added', `${addRelIssueId.value} → ${typeLabel} → ${addRelSelectedTarget.value}`)
-    isAddRelDialogOpen.value = false
-  } catch {
-    notifyError('Failed to add relation')
-  } finally {
-    isAddingRel.value = false
-  }
-}
-
-const confirmRemoveRelation = (issueId: string, targetId: string) => {
-  pendingRelRemoval.value = { issueId, targetId }
-  isRemoveRelDialogOpen.value = true
-}
-
-const handleRemoveRelation = async () => {
-  if (!pendingRelRemoval.value) return
-  isRemovingRel.value = true
-  try {
-    await removeRelation(pendingRelRemoval.value.issueId, pendingRelRemoval.value.targetId)
-    notifySuccess('Relation removed')
-  } catch {
-    notifyError('Failed to remove relation')
-  } finally {
-    isRemovingRel.value = false
-    isRemoveRelDialogOpen.value = false
-    pendingRelRemoval.value = null
-  }
-}
 
 const handleNavigateToIssue = async (id: string) => {
   // Check if this is a child issue (format: parent-id.number)
@@ -867,279 +549,6 @@ const handleNavigateToIssue = async (id: string) => {
   await fetchIssue(id)
 }
 
-const handleAttachImage = async (path: string) => {
-  if (!selectedIssue.value) return
-
-  const currentRef = selectedIssue.value.externalRef || ''
-
-  // Check for duplicates by filename
-  const selectedFilename = path.split('/').pop() || path
-  const existingRefs = currentRef ? currentRef.split('\n').filter(Boolean) : []
-  const isDuplicate = existingRefs.some((ref) => {
-    const refFilename = ref.split('/').pop() || ref
-    return refFilename === selectedFilename
-  })
-
-  if (isDuplicate) {
-    notify('File already attached', selectedFilename)
-    return
-  }
-
-  try {
-    // Copy the file to .beads/attachments/{issue-id}/
-    const { invoke } = await import('@tauri-apps/api/core')
-    const copiedPath = await invoke<string>('copy_file_to_attachments', {
-      projectPath: beadsPath.value,
-      sourcePath: path,
-      issueId: selectedIssue.value.id,
-    })
-
-    // Append copied path to externalRef
-    const newRef = currentRef ? `${currentRef}\n${copiedPath}` : copiedPath
-    await updateIssue(selectedIssue.value.id, { externalRef: newRef })
-  } catch (error) {
-    console.error('Failed to copy file:', error)
-    // Fallback: use original path if copy fails
-    const newRef = currentRef ? `${currentRef}\n${path}` : path
-    await updateIssue(selectedIssue.value.id, { externalRef: newRef })
-  }
-
-  // Refresh issue to show the new attachment
-  await fetchIssue(selectedIssue.value.id)
-}
-
-const confirmDetachImage = (path: string) => {
-  detachImagePath.value = path
-  isDetachDialogOpen.value = true
-}
-
-const handleDetachImage = async () => {
-  if (!selectedIssue.value || !detachImagePath.value) return
-
-  isDetaching.value = true
-  try {
-    const imagePath = detachImagePath.value
-
-    // Remove image path from externalRef
-    const currentRef = selectedIssue.value.externalRef || ''
-    const lines = currentRef.split('\n')
-
-    console.log('[detach] Current externalRef:', currentRef)
-    console.log('[detach] Lines:', lines)
-    console.log('[detach] Target to remove:', imagePath)
-
-    const newRef = lines
-      .filter((line) => {
-        const trimmed = line.trim()
-        const keep = trimmed !== imagePath
-        console.log(`[detach] Line "${trimmed}" === target? ${!keep}, keep: ${keep}`)
-        return keep
-      })
-      .join('\n')
-
-    console.log('[detach] New externalRef:', newRef)
-
-    // bd CLI has UNIQUE constraint on external_ref - can't set to empty string
-    // Only update if there's remaining content, otherwise skip the update
-    if (newRef.trim()) {
-      await updateIssue(selectedIssue.value.id, { externalRef: newRef })
-    } else {
-      // Can't clear external_ref due to bd CLI limitation
-      // We need to set it to something unique - use a placeholder
-      console.log('[detach] Cannot clear external_ref, using placeholder')
-      await updateIssue(selectedIssue.value.id, { externalRef: `cleared:${selectedIssue.value.id}` })
-    }
-
-    // If the image is in .beads/attachments/, delete the file
-    if (imagePath.includes('.beads/attachments/')) {
-      console.log('[detach] Deleting attachment file:', imagePath)
-      await bdDeleteAttachmentFile(imagePath).catch((e) => {
-        console.warn('[detach] Failed to delete attachment file:', e)
-      })
-    }
-
-    // Cleanup empty attachment folder for this issue
-    const path = beadsPath.value && beadsPath.value !== '.' ? beadsPath.value : undefined
-    bdCleanupEmptyAttachmentFolder(selectedIssue.value.id, path).catch(() => {
-      // Silently ignore cleanup errors
-    })
-
-    // Refresh issue to update the attachments
-    await fetchIssue(selectedIssue.value.id)
-  } finally {
-    isDetaching.value = false
-    isDetachDialogOpen.value = false
-    detachImagePath.value = null
-  }
-}
-
-const handleDeleteIssue = async () => {
-  // Determine which IDs we're deleting
-  let idsToDelete: string[] = []
-  if (multiSelectMode.value && selectedIds.value.length > 0) {
-    idsToDelete = [...selectedIds.value]
-  } else if (selectedIssue.value) {
-    idsToDelete = [selectedIssue.value.id]
-  } else {
-    return
-  }
-
-  // For each ID, fetch full issue to check for children
-  // (list view may not have children populated, need to use bdShow)
-  const issuesToCheck: Issue[] = []
-  for (const id of idsToDelete) {
-    // Fetch full issue details (including children) via bdShow
-    const fullIssue = await fetchIssue(id)
-    if (fullIssue) {
-      issuesToCheck.push(fullIssue)
-    } else {
-      // Fallback to list data if fetch fails
-      const issueFromList = filteredIssues.value.find(i => i.id === id)
-      if (issueFromList) {
-        issuesToCheck.push(issueFromList)
-      }
-    }
-  }
-
-  // Check if any selected issue has children
-  const issuesWithChildren = issuesToCheck.filter(
-    (issue): issue is Issue => !!issue.children?.length
-  )
-
-  const firstEpic = issuesWithChildren[0]
-  if (firstEpic) {
-    // Show epic delete dialog for the first issue with children
-    epicToDelete.value = firstEpic
-    epicChildren.value = firstEpic.children || []
-    // Store remaining IDs to delete after epic processing
-    remainingDeleteIds.value = idsToDelete.filter(id => id !== firstEpic.id)
-    isEpicDeleteDialogOpen.value = true
-  } else {
-    // Standard delete flow (no children)
-    deleteTargetTitles.value = issuesToCheck
-      .map(issue => issue.title)
-      .filter((t): t is string => !!t)
-    isDeleteDialogOpen.value = true
-  }
-}
-
-const confirmDelete = async () => {
-  isDeleting.value = true
-  let hasError = false
-  try {
-    if (multiSelectMode.value && selectedIds.value.length > 0) {
-      const successfullyDeleted: string[] = []
-      for (const id of selectedIds.value) {
-        const success = await deleteIssue(id)
-        if (!success) {
-          hasError = true
-          notifyError('Failed to delete issue', issueError.value || `Could not delete ${id}`)
-        } else {
-          successfullyDeleted.push(id)
-        }
-      }
-      // Only remove successfully deleted items from selection
-      selectedIds.value = selectedIds.value.filter(id => !successfullyDeleted.includes(id))
-    } else if (selectedIssue.value) {
-      const success = await deleteIssue(selectedIssue.value.id)
-      if (!success) {
-        hasError = true
-        notifyError('Failed to delete issue', issueError.value || 'Could not delete the issue')
-      } else {
-        isEditMode.value = false
-        isCreatingNew.value = false
-      }
-    }
-    await fetchIssues()
-    await fetchStats(issues.value)
-  } finally {
-    isDeleting.value = false
-    isDeleteDialogOpen.value = false
-  }
-}
-
-const confirmEpicDelete = async (mode: 'delete-all' | 'detach') => {
-  if (!epicToDelete.value) return
-  isDeletingEpic.value = true
-  let hasError = false
-
-  try {
-    if (mode === 'detach') {
-      // Detach all children first (set parent to empty string)
-      for (const child of epicChildren.value) {
-        await updateIssue(child.id, { parent: '' })
-      }
-    } else {
-      // Delete all children first
-      for (const child of epicChildren.value) {
-        const success = await deleteIssue(child.id)
-        if (!success) {
-          hasError = true
-          notifyError('Failed to delete child issue', issueError.value || `Could not delete ${child.id}`)
-        }
-      }
-    }
-    // Then delete the epic
-    const epicSuccess = await deleteIssue(epicToDelete.value.id)
-    if (!epicSuccess) {
-      hasError = true
-      notifyError('Failed to delete issue', issueError.value || `Could not delete ${epicToDelete.value.id}`)
-    }
-
-    // Clear selection if deleted epic was selected (only if successful)
-    if (epicSuccess && selectedIssue.value?.id === epicToDelete.value.id) {
-      isEditMode.value = false
-      isCreatingNew.value = false
-    }
-
-    // Remove the epic ID from selectedIds if in multi-select mode (only if successful)
-    if (epicSuccess && multiSelectMode.value) {
-      selectedIds.value = selectedIds.value.filter(id => id !== epicToDelete.value?.id)
-    }
-
-    // Check if there are more issues with children to process
-    if (remainingDeleteIds.value.length > 0) {
-      // Check remaining issues for children
-      const remainingIssues = remainingDeleteIds.value
-        .map(id => issues.value.find(i => i.id === id))
-        .filter((issue): issue is Issue => !!issue)
-
-      const nextIssueWithChildren = remainingIssues.find(issue => issue.children?.length)
-
-      if (nextIssueWithChildren) {
-        // Show dialog for next epic with children
-        epicToDelete.value = nextIssueWithChildren
-        epicChildren.value = nextIssueWithChildren.children || []
-        remainingDeleteIds.value = remainingDeleteIds.value.filter(id => id !== nextIssueWithChildren.id)
-        isDeletingEpic.value = false
-        return // Keep dialog open for next epic
-      } else {
-        // No more epics with children, delete remaining issues
-        const successfullyDeleted: string[] = []
-        for (const id of remainingDeleteIds.value) {
-          const success = await deleteIssue(id)
-          if (!success) {
-            hasError = true
-            notifyError('Failed to delete issue', issueError.value || `Could not delete ${id}`)
-          } else {
-            successfullyDeleted.push(id)
-          }
-        }
-        // Only clear successfully deleted items from selection
-        selectedIds.value = selectedIds.value.filter(id => !successfullyDeleted.includes(id))
-      }
-    }
-
-    await fetchIssues()
-    await fetchStats(issues.value)
-  } finally {
-    isDeletingEpic.value = false
-    isEpicDeleteDialogOpen.value = false
-    epicToDelete.value = null
-    epicChildren.value = []
-    remainingDeleteIds.value = []
-  }
-}
 
 // Search handler - search is prioritary over filters (always starts empty)
 const searchValue = ref('')
@@ -1316,77 +725,16 @@ watch(
 
           <!-- Scrollable section for Charts and Ready to Work -->
           <div v-if="stats" class="flex-1 overflow-y-auto px-4 pb-4 space-y-4">
-            <!-- Collapsible Charts Section -->
-            <div class="space-y-2">
-              <button
-                class="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors w-full"
-                @click="isChartsCollapsed = !isChartsCollapsed"
-              >
-                <svg
-                  class="w-3 h-3 transition-transform"
-                  :class="{ '-rotate-90': isChartsCollapsed }"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="2"
-                >
-                  <polyline points="6 9 12 15 18 9" />
-                </svg>
-                <span class="uppercase tracking-wide">Charts</span>
-              </button>
-              <div v-show="!isChartsCollapsed" class="space-y-4 pl-5">
-                <StatusChart :open="stats.open" :closed="stats.closed" />
-                <PriorityChart :by-priority="stats.byPriority" />
-              </div>
-            </div>
-
-            <!-- Collapsible In Progress Section -->
-            <div v-if="inProgressIssues.length > 0" class="space-y-2">
-              <button
-                class="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors w-full"
-                @click="isInProgressCollapsed = !isInProgressCollapsed"
-              >
-                <svg
-                  class="w-3 h-3 transition-transform"
-                  :class="{ '-rotate-90': isInProgressCollapsed }"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="2"
-                >
-                  <polyline points="6 9 12 15 18 9" />
-                </svg>
-                <span class="uppercase tracking-wide">In Progress</span>
-                <span class="text-[10px] ml-auto">({{ inProgressIssues.length }})</span>
-              </button>
-              <div v-show="!isInProgressCollapsed" class="pl-5">
-                <QuickList :issues="inProgressIssues" @select="handleSelectIssue" />
-              </div>
-            </div>
-
-            <!-- Collapsible Ready to Work Section -->
-            <div class="space-y-2">
-              <button
-                class="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors w-full"
-                @click="isReadyCollapsed = !isReadyCollapsed"
-              >
-                <svg
-                  class="w-3 h-3 transition-transform"
-                  :class="{ '-rotate-90': isReadyCollapsed }"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="2"
-                >
-                  <polyline points="6 9 12 15 18 9" />
-                </svg>
-                <span class="uppercase tracking-wide">Ready to Work</span>
-                <span class="text-[10px] ml-auto">({{ readyIssues.length }})</span>
-              </button>
-              <div v-show="!isReadyCollapsed" class="pl-5">
-                <QuickList :issues="readyIssues" @select="handleSelectIssue" />
-              </div>
-            </div>
+            <DashboardContent
+              hide-kpis
+              :stats="stats"
+              :ready-issues="readyIssues"
+              :in-progress-issues="inProgressIssues"
+              :active-kpi-filter="activeKpiFilter"
+              :status-filters="filters.status"
+              @select-issue="handleSelectIssue"
+              @kpi-click="handleKpiClick"
+            />
           </div>
         </div>
 
@@ -1406,20 +754,30 @@ watch(
         v-show="!(isEditMode || isCreatingNew)"
         class="flex-1 flex flex-col overflow-hidden min-w-0"
       >
-        <div v-if="!showOnboarding" class="p-4 border-b border-border space-y-3">
-          <IssuesToolbar
+        <!-- Onboarding: Prerequisites Card -->
+        <PrerequisitesCard v-if="showOnboarding" @browse="openFolderPicker" />
+
+        <!-- Normal: Issues Toolbar + Table -->
+        <template v-else>
+          <IssueListPanel
             v-model:search="searchValue"
-            :selected-statuses="filters.status"
-            :selected-types="filters.type"
-            :selected-priorities="filters.priority"
+            v-model:selected-ids="selectedIds"
+            :filters="{ status: filters.status, type: filters.type, priority: filters.priority, labels: filters.labels, assignee: filters.assignee }"
             :available-labels="availableLabels"
-            :selected-labels="filters.labels"
             :available-assignees="availableAssignees"
-            :selected-assignees="filters.assignee"
             :has-selection="multiSelectMode ? selectedIds.length > 0 : !!selectedIssue"
             :multi-select-mode="multiSelectMode"
             :selected-count="selectedIds.length"
             :columns="columns"
+            :is-search-active="isSearchActive"
+            :issues="paginatedIssues"
+            :grouped-issues="groupedIssues"
+            :selected-id="selectedIssue?.id"
+            :has-more="hasMore"
+            :total-count="filteredIssues.length"
+            :sort-field="sortField"
+            :sort-direction="sortDirection"
+            :newly-added-ids="newlyAddedIds"
             @add="handleAddIssue"
             @delete="handleDeleteIssue"
             @toggle-multi-select="toggleMultiSelect"
@@ -1430,41 +788,8 @@ watch(
             @toggle-priority="togglePriority"
             @toggle-label="toggleLabelFilter"
             @toggle-assignee="toggleAssignee"
-          />
-
-          <FilterChips
-            v-if="!isSearchActive"
-            :status-filters="filters.status"
-            :type-filters="filters.type"
-            :priority-filters="filters.priority"
-            :label-filters="filters.labels"
-            :assignee-filters="filters.assignee"
-            @remove-status="toggleStatus"
-            @remove-type="toggleType"
-            @remove-priority="togglePriority"
             @remove-label="handleRemoveLabelFilter"
-            @remove-assignee="toggleAssignee"
-            @clear-all="clearFilters"
-          />
-        </div>
-
-        <!-- Onboarding: Prerequisites Card -->
-        <PrerequisitesCard v-if="showOnboarding" @browse="openFolderPicker" />
-
-        <!-- Normal: Issues Table -->
-        <div v-else class="flex-1 overflow-auto p-4">
-          <IssueTable
-            v-model:selected-ids="selectedIds"
-            :issues="paginatedIssues"
-            :grouped-issues="groupedIssues"
-            :columns="columns"
-            :selected-id="selectedIssue?.id"
-            :multi-select-mode="multiSelectMode"
-            :has-more="hasMore"
-            :total-count="filteredIssues.length"
-            :external-sort-column="sortField"
-            :external-sort-direction="sortDirection"
-            :newly-added-ids="newlyAddedIds"
+            @clear-filters="clearFilters"
             @select="handleSelectIssue"
             @edit="handleEditIssueFromTable"
             @deselect="handleDeselectIssue"
@@ -1475,7 +800,7 @@ watch(
           <div v-if="isLoading" class="text-center text-muted-foreground py-4">
             Loading...
           </div>
-        </div>
+        </template>
       </main>
 
       <!-- Right Sidebar - Details (hidden when no selection and not in edit mode) -->
@@ -1524,72 +849,14 @@ watch(
         <!-- Sidebar content -->
         <template v-if="isRightSidebarOpen">
           <!-- Fixed header for issue preview -->
-          <div v-if="selectedIssue && !isEditMode && !isCreatingNew" class="p-4 pb-0 space-y-3 border-b border-border">
-            <!-- Badges row -->
-            <div class="flex items-center gap-1.5 flex-wrap">
-              <CopyableId :value="selectedIssue.id" :display-value="selectedIssue.id.includes('-') ? selectedIssue.id.slice(selectedIssue.id.lastIndexOf('-') + 1) : selectedIssue.id" />
-              <TypeBadge :type="selectedIssue.type" size="sm" />
-              <StatusBadge :status="selectedIssue.status" size="sm" />
-              <PriorityBadge :priority="selectedIssue.priority" size="sm" />
-            </div>
-
-            <!-- Title -->
-            <h3 class="text-sm font-semibold line-clamp-2">{{ selectedIssue.title }}</h3>
-
-            <!-- Action buttons -->
-            <div class="flex items-center justify-between pb-3">
-              <div class="flex items-center gap-1">
-                <!-- Edit button: only when not closed -->
-                <Button v-if="selectedIssue.status !== 'closed'" size="sm" class="h-7 text-xs px-2" @click="handleEditIssue">
-                  <svg class="w-3 h-3 mr-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-                  </svg>
-                  Edit
-                </Button>
-                <!-- Reopen button: only when closed -->
-                <Button
-                  v-if="selectedIssue.status === 'closed'"
-                  size="sm"
-                  class="h-7 text-xs px-2"
-                  @click="handleReopenIssue"
-                >
-                  <svg class="w-3 h-3 mr-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
-                    <path d="M3 3v5h5" />
-                  </svg>
-                  Reopen
-                </Button>
-                <!-- Close button: only when not closed -->
-                <Button
-                  v-if="selectedIssue.status !== 'closed'"
-                  variant="outline"
-                  size="sm"
-                  class="h-7 text-xs px-2"
-                  @click="handleCloseIssue"
-                >
-                  <svg class="w-3 h-3 mr-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <polyline points="20 6 9 17 4 12" />
-                  </svg>
-                  Close
-                </Button>
-              </div>
-              <Button
-                variant="outline"
-                size="sm"
-                class="h-7 text-xs px-2 text-destructive hover:bg-destructive hover:text-destructive-foreground"
-                @click="handleDeleteIssue"
-              >
-                <svg class="w-3 h-3 mr-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <polyline points="3 6 5 6 21 6" />
-                  <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                  <line x1="10" y1="11" x2="10" y2="17" />
-                  <line x1="14" y1="11" x2="14" y2="17" />
-                </svg>
-                Delete
-              </Button>
-            </div>
-          </div>
+          <IssueDetailHeader
+            v-if="selectedIssue && !isEditMode && !isCreatingNew"
+            :selected-issue="selectedIssue"
+            @edit="handleEditIssue"
+            @reopen="handleReopenIssue"
+            @close="handleCloseIssue"
+            @delete="handleDeleteIssue"
+          />
 
           <!-- Form mode: form gère son propre scroll -->
           <div v-if="isEditMode || isCreatingNew" class="flex-1 min-h-0 p-4 overflow-hidden">
@@ -1683,91 +950,19 @@ watch(
         <div class="p-4 space-y-6">
           <PathSelector v-if="!showOnboarding" ref="mobilePathSelectorRef" :is-loading="isLoading" @change="handlePathChange" @reset="handleReset" />
 
-          <div v-if="stats" class="space-y-6">
-            <div class="grid grid-cols-2 gap-3">
-              <KpiCard title="Total" :value="stats.total" :active="activeKpiFilter === null && filters.status.length === 0" @click="handleKpiClick('total')" />
-              <KpiCard title="Open" :value="stats.open" color="var(--color-status-open)" :active="activeKpiFilter === 'open'" @click="handleKpiClick('open')" />
-              <KpiCard title="In Progress" :value="stats.inProgress" color="var(--color-status-in-progress)" :active="activeKpiFilter === 'in_progress'" @click="handleKpiClick('in_progress')" />
-              <KpiCard title="Blocked" :value="stats.blocked" color="var(--color-status-blocked)" :active="activeKpiFilter === 'blocked'" @click="handleKpiClick('blocked')" />
-            </div>
-
-            <!-- Collapsible Charts Section -->
-            <div class="space-y-2">
-              <button
-                class="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors w-full"
-                @click="isChartsCollapsed = !isChartsCollapsed"
-              >
-                <svg
-                  class="w-3 h-3 transition-transform"
-                  :class="{ '-rotate-90': isChartsCollapsed }"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="2"
-                >
-                  <polyline points="6 9 12 15 18 9" />
-                </svg>
-                <span class="uppercase tracking-wide">Charts</span>
-              </button>
-              <div v-show="!isChartsCollapsed" class="space-y-4 pl-5">
-                <StatusChart :open="stats.open" :closed="stats.closed" />
-                <PriorityChart :by-priority="stats.byPriority" />
-              </div>
-            </div>
-
-            <!-- Collapsible In Progress Section -->
-            <div v-if="inProgressIssues.length > 0" class="space-y-2">
-              <button
-                class="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors w-full"
-                @click="isInProgressCollapsed = !isInProgressCollapsed"
-              >
-                <svg
-                  class="w-3 h-3 transition-transform"
-                  :class="{ '-rotate-90': isInProgressCollapsed }"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="2"
-                >
-                  <polyline points="6 9 12 15 18 9" />
-                </svg>
-                <span class="uppercase tracking-wide">In Progress</span>
-                <span class="text-[10px] ml-auto">({{ inProgressIssues.length }})</span>
-              </button>
-              <div v-show="!isInProgressCollapsed" class="pl-5">
-                <QuickList :issues="inProgressIssues" @select="handleSelectIssue" />
-              </div>
-            </div>
-
-            <!-- Collapsible Ready to Work Section -->
-            <div class="space-y-2">
-              <button
-                class="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors w-full"
-                @click="isReadyCollapsed = !isReadyCollapsed"
-              >
-                <svg
-                  class="w-3 h-3 transition-transform"
-                  :class="{ '-rotate-90': isReadyCollapsed }"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="2"
-                >
-                  <polyline points="6 9 12 15 18 9" />
-                </svg>
-                <span class="uppercase tracking-wide">Ready to Work</span>
-                <span class="text-[10px] ml-auto">({{ readyIssues.length }})</span>
-              </button>
-              <div v-show="!isReadyCollapsed" class="pl-5">
-                <QuickList :issues="readyIssues" @select="handleSelectIssue" />
-              </div>
-            </div>
-          </div>
-
-          <div v-else class="flex items-center justify-center py-8">
-            <OnboardingCard v-if="showOnboarding" @browse="openFolderPicker" />
-            <span v-else class="text-muted-foreground text-sm">Loading...</span>
-          </div>
+          <DashboardContent
+            class="space-y-6"
+            :stats="stats"
+            :ready-issues="readyIssues"
+            :in-progress-issues="inProgressIssues"
+            :kpi-grid-cols="2"
+            :active-kpi-filter="activeKpiFilter"
+            :status-filters="filters.status"
+            :show-onboarding="showOnboarding"
+            @select-issue="handleSelectIssue"
+            @kpi-click="handleKpiClick"
+            @browse="openFolderPicker"
+          />
         </div>
       </ScrollArea>
 
@@ -1777,141 +972,57 @@ watch(
         <PrerequisitesCard v-if="showOnboarding" @browse="openFolderPicker" />
 
         <!-- Normal: Issues Toolbar and Table -->
-        <template v-else>
-          <div class="p-4 border-b border-border space-y-3">
-            <IssuesToolbar
-              v-model:search="searchValue"
-              :selected-statuses="filters.status"
-              :selected-types="filters.type"
-              :selected-priorities="filters.priority"
-              :available-labels="availableLabels"
-              :selected-labels="filters.labels"
-              :available-assignees="availableAssignees"
-              :selected-assignees="filters.assignee"
-              :has-selection="multiSelectMode ? selectedIds.length > 0 : !!selectedIssue"
-              :multi-select-mode="multiSelectMode"
-              :selected-count="selectedIds.length"
-              :columns="columns"
-              @add="handleAddIssue"
-              @delete="handleDeleteIssue"
-              @toggle-multi-select="toggleMultiSelect"
-              @update:columns="setColumns"
-              @reset-columns="resetColumns"
-              @toggle-status="toggleStatus"
-              @toggle-type="toggleType"
-              @toggle-priority="togglePriority"
-              @toggle-label="toggleLabelFilter"
-              @toggle-assignee="toggleAssignee"
-            />
-
-            <FilterChips
-              v-if="!isSearchActive"
-              :status-filters="filters.status"
-              :type-filters="filters.type"
-              :priority-filters="filters.priority"
-              :label-filters="filters.labels"
-              :assignee-filters="filters.assignee"
-              @remove-status="toggleStatus"
-              @remove-type="toggleType"
-              @remove-priority="togglePriority"
-              @remove-label="handleRemoveLabelFilter"
-              @remove-assignee="toggleAssignee"
-              @clear-all="clearFilters"
-            />
-          </div>
-
-          <div class="flex-1 overflow-auto p-4">
-            <IssueTable
-              v-model:selected-ids="selectedIds"
-              :issues="paginatedIssues"
-              :grouped-issues="groupedIssues"
-              :columns="columns"
-              :selected-id="selectedIssue?.id"
-              :multi-select-mode="multiSelectMode"
-              :has-more="hasMore"
-              :total-count="filteredIssues.length"
-              :external-sort-column="sortField"
-              :external-sort-direction="sortDirection"
-              :newly-added-ids="newlyAddedIds"
-              @select="handleSelectIssue"
-              @edit="handleEditIssueFromTable"
-              @deselect="handleDeselectIssue"
-              @load-more="loadMore"
-              @sort="setSort"
-            />
-          </div>
-        </template>
+        <IssueListPanel
+          v-if="!showOnboarding"
+          v-model:search="searchValue"
+          v-model:selected-ids="selectedIds"
+          :filters="{ status: filters.status, type: filters.type, priority: filters.priority, labels: filters.labels, assignee: filters.assignee }"
+          :available-labels="availableLabels"
+          :available-assignees="availableAssignees"
+          :has-selection="multiSelectMode ? selectedIds.length > 0 : !!selectedIssue"
+          :multi-select-mode="multiSelectMode"
+          :selected-count="selectedIds.length"
+          :columns="columns"
+          :is-search-active="isSearchActive"
+          :issues="paginatedIssues"
+          :grouped-issues="groupedIssues"
+          :selected-id="selectedIssue?.id"
+          :has-more="hasMore"
+          :total-count="filteredIssues.length"
+          :sort-field="sortField"
+          :sort-direction="sortDirection"
+          :newly-added-ids="newlyAddedIds"
+          @add="handleAddIssue"
+          @delete="handleDeleteIssue"
+          @toggle-multi-select="toggleMultiSelect"
+          @update:columns="setColumns"
+          @reset-columns="resetColumns"
+          @toggle-status="toggleStatus"
+          @toggle-type="toggleType"
+          @toggle-priority="togglePriority"
+          @toggle-label="toggleLabelFilter"
+          @toggle-assignee="toggleAssignee"
+          @remove-label="handleRemoveLabelFilter"
+          @clear-filters="clearFilters"
+          @select="handleSelectIssue"
+          @edit="handleEditIssueFromTable"
+          @deselect="handleDeselectIssue"
+          @load-more="loadMore"
+          @sort="setSort"
+        />
       </div>
 
       <!-- Details Panel -->
       <div v-else-if="mobilePanel === 'details'" class="flex-1 flex flex-col overflow-hidden">
         <!-- Fixed header for issue preview -->
-        <div v-if="selectedIssue && !isEditMode && !isCreatingNew" class="p-4 pb-0 space-y-3 border-b border-border">
-          <!-- Badges row -->
-          <div class="flex items-center gap-1.5 flex-wrap">
-            <CopyableId :value="selectedIssue.id" :display-value="selectedIssue.id.includes('-') ? selectedIssue.id.slice(selectedIssue.id.lastIndexOf('-') + 1) : selectedIssue.id" />
-            <TypeBadge :type="selectedIssue.type" size="sm" />
-            <StatusBadge :status="selectedIssue.status" size="sm" />
-            <PriorityBadge :priority="selectedIssue.priority" size="sm" />
-          </div>
-
-          <!-- Title -->
-          <h3 class="text-sm font-semibold line-clamp-2">{{ selectedIssue.title }}</h3>
-
-          <!-- Action buttons -->
-          <div class="flex items-center justify-between pb-3">
-            <div class="flex items-center gap-1">
-              <!-- Edit button: only when not closed -->
-              <Button v-if="selectedIssue.status !== 'closed'" size="sm" class="h-7 text-xs px-2" @click="handleEditIssue">
-                <svg class="w-3 h-3 mr-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-                  <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-                </svg>
-                Edit
-              </Button>
-              <!-- Reopen button: only when closed -->
-              <Button
-                v-if="selectedIssue.status === 'closed'"
-                size="sm"
-                class="h-7 text-xs px-2"
-                @click="handleReopenIssue"
-              >
-                <svg class="w-3 h-3 mr-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
-                  <path d="M3 3v5h5" />
-                </svg>
-                Reopen
-              </Button>
-              <!-- Close button: only when not closed -->
-              <Button
-                v-if="selectedIssue.status !== 'closed'"
-                variant="outline"
-                size="sm"
-                class="h-7 text-xs px-2"
-                @click="handleCloseIssue"
-              >
-                <svg class="w-3 h-3 mr-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <polyline points="20 6 9 17 4 12" />
-                </svg>
-                Close
-              </Button>
-            </div>
-            <Button
-              variant="outline"
-              size="sm"
-              class="h-7 text-xs px-2 text-destructive hover:bg-destructive hover:text-destructive-foreground"
-              @click="handleDeleteIssue"
-            >
-              <svg class="w-3 h-3 mr-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <polyline points="3 6 5 6 21 6" />
-                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                <line x1="10" y1="11" x2="10" y2="17" />
-                <line x1="14" y1="11" x2="14" y2="17" />
-              </svg>
-              Delete
-            </Button>
-          </div>
-        </div>
+        <IssueDetailHeader
+          v-if="selectedIssue && !isEditMode && !isCreatingNew"
+          :selected-issue="selectedIssue"
+          @edit="handleEditIssue"
+          @reopen="handleReopenIssue"
+          @close="handleCloseIssue"
+          @delete="handleDeleteIssue"
+        />
 
         <!-- Form mode: form gère son propre scroll -->
         <div v-if="isEditMode || isCreatingNew" class="flex-1 min-h-0 p-4 overflow-hidden">
@@ -2005,357 +1116,8 @@ watch(
       <UpdateIndicator />
     </footer>
 
-    <!-- Delete Confirmation Dialog -->
-    <ConfirmDialog
-      v-model:open="isDeleteDialogOpen"
-      title="Delete"
-      confirm-text="Delete"
-      cancel-text="Cancel"
-      variant="destructive"
-      :is-loading="isDeleting"
-      @confirm="confirmDelete"
-    >
-      <template #description>
-        <p class="text-sm text-muted-foreground">
-          You are about to permanently delete
-          {{ deleteTargetTitles.length > 1 ? 'the following issues' : 'the issue' }}:
-        </p>
-        <div class="mt-2 space-y-1">
-          <p
-            v-for="title in deleteTargetTitles.slice(0, 5)"
-            :key="title"
-            class="text-sm font-medium text-sky-400"
-          >
-            {{ title }}
-          </p>
-          <p v-if="deleteTargetTitles.length > 5" class="text-sm text-muted-foreground">
-            ... and {{ deleteTargetTitles.length - 5 }} more ({{ deleteTargetTitles.length }} total)
-          </p>
-        </div>
-        <p class="mt-3 text-sm text-muted-foreground">
-          This action cannot be undone.
-        </p>
-      </template>
-    </ConfirmDialog>
-
-    <!-- Epic Delete Confirmation Dialog (for issues with children) -->
-    <Dialog v-model:open="isEpicDeleteDialogOpen">
-      <DialogContent class="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle class="flex items-center gap-2">
-            <svg class="w-5 h-5 text-destructive" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <circle cx="12" cy="12" r="10" />
-              <line x1="12" y1="8" x2="12" y2="12" />
-              <line x1="12" y1="16" x2="12.01" y2="16" />
-            </svg>
-            Delete Issue with Children
-          </DialogTitle>
-          <DialogDescription as="div">
-            <p class="text-sm text-muted-foreground">
-              The issue "<span class="font-medium text-sky-400">{{ epicToDelete?.title }}</span>" has {{ epicChildren.length }} child issue{{ epicChildren.length > 1 ? 's' : '' }}:
-            </p>
-            <div class="mt-2 space-y-1 max-h-32 overflow-y-auto">
-              <p v-for="child in epicChildren.slice(0, 5)" :key="child.id" class="text-sm text-muted-foreground">
-                <span class="font-medium">{{ child.title }}</span>
-              </p>
-              <p v-if="epicChildren.length > 5" class="text-sm text-muted-foreground">
-                ... and {{ epicChildren.length - 5 }} more
-              </p>
-            </div>
-            <p class="mt-3 text-sm text-muted-foreground">
-              What would you like to do?
-            </p>
-          </DialogDescription>
-        </DialogHeader>
-        <DialogFooter class="flex-col gap-2 sm:flex-col">
-          <Button
-            variant="destructive"
-            class="w-full"
-            :disabled="isDeletingEpic"
-            @click="confirmEpicDelete('delete-all')"
-          >
-            <svg v-if="isDeletingEpic" class="animate-spin -ml-1 mr-2 h-4 w-4" viewBox="0 0 24 24" fill="none">
-              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
-              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-            </svg>
-            Delete Issue and All Children
-          </Button>
-          <Button
-            variant="outline"
-            class="w-full"
-            :disabled="isDeletingEpic"
-            @click="confirmEpicDelete('detach')"
-          >
-            Delete Issue Only (Detach Children)
-          </Button>
-          <Button
-            variant="ghost"
-            class="w-full"
-            :disabled="isDeletingEpic"
-            @click="isEpicDeleteDialogOpen = false"
-          >
-            Cancel
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-
-    <!-- Close Confirmation Dialog -->
-    <ConfirmDialog
-      v-model:open="isCloseDialogOpen"
-      title="Close issue"
-      confirm-text="Close"
-      cancel-text="Cancel"
-      :is-loading="isClosing"
-      @confirm="confirmClose"
-    >
-      <template #description>
-        <p class="text-sm text-muted-foreground">
-          You are about to close the issue:
-        </p>
-        <div class="mt-2">
-          <p class="text-sm text-sky-400 font-mono">{{ selectedIssue?.id }}</p>
-          <p class="text-sm font-medium">{{ selectedIssue?.title }}</p>
-        </div>
-        <p class="mt-3 text-sm text-muted-foreground">
-          The issue will be marked as completed.
-        </p>
-      </template>
-    </ConfirmDialog>
-
-    <!-- Detach Attachment Confirmation Dialog -->
-    <ConfirmDialog
-      v-model:open="isDetachDialogOpen"
-      title="Detach attachment"
-      confirm-text="Detach"
-      cancel-text="Cancel"
-      variant="destructive"
-      :is-loading="isDetaching"
-      @confirm="handleDetachImage"
-    >
-      <template #description>
-        <p class="text-sm text-muted-foreground">
-          Are you sure you want to detach this attachment?
-        </p>
-        <p class="mt-2 text-xs text-muted-foreground font-mono break-all">
-          {{ detachImagePath }}
-        </p>
-        <p v-if="detachImagePath?.includes('.beads/attachments/')" class="mt-3 text-sm text-destructive">
-          The attachment file will be permanently deleted.
-        </p>
-        <p v-else class="mt-3 text-sm text-muted-foreground">
-          Only the reference will be removed. The original file will not be deleted.
-        </p>
-      </template>
-    </ConfirmDialog>
-
-    <!-- Remove Dependency Confirmation Dialog -->
-    <ConfirmDialog
-      v-model:open="isRemoveDepDialogOpen"
-      title="Remove dependency"
-      confirm-text="Remove"
-      cancel-text="Cancel"
-      variant="destructive"
-      :is-loading="isRemovingDep"
-      @confirm="handleRemoveDependency"
-    >
-      <template #description>
-        <p class="text-sm text-muted-foreground">
-          Are you sure you want to remove this dependency?
-        </p>
-        <div v-if="pendingDepRemoval" class="mt-2 space-y-2">
-          <div>
-            <p class="text-xs text-muted-foreground uppercase tracking-wide">Issue</p>
-            <p class="text-sm font-mono text-sky-400">{{ pendingDepRemoval.issueId }}</p>
-            <p class="text-sm text-muted-foreground">{{ availableIssuesForDeps.find(i => i.id === pendingDepRemoval!.issueId)?.title }}</p>
-          </div>
-          <div>
-            <p class="text-xs text-muted-foreground uppercase tracking-wide">Blocker</p>
-            <p class="text-sm font-mono text-sky-400">{{ pendingDepRemoval.blockerId }}</p>
-            <p class="text-sm text-muted-foreground">{{ availableIssuesForDeps.find(i => i.id === pendingDepRemoval!.blockerId)?.title }}</p>
-          </div>
-        </div>
-      </template>
-    </ConfirmDialog>
-
-    <!-- Add Blocker Dialog -->
-    <Dialog v-model:open="isAddBlockerDialogOpen">
-      <DialogContent class="sm:max-w-lg overflow-hidden">
-        <DialogHeader>
-          <DialogTitle>Add a blocker</DialogTitle>
-          <DialogDescription>
-            From <span class="font-mono text-sky-400">{{ addBlockerIssueId }}</span>
-            <br />
-            <span class="text-muted-foreground">{{ availableIssuesForDeps.find(i => i.id === addBlockerIssueId)?.title }}</span>
-          </DialogDescription>
-        </DialogHeader>
-        <div class="space-y-4 py-2 overflow-hidden">
-          <div class="space-y-1.5 overflow-hidden">
-            <label class="text-xs font-medium text-muted-foreground uppercase tracking-wide">Blocked by</label>
-            <input
-              v-model="addBlockerSearchQuery"
-              type="text"
-              class="h-9 w-full text-sm px-3 rounded-md border border-border bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-              placeholder="Search by ID or title..."
-            />
-            <div class="max-h-64 overflow-y-auto rounded-md border border-border">
-              <button
-                v-for="opt in addBlockerFilteredOptions"
-                :key="opt.id"
-                class="flex items-center gap-2 w-full text-left px-3 py-2 text-sm hover:bg-accent hover:text-accent-foreground transition-colors min-w-0"
-                :class="{ 'bg-accent': addBlockerSelectedTarget === opt.id }"
-                @click="addBlockerSelectedTarget = opt.id"
-              >
-                <span :class="['font-medium shrink-0', priorityTextColor(opt.priority)]">{{ opt.id }}</span>
-                <span class="truncate text-muted-foreground flex-1 min-w-0">{{ opt.title }}</span>
-                <StatusBadge :status="opt.status" class="shrink-0 scale-75 origin-right" />
-              </button>
-              <p v-if="!addBlockerFilteredOptions.length && addBlockerSearchQuery" class="px-3 py-2 text-sm text-muted-foreground">
-                No matching issues found
-              </p>
-              <p v-if="!addBlockerFilteredOptions.length && !addBlockerSearchQuery" class="px-3 py-2 text-sm text-muted-foreground">
-                Type to search for issues...
-              </p>
-            </div>
-          </div>
-        </div>
-        <DialogFooter class="gap-3">
-          <Button variant="outline" @click="isAddBlockerDialogOpen = false">Cancel</Button>
-          <Button
-            :disabled="!addBlockerSelectedTarget || isAddingBlocker"
-            @click="handleAddBlocker"
-          >
-            <svg
-              v-if="isAddingBlocker"
-              class="animate-spin -ml-1 mr-2 h-4 w-4"
-              xmlns="http://www.w3.org/2000/svg"
-              fill="none"
-              viewBox="0 0 24 24"
-            >
-              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-            </svg>
-            Add blocker
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-
-    <!-- Add Relation Dialog -->
-    <Dialog v-model:open="isAddRelDialogOpen">
-      <DialogContent class="sm:max-w-lg overflow-hidden">
-        <DialogHeader>
-          <DialogTitle>Add a relation</DialogTitle>
-          <DialogDescription>
-            From <span class="font-mono text-sky-400">{{ addRelIssueId }}</span>
-            <br />
-            <span class="text-muted-foreground">{{ availableIssuesForDeps.find(i => i.id === addRelIssueId)?.title }}</span>
-          </DialogDescription>
-        </DialogHeader>
-        <div class="space-y-4 py-2 overflow-hidden">
-          <!-- Relation type selector -->
-          <div class="space-y-1.5">
-            <label class="text-xs font-medium text-muted-foreground uppercase tracking-wide">Type</label>
-            <select
-              v-model="addRelSelectedType"
-              class="h-9 w-full text-sm px-3 rounded-md border border-border bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-            >
-              <option v-for="rt in availableRelationTypes" :key="rt.value" :value="rt.value">{{ rt.label }}</option>
-            </select>
-          </div>
-          <!-- Target issue search -->
-          <div class="space-y-1.5 overflow-hidden">
-            <div class="flex items-center justify-between">
-              <label class="text-xs font-medium text-muted-foreground uppercase tracking-wide">Target issue</label>
-              <button
-                type="button"
-                class="flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full border transition-colors select-none"
-                :class="addRelFilterClosed
-                  ? 'border-sky-500/50 bg-sky-500/10 text-sky-400'
-                  : 'border-border text-muted-foreground hover:border-muted-foreground/50'"
-                @click="addRelFilterClosed = !addRelFilterClosed"
-              >
-                <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 3H2l8 9.46V19l4 2v-8.54L22 3z" /></svg>
-                Exclude closed
-              </button>
-            </div>
-            <input
-              v-model="addRelSearchQuery"
-              type="text"
-              class="h-9 w-full text-sm px-3 rounded-md border border-border bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-              placeholder="Search by ID or title..."
-            />
-            <div class="max-h-64 overflow-y-auto rounded-md border border-border">
-              <button
-                v-for="opt in addRelFilteredOptions"
-                :key="opt.id"
-                class="flex items-center gap-2 w-full text-left px-3 py-2 text-sm hover:bg-accent hover:text-accent-foreground transition-colors min-w-0"
-                :class="{ 'bg-accent': addRelSelectedTarget === opt.id }"
-                @click="addRelSelectedTarget = opt.id"
-              >
-                <span :class="['font-medium shrink-0', priorityTextColor(opt.priority)]">{{ opt.id }}</span>
-                <span class="truncate text-muted-foreground flex-1 min-w-0">{{ opt.title }}</span>
-                <StatusBadge :status="opt.status" class="shrink-0 scale-75 origin-right" />
-              </button>
-              <p v-if="!addRelFilteredOptions.length && addRelSearchQuery" class="px-3 py-2 text-sm text-muted-foreground">
-                No matching issues found
-              </p>
-              <p v-if="!addRelFilteredOptions.length && !addRelSearchQuery" class="px-3 py-2 text-sm text-muted-foreground">
-                Type to search for issues...
-              </p>
-            </div>
-          </div>
-        </div>
-        <DialogFooter class="gap-3">
-          <Button variant="outline" @click="isAddRelDialogOpen = false">Cancel</Button>
-          <Button
-            :disabled="!addRelSelectedTarget || isAddingRel"
-            @click="handleAddRelation"
-          >
-            <svg
-              v-if="isAddingRel"
-              class="animate-spin -ml-1 mr-2 h-4 w-4"
-              xmlns="http://www.w3.org/2000/svg"
-              fill="none"
-              viewBox="0 0 24 24"
-            >
-              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-            </svg>
-            Add relation
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-
-    <!-- Remove Relation Confirmation Dialog -->
-    <ConfirmDialog
-      v-model:open="isRemoveRelDialogOpen"
-      title="Remove relation"
-      confirm-text="Remove"
-      cancel-text="Cancel"
-      variant="destructive"
-      :is-loading="isRemovingRel"
-      @confirm="handleRemoveRelation"
-    >
-      <template #description>
-        <p class="text-sm text-muted-foreground">
-          Are you sure you want to remove this relation?
-        </p>
-        <div v-if="pendingRelRemoval" class="mt-2 space-y-2">
-          <div>
-            <p class="text-xs text-muted-foreground uppercase tracking-wide">Issue</p>
-            <p class="text-sm font-mono text-sky-400">{{ pendingRelRemoval.issueId }}</p>
-            <p class="text-sm text-muted-foreground">{{ availableIssuesForDeps.find(i => i.id === pendingRelRemoval!.issueId)?.title }}</p>
-          </div>
-          <div>
-            <p class="text-xs text-muted-foreground uppercase tracking-wide">Related to</p>
-            <p class="text-sm font-mono text-sky-400">{{ pendingRelRemoval.targetId }}</p>
-            <p class="text-sm text-muted-foreground">{{ availableIssuesForDeps.find(i => i.id === pendingRelRemoval!.targetId)?.title }}</p>
-          </div>
-        </div>
-      </template>
-    </ConfirmDialog>
+    <!-- Issue management dialogs + Image/Markdown Preview -->
+    <DialogsLayer />
 
     <!-- Onboarding Folder Picker -->
     <FolderPicker
@@ -2484,50 +1246,5 @@ watch(
       </DialogContent>
     </Dialog>
 
-    <!-- Image Preview Dialog -->
-    <ImagePreviewDialog
-      v-model:open="imagePreview.isOpen.value"
-      :image-src="imagePreview.imageSrc.value"
-      :image-alt="imagePreview.imageAlt.value"
-      :has-multiple-images="imagePreview.hasMultipleImages.value"
-      :can-go-next="imagePreview.canGoNext.value"
-      :can-go-prev="imagePreview.canGoPrev.value"
-      :image-counter="imagePreview.imageCounter.value"
-      @next="imagePreview.goNext"
-      @prev="imagePreview.goPrev"
-    />
-
-    <!-- Markdown Preview Dialog -->
-    <MarkdownPreviewDialog
-      v-model:open="markdownPreview.isOpen.value"
-      :markdown-content="markdownPreview.markdownContent.value"
-      :markdown-title="markdownPreview.markdownTitle.value"
-      :is-loading="markdownPreview.isLoading.value"
-      :has-multiple-files="markdownPreview.hasMultipleFiles.value"
-      :can-go-next="markdownPreview.canGoNext.value"
-      :can-go-prev="markdownPreview.canGoPrev.value"
-      :file-counter="markdownPreview.fileCounter.value"
-      :is-edit-mode="markdownPreview.isEditMode.value"
-      :edited-content="markdownPreview.editedContent.value"
-      :is-saving="markdownPreview.isSaving.value"
-      @next="markdownPreview.goNext"
-      @prev="markdownPreview.goPrev"
-      @toggle-edit="markdownPreview.toggleEdit"
-      @save="markdownPreview.requestSave"
-      @cancel-edit="markdownPreview.cancelEdit"
-      @update:edited-content="markdownPreview.editedContent.value = $event"
-    />
-
-    <!-- Markdown Save Confirmation -->
-    <ConfirmDialog
-      v-model:open="markdownPreview.showSaveConfirm.value"
-      title="Save changes"
-      description="Save the changes to this markdown file?"
-      confirm-text="Save"
-      cancel-text="Cancel"
-      :is-loading="markdownPreview.isSaving.value"
-      @confirm="markdownPreview.confirmSave"
-      @cancel="markdownPreview.cancelSave"
-    />
   </div>
 </template>

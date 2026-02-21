@@ -21,6 +21,12 @@ All steps mandatory. Work is NOT complete until `git push` succeeds.
 3. Close finished issues
 4. `git pull --rebase && bd sync && git push && git status`
 
+### Code Organization
+- **Never overload `app/pages/index.vue`** — extract logic into composables (`app/composables/`) and UI sections into dedicated components (`app/components/`)
+- Keep `index.vue` as an orchestrator: layout structure, composable wiring, and minimal glue code
+- Prefer reusable composables over inline logic for state, dialogs, resize, filtering, etc.
+- **Prefer shared components** over duplication — if a UI element is used in multiple places, extract it into a shared component
+
 ### Dev Server
 Always kill zombies before starting: `pkill -f "beads-issue-tracker" 2>/dev/null && pnpm tauri:dev`
 
