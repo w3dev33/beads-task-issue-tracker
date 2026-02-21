@@ -1,5 +1,25 @@
 # Changelog
 
+## [1.20.1] - 2026-02-20
+
+> Requires **bd 0.55+** for optimal performance. Compatible with bd 0.50+ (with fallback).
+
+### bd 0.55 Compatibility & Stability
+- **Per-project mutex**: Serializes all `bd` CLI calls per project to prevent concurrent Dolt embedded access that caused SIGSEGV crashes (nil pointer dereference in dolthub/driver)
+- **Single `bd list --all` call**: Uses the fixed `--all` flag in bd 0.55+ instead of 2 separate calls (open + closed), with automatic fallback for older versions
+- **Dolt mtime detection fix**: `get_beads_mtime()` now scans the nested Dolt layout (`.beads/dolt/<name>/.dolt/`) introduced in bd 0.52+, in addition to the legacy layout
+
+### Project Switch Optimization
+- **Stop polling/watcher before switch**: Prevents concurrent `bd` calls from the old project's poll cycle and watcher cascade during project switch
+- **Pre-flight checks in parallel**: Migration check and mtime reset run concurrently before data load
+- **Watcher resumes after data load**: Avoids self-triggered cascade polls from `bd` writing to `.beads/`
+
+### Bug Fixes
+- Add missing `IssueStatus` values (deferred, tombstone, pinned, hooked) in FilterChips and IssueTable
+- Fix Vue runtime warnings from directives on TooltipProvider
+- Fix zoom breaking favorites drag and drop reordering
+- Fix favorite removal modal not showing and duplicate entries
+
 ## [1.20.0] - 2026-02-19
 
 > **bd 0.50+ compatibility** — This release adds full support for the Dolt backend introduced in bd 0.50.
