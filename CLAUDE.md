@@ -17,9 +17,16 @@ Consult these before starting any task.
 ### Session Completion
 All steps mandatory. Work is NOT complete until `git push` succeeds.
 1. File issues for remaining work
-2. Run quality gates (if code changed)
+2. Run quality gates (if code changed): `pnpm test && npx vue-tsc --noEmit`
 3. Close finished issues
 4. `git pull --rebase && bd sync && git push && git status`
+
+### Testing
+- **Run before committing**: `pnpm test` — runs all Vitest unit tests
+- **Watch mode**: `pnpm test:watch` — for development
+- Tests live in `tests/` mirroring `app/` structure (e.g., `tests/utils/markdown.test.ts` → `app/utils/markdown.ts`)
+- Pure logic must be extracted into `app/utils/` for testability (not buried in composables)
+- When adding or modifying pure logic (filtering, sorting, parsing, transformations), add or update corresponding tests
 
 ### Code Organization
 - **Never overload `app/pages/index.vue`** — extract logic into composables (`app/composables/`) and UI sections into dedicated components (`app/components/`)

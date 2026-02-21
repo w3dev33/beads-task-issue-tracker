@@ -36,7 +36,9 @@
     "sync-version": "node scripts/sync-version.js",
     "version:minor": "npm version minor --no-git-tag-version && node scripts/sync-version.js",
     "version:major": "npm version major --no-git-tag-version && node scripts/sync-version.js",
-    "version:set": "npm version"
+    "version:set": "npm version",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@tanstack/vue-table": "^8.21.3",
@@ -61,12 +63,15 @@
   "devDependencies": {
     "@tailwindcss/vite": "^4.1.18",
     "@tauri-apps/cli": "^2.9.6",
+    "@types/dompurify": "^3.2.0",
     "@types/markdown-it": "^14.1.2",
     "@types/sortablejs": "^1.15.9",
+    "jsdom": "^28.1.0",
     "tailwindcss": "^4.1.18",
     "terser": "^5.46.0",
     "tw-animate-css": "^1.4.0",
     "typescript": "^5.9.3",
+    "vitest": "^4.0.18",
     "vue-tsc": "^3.2.3"
   },
   "packageManager": "pnpm@10.0.0"
