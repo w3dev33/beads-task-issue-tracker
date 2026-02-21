@@ -31,6 +31,7 @@ Always kill zombies before starting: `pkill -f "beads-issue-tracker" 2>/dev/null
 2. `npm version X.Y.Z --no-git-tag-version && node scripts/sync-version.js` (same version as CHANGELOG)
 3. Commit, tag (`git tag -a vX.Y.Z`), push with tags
 4. `gh release create vX.Y.Z --title "..." --notes "..."`
+5. **Update `.claude/codebase-map.md`** to reflect any structural changes (new files, composables, commands, etc.)
 
 **Release notes must include:**
 - bd compatibility version (e.g., `> Requires **bd 0.49.3+**`)
