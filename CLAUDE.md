@@ -27,9 +27,10 @@ Always kill zombies before starting: `pkill -f "beads-issue-tracker" 2>/dev/null
 ## GitHub — Account: w3dev33
 
 ### Releases
-1. `npm version X.Y.Z --no-git-tag-version && node scripts/sync-version.js`
-2. Commit, tag (`git tag -a vX.Y.Z`), push with tags
-3. `gh release create vX.Y.Z --title "..." --notes "..."`
+1. **Update `CHANGELOG.md`** before anything else — list all changes for this version
+2. `npm version X.Y.Z --no-git-tag-version && node scripts/sync-version.js`
+3. Commit, tag (`git tag -a vX.Y.Z`), push with tags
+4. `gh release create vX.Y.Z --title "..." --notes "..."`
 
 **Release notes must include:**
 - bd compatibility version (e.g., `> Requires **bd 0.49.3+**`)
