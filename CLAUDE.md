@@ -27,8 +27,8 @@ Always kill zombies before starting: `pkill -f "beads-issue-tracker" 2>/dev/null
 ## GitHub — Account: w3dev33
 
 ### Releases
-1. **Update `CHANGELOG.md`** before anything else — list all changes for this version
-2. `npm version X.Y.Z --no-git-tag-version && node scripts/sync-version.js`
+1. **Update `CHANGELOG.md`** with the target version heading and all changes
+2. `npm version X.Y.Z --no-git-tag-version && node scripts/sync-version.js` (same version as CHANGELOG)
 3. Commit, tag (`git tag -a vX.Y.Z`), push with tags
 4. `gh release create vX.Y.Z --title "..." --notes "..."`
 
@@ -48,7 +48,7 @@ Keep `Co-Authored-By: Claude Code <noreply@anthropic.com>` for transparency.
 ### Always Allowed (no confirmation needed)
 - All `bd` CLI commands
 - File operations on `.claude/` and `.beads/`
-- `/Users/laurentchapin/.claude/` (global config)
+- `~/.claude/` (global config)
 
 ### Always Require Confirmation
 - `git commit`, `git push`, `/close-issue`
