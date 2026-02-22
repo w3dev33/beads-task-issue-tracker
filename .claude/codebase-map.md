@@ -1,7 +1,7 @@
 # Codebase Map - Beads Task-Issue Tracker
 
 > Auto-generated comprehensive map of the codebase for faster AI reasoning.
-> Last updated: 2026-02-22 | App version: 1.21.0
+> Last updated: 2026-02-22 | App version: 1.22.0
 
 ## Architecture Overview
 
@@ -49,7 +49,7 @@
 | `useProjectStorage.ts` | `useProjectStorage()`, `saveProjectValue()` | Per-project localStorage via path hash (`beads:proj:{hash}:{key}`) |
 | `useLocalStorage.ts` | `useLocalStorage()` | Global localStorage with singleton cache |
 | `useBeadsPath.ts` | `useBeadsPath()` | Project path management — validates, triggers storage reload on change |
-| `useFavorites.ts` | `useFavorites()` | Favorite projects — add/remove/rename/reorder, sort modes |
+| `useFavorites.ts` | `useProjects()` | Projects — add/remove/rename/reorder, sort modes (renamed from favorites) |
 
 #### UI State
 | File | Exports | Purpose |
@@ -66,13 +66,13 @@
 | File | Exports | Purpose |
 |------|---------|---------|
 | `useAdaptivePolling.ts` | `useAdaptivePolling()` | Smart polling: 5s active, 30s blurred, 60s idle, paused when hidden. Cheap mtime check (1s) + expensive data fetch |
-| `useChangeDetection.ts` | `useChangeDetection()` | Unified change detection — auto-selects backend by mode: native file watcher (direct) or SSE via probe `/events/:project` (probe). Handles mode switching reactively. 300ms debounce + 3s cooldown on both backends |
+| `useChangeDetection.ts` | `useChangeDetection()` | Change detection via native file watcher (Tauri events). SSE backend kept as dead code for future dashboard use. 300ms debounce + 3s cooldown |
 
 #### Page Orchestration
 | File | Exports | Purpose |
 |------|---------|---------|
 | `useSidebarResize.ts` | `useSidebarResize()` | Sidebar open/close state (persisted) + drag resize handlers |
-| `useIssueDialogs.ts` | `useIssueDialogs()` | All dialog state + ~20 handlers (delete, close, detach, deps, relations). Singleton pattern |
+| `useIssueDialogs.ts` | `useIssueDialogs()` | All dialog state + ~20 handlers (delete, close, detach, deps, relations). Singleton pattern. Delete notifications |
 
 #### Dialogs & Previews
 | File | Exports | Purpose |
@@ -96,7 +96,7 @@
 | `AppHeader.vue` | Top bar: title, zoom controls, theme toggle, Tauri drag region |
 | `UpdateIndicator.vue` | Sync/watcher status badges |
 | `UpdateDialog.vue` | Available updates UI |
-| `SettingsDialog.vue` | Theme, zoom, logging, debug options |
+| `SettingsDialog.vue` | Theme, CLI client, probe toggle (dev-only) |
 | `AboutDialog.vue` | App info, credits |
 | `DebugPanel.vue` | Live log viewer with filters |
 | `DebugDialog.vue` | BD CLI version, compatibility info |
@@ -106,7 +106,7 @@
 #### Dashboard (`dashboard/`)
 | Component | Purpose |
 |-----------|---------|
-| `PathSelector.vue` | Project picker — filesystem tree navigation, favorites integration |
+| `PathSelector.vue` | Project picker — filesystem tree navigation, probe expose toggle (dev-only) |
 | `FolderPicker.vue` | Breadcrumb folder navigation with Beads/Dolt badges (sub-component of PathSelector) |
 | `KpiCard.vue` | Stats card (total, open, in-progress, blocked, closed, ready) |
 | `StatusChart.vue` | Status pie chart |
@@ -155,7 +155,7 @@
 
 | File | Key Exports | Purpose |
 |------|-------------|---------|
-| `bd-api.ts` (~650 lines) | `bdList()`, `bdCreate()`, `bdUpdate()`, `bdShow()`, `bdClose()`, `bdDelete()`, `bdPollData()`, `bdCheckChanged()`, `bdSync()`, `bdMigrateToDolt()`, `bdCheckNeedsMigration()`, `getProbeProjectName()`, etc. | Tauri invoke bridge — all 53 commands. Falls back to web API in browser mode. Probe project resolution via `getProbeProjectName()` |
+| `bd-api.ts` (~650 lines) | `bdList()`, `bdCreate()`, `bdUpdate()`, `bdShow()`, `bdClose()`, `bdDelete()`, `bdPollData()`, `bdCheckChanged()`, `bdSync()`, `bdMigrateToDolt()`, `bdCheckNeedsMigration()`, etc. | Tauri invoke bridge — all 53 commands. Falls back to web API in browser mode. Probe functions guarded by `isProbeEnabled()` (dev-only) |
 | `probe-adapter.ts` | `probeMetricsToIssues()`, `probeMetricsToPollData()`, `matchProbeProject()` | Probe response → app types adapter. `matchProbeProject()`: pure path matching with `.beads` suffix normalization |
 | `issue-helpers.ts` | `deduplicateIssues()`, `naturalCompare()`, `sortIssues()`, `filterIssues()`, `groupIssues()`, `computeStatsFromIssues()` | Pure functions extracted from useIssues + useDashboard for testability. Sorting, filtering, epic grouping, dashboard KPIs |
 | `favorites-helpers.ts` | `normalizePath()`, `deduplicateFavorites()`, `sortFavorites()`, `isFavorite()`, `createFavoriteEntry()` | Pure functions extracted from useFavorites for testability |
@@ -332,10 +332,8 @@ User Action → Vue Component → Composable → bd-api.ts → Tauri invoke()
   → Rust Command → bd CLI → .beads/ SQLite
   → JSON response → Rust transform → Frontend state → Reactive UI update
 
-Change Detection (useChangeDetection — auto-selects by mode):
-  Direct: .beads/ change → notify crate → Tauri event → watcher backend
-    → pollForChanges() → bdPollData() → refresh all data
-  Probe:  .beads/ change → probe SSE /events/:project → SSE backend
+Change Detection (useChangeDetection — native file watcher):
+  .beads/ change → notify crate → Tauri event → watcher backend
     → pollForChanges() → bdPollData() → refresh all data
 
 Polling: useAdaptivePolling → bdCheckChanged() (mtime) → if changed → bdPollData()
@@ -367,7 +365,7 @@ Polling: useAdaptivePolling → bdCheckChanged() (mtime) → if changed → bdPo
 | File | Tests | Covers |
 |------|-------|--------|
 | `markdown.test.ts` | 54 | `isImagePath`, `isMarkdownPath`, `isUrl`, `extractImagesFromMarkdown`, `extractImagesFromExternalRef`, `extractMarkdownFromExternalRef`, `extractNonImageRefs`, `renderMarkdown` |
-| `issue-helpers.test.ts` | 48 | `deduplicateIssues`, `naturalCompare`, `getParentIdFromIssue`, `compareChildIssues`, sort orders, `sortIssues`, `filterIssues`, `groupIssues` |
+| `issue-helpers.test.ts` | 53 | `deduplicateIssues`, `naturalCompare`, `getParentIdFromIssue`, `compareChildIssues`, sort orders, `sortIssues`, `filterIssues`, `groupIssues`, `computeReadyIssues` |
 | `favorites-helpers.test.ts` | 22 | `normalizePath`, `deduplicateFavorites`, `sortFavorites`, `isFavorite`, `createFavoriteEntry` |
 | `path.test.ts` | 19 | `splitPath`, `getPathSeparator`, `getFolderName`, `getParentPath` |
 | `open-url.test.ts` | 19 | `isValidUrl`, `isLocalPath`, `normalizeUrl` |
