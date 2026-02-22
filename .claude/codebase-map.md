@@ -1,7 +1,7 @@
 # Codebase Map - Beads Task-Issue Tracker
 
 > Auto-generated comprehensive map of the codebase for faster AI reasoning.
-> Last updated: 2026-02-21 | App version: 1.20.1
+> Last updated: 2026-02-21 | App version: 1.21.0
 
 ## Architecture Overview
 
@@ -156,6 +156,8 @@
 | File | Key Exports | Purpose |
 |------|-------------|---------|
 | `bd-api.ts` (645 lines) | `bdList()`, `bdCreate()`, `bdUpdate()`, `bdShow()`, `bdClose()`, `bdDelete()`, `bdPollData()`, `bdCheckChanged()`, `bdSync()`, `bdMigrateToDolt()`, `bdCheckNeedsMigration()`, etc. | Tauri invoke bridge — all 53 commands. Falls back to web API in browser mode |
+| `issue-helpers.ts` | `deduplicateIssues()`, `naturalCompare()`, `sortIssues()`, `filterIssues()`, `groupIssues()`, `computeStatsFromIssues()` | Pure functions extracted from useIssues + useDashboard for testability. Sorting, filtering, epic grouping, dashboard KPIs |
+| `favorites-helpers.ts` | `normalizePath()`, `deduplicateFavorites()`, `sortFavorites()`, `isFavorite()`, `createFavoriteEntry()` | Pure functions extracted from useFavorites for testability |
 | `markdown.ts` | `renderMarkdown()`, `extractImagesFromMarkdown()`, `extractImagesFromExternalRef()`, `extractMarkdownFromExternalRef()`, `extractNonImageRefs()` | Markdown rendering + image/ref extraction. Filters `cleared:` prefixes |
 | `open-url.ts` | `openUrl()`, `openImageFile()`, `readImageFile()`, `readTextFile()`, `writeTextFile()` | URL/file opening + image loading as base64 |
 | `path.ts` | `splitPath()`, `getPathSeparator()`, `getFolderName()`, `getParentPath()` | Cross-platform path utilities |
@@ -348,3 +350,23 @@ Polling: useAdaptivePolling → bdCheckChanged() (mtime) → if changed → bdPo
 | Global settings | `localStorage beads:*` | Theme, favorites, zoom, notifications |
 | Window | `tauri.conf.json` | 1400x900, min 800x600, overlay title bar |
 | Dev server | Port 3133 | `pnpm nuxt dev --port 3133` |
+
+---
+
+## Testing
+
+**Framework**: Vitest with jsdom environment | **Config**: `vitest.config.ts` | **Run**: `pnpm test` / `pnpm test:watch`
+
+### Test Files (`tests/utils/`)
+
+| File | Tests | Covers |
+|------|-------|--------|
+| `markdown.test.ts` | 54 | `isImagePath`, `isMarkdownPath`, `isUrl`, `extractImagesFromMarkdown`, `extractImagesFromExternalRef`, `extractMarkdownFromExternalRef`, `extractNonImageRefs`, `renderMarkdown` |
+| `issue-helpers.test.ts` | 48 | `deduplicateIssues`, `naturalCompare`, `getParentIdFromIssue`, `compareChildIssues`, sort orders, `sortIssues`, `filterIssues`, `groupIssues` |
+| `favorites-helpers.test.ts` | 22 | `normalizePath`, `deduplicateFavorites`, `sortFavorites`, `isFavorite`, `createFavoriteEntry` |
+| `path.test.ts` | 19 | `splitPath`, `getPathSeparator`, `getFolderName`, `getParentPath` |
+| `open-url.test.ts` | 19 | `isValidUrl`, `isLocalPath`, `normalizeUrl` |
+| `dashboard-stats.test.ts` | 11 | `computeStatsFromIssues` |
+| `hash.test.ts` | 6 | `hashPath` |
+
+**Total: 179 tests** | **Strategy**: Extract pure functions from composables into `app/utils/` for unit testing. Composables remain thin reactive wrappers.

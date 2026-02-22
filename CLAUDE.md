@@ -34,6 +34,11 @@ All steps mandatory. Work is NOT complete until `git push` succeeds.
 - Prefer reusable composables over inline logic for state, dialogs, resize, filtering, etc.
 - **Prefer shared components** over duplication — if a UI element is used in multiple places, extract it into a shared component
 
+### Context Management
+- **Always prefer `/continue-task` over `/compact`** — it preserves issue context, progress, and next steps far better
+- When the session is long and context is getting large, proactively run `/continue-task` before auto-compact triggers
+- If a `PreCompact` hook fires with "auto" trigger, immediately run `/continue-task` instead of letting compact proceed blindly
+
 ### Dev Server
 Always kill zombies before starting: `pkill -f "beads-issue-tracker" 2>/dev/null && pnpm tauri:dev`
 
