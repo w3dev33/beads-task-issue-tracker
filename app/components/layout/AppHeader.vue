@@ -7,18 +7,19 @@ import {
 } from '~/components/ui/tooltip'
 
 const props = defineProps<{
-  favoriteName?: string
+  projectName?: string
   editContext?: string
   editId?: string
   showRefresh?: boolean
+  isExposed?: boolean
 }>()
 
 const emit = defineEmits<{
   refresh: []
 }>()
 
-// Title: show favorite name if selected, otherwise default app title
-const displayTitle = computed(() => props.favoriteName || 'Beads Task-Issue Tracker')
+// Title: show project name if selected, otherwise default app title
+const displayTitle = computed(() => props.projectName || 'Beads Task-Issue Tracker')
 
 const { isDark, currentTheme, cycleTheme } = useTheme()
 const { zoomLevel, zoomIn, zoomOut, resetZoom, canZoomIn, canZoomOut } = useZoom()
@@ -76,7 +77,23 @@ const handleZoomIn = (event: MouseEvent) => {
         <circle cx="20" cy="5" r="3" fill="#eab308" />
         <circle cx="12" cy="18" r="3" fill="#ef4444" />
       </svg>
-      <h1 class="text-lg font-semibold text-foreground leading-tight">{{ displayTitle }}</h1>
+      <h1 class="text-lg font-semibold text-foreground leading-tight flex items-center gap-2">
+        {{ displayTitle }}
+        <svg
+          v-if="isExposed"
+          class="w-4 h-4 text-green-500"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          <circle cx="12" cy="12" r="10" />
+          <line x1="2" y1="12" x2="22" y2="12" />
+          <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+        </svg>
+      </h1>
     </div>
 
     <!-- Edit context (centered, replaces title) - pointer-events-none to allow drag through -->

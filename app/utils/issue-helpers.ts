@@ -373,3 +373,13 @@ export function computeStatsFromIssues(issues: Issue[]): DashboardStats {
 
   return stats
 }
+
+/**
+ * Compute ready-to-work issues: open (not blocked) with no blockers.
+ * Used client-side in probe mode where `bd ready` is not available.
+ */
+export function computeReadyIssues(issues: Issue[]): Issue[] {
+  return issues.filter(i =>
+    i.status === 'open' && (!i.blockedBy || i.blockedBy.length === 0),
+  )
+}

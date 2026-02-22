@@ -11,31 +11,33 @@ import ConfirmDialog from '~/components/ui/confirm-dialog/ConfirmDialog.vue'
 import FolderPicker from './FolderPicker.vue'
 import Sortable from 'sortablejs'
 import { getFolderName } from '~/utils/path'
+import { listProbeProjects, registerOrExposeProject, patchProbeProject, probeUnregisterProject, getExternalUrl } from '~/utils/bd-api'
+import type { ProbeProject } from '~/utils/probe-adapter'
 
 const props = defineProps<{
   isLoading?: boolean
 }>()
 
-const { beadsPath, setPath, clearPath, isCustomPath } = useBeadsPath()
-const { favorites, sortedFavorites, sortMode, hasReordered, addFavorite, removeFavorite, isFavorite, reorderFavorites, setSortMode, resetSortOrder } = useFavorites()
+const { beadsPath, setPath, clearPath } = useBeadsPath()
+const { projects, sortedProjects, sortMode, hasReordered, removeProject, reorderProjects, setSortMode, resetSortOrder } = useProjects()
 
-const favoritesListRef = ref<HTMLElement | null>(null)
+const projectsListRef = ref<HTMLElement | null>(null)
 let sortableInstance: Sortable | null = null
 
-// Apply counter-zoom on favorites list before SortableJS calculates coordinates
+// Apply counter-zoom on projects list before SortableJS calculates coordinates
 const resetZoomOnPointerDown = (e: PointerEvent) => {
   const target = e.target as HTMLElement
-  if (!target.closest('.drag-handle') || !favoritesListRef.value) return
+  if (!target.closest('.drag-handle') || !projectsListRef.value) return
   const zoomableContent = document.getElementById('zoomable-content')
   const parentZoom = parseFloat(zoomableContent?.style.zoom || '100')
   if (parentZoom !== 100) {
-    favoritesListRef.value.style.zoom = `${10000 / parentZoom}%`
+    projectsListRef.value.style.zoom = `${10000 / parentZoom}%`
   }
 }
 
 const restoreZoom = () => {
-  if (favoritesListRef.value) {
-    favoritesListRef.value.style.zoom = ''
+  if (projectsListRef.value) {
+    projectsListRef.value.style.zoom = ''
   }
 }
 
@@ -44,14 +46,14 @@ const initSortable = () => {
     sortableInstance.destroy()
     sortableInstance = null
   }
-  if (!favoritesListRef.value) return
+  if (!projectsListRef.value) return
 
   // Listen on pointerdown to reset zoom before SortableJS kicks in
-  favoritesListRef.value.addEventListener('pointerdown', resetZoomOnPointerDown)
+  projectsListRef.value.addEventListener('pointerdown', resetZoomOnPointerDown)
   // Restore zoom if user releases without dragging
-  favoritesListRef.value.addEventListener('pointerup', restoreZoom)
+  projectsListRef.value.addEventListener('pointerup', restoreZoom)
 
-  sortableInstance = Sortable.create(favoritesListRef.value, {
+  sortableInstance = Sortable.create(projectsListRef.value, {
     handle: '.drag-handle',
     animation: 200,
     ghostClass: 'opacity-30',
@@ -73,24 +75,24 @@ const initSortable = () => {
       container.removeChild(evt.item)
       const refNode = container.children[evt.oldIndex] || null
       container.insertBefore(evt.item, refNode)
-      // Build reordered favorites array from paths
-      const currentFavs = sortedFavorites.value
+      // Build reordered projects array from paths
+      const currentProjs = sortedProjects.value
       const reordered = newOrder
-        .map(path => currentFavs.find(f => f.path === path))
+        .map(path => currentProjs.find(f => f.path === path))
         .filter((f): f is NonNullable<typeof f> => !!f)
-      if (reordered.length === currentFavs.length) {
-        reorderFavorites(reordered)
+      if (reordered.length === currentProjs.length) {
+        reorderProjects(reordered)
       }
     },
   })
 }
 
-const isFavoritesCollapsed = useLocalStorage('beads:favoritesCollapsed', false)
+const isProjectsCollapsed = useLocalStorage('beads:favoritesCollapsed', false)
 
 onMounted(initSortable)
 onBeforeUnmount(() => {
-  favoritesListRef.value?.removeEventListener('pointerdown', resetZoomOnPointerDown)
-  favoritesListRef.value?.removeEventListener('pointerup', restoreZoom)
+  projectsListRef.value?.removeEventListener('pointerdown', resetZoomOnPointerDown)
+  projectsListRef.value?.removeEventListener('pointerup', restoreZoom)
   sortableInstance?.destroy()
 })
 
@@ -101,8 +103,8 @@ watch(() => props.isLoading, () => {
   }
 })
 
-// Re-init sortable when favorites list becomes visible or content changes
-watch([isFavoritesCollapsed, () => favorites.value.length], () => {
+// Re-init sortable when projects list becomes visible or content changes
+watch([isProjectsCollapsed, () => projects.value.length], () => {
   nextTick(initSortable)
 })
 
@@ -122,61 +124,60 @@ const emit = defineEmits<{
 
 const isPickerOpen = ref(false)
 const isRemoveDialogOpen = ref(false)
-const favoriteToRemove = ref<string | null>(null)
+const projectToRemove = ref<string | null>(null)
 
-// Expose isPickerOpen to parent components
-defineExpose({ isPickerOpen })
+// Whether the currently selected project is exposed to the probe
+const isCurrentExposed = computed(() => {
+  if (!probeEnabled.value || !beadsPath.value) return false
+  return isExposed(beadsPath.value)
+})
+
+// Expose to parent components
+defineExpose({ isPickerOpen, isCurrentExposed })
 
 const handleSelectFolder = (path: string) => {
   setPath(path)
   emit('change')
 }
 
-const handleSelectFavorite = (path: string) => {
+const handleSelectProject = (path: string) => {
   // Don't allow switching while loading
   if (props.isLoading) return
   setPath(path)
   emit('change')
 }
 
-const handleToggleFavorite = () => {
-  if (isFavorite(beadsPath.value)) {
-    // Show confirmation dialog
-    favoriteToRemove.value = beadsPath.value
-    isRemoveDialogOpen.value = true
-  } else {
-    addFavorite(beadsPath.value)
-  }
-}
-
-const handleRemoveFavorite = (path: string, event: Event) => {
+const handleRemoveProject = (path: string, event: Event) => {
   event.stopPropagation()
   // Show confirmation dialog
-  favoriteToRemove.value = path
+  projectToRemove.value = path
   isRemoveDialogOpen.value = true
 }
 
-const confirmRemoveFavorite = () => {
-  if (!favoriteToRemove.value) return
+const confirmRemoveProject = () => {
+  if (!projectToRemove.value) return
 
-  const pathToRemove = favoriteToRemove.value
+  const pathToRemove = projectToRemove.value
   const isCurrentPath = beadsPath.value === pathToRemove
-  const isLastFavorite = favorites.value.length === 1
+  const isLastProject = projects.value.length === 1
 
-  // Remove the favorite
-  removeFavorite(pathToRemove)
+  // Unregister from probe before removing (fire-and-forget)
+  probeUnregisterProject(pathToRemove)
+
+  // Remove the project
+  removeProject(pathToRemove)
 
   // If we removed the current path
   if (isCurrentPath) {
-    if (isLastFavorite) {
-      // Last favorite removed - clear path to show onboarding
+    if (isLastProject) {
+      // Last project removed - clear path to show onboarding
       clearPath()
       emit('reset')
     } else {
-      // Switch to another favorite
-      const remainingFavorite = favorites.value.find(f => f.path !== pathToRemove)
-      if (remainingFavorite) {
-        setPath(remainingFavorite.path)
+      // Switch to another project
+      const remainingProject = projects.value.find(f => f.path !== pathToRemove)
+      if (remainingProject) {
+        setPath(remainingProject.path)
         emit('change')
       }
     }
@@ -184,15 +185,106 @@ const confirmRemoveFavorite = () => {
 
   // Close dialog
   isRemoveDialogOpen.value = false
-  favoriteToRemove.value = null
+  projectToRemove.value = null
 }
 
-const favoriteToRemoveName = computed(() => {
-  if (!favoriteToRemove.value) return ''
-  return getFolderName(favoriteToRemove.value)
+const projectToRemoveName = computed(() => {
+  if (!projectToRemove.value) return ''
+  return getFolderName(projectToRemove.value)
 })
 
-const currentIsFavorite = computed(() => isFavorite(beadsPath.value))
+// ============================================================================
+// Probe Expose Toggle (per-project)
+// ============================================================================
+
+const probeProjects = ref<ProbeProject[]>([])
+const isDev = import.meta.dev
+const probeEnabled = isDev ? useLocalStorage('beads:probeEnabled', false) : ref(false)
+const togglingPath = ref<string | null>(null)
+const isExposeDialogOpen = ref(false)
+const exposeTargetPath = ref<string | null>(null)
+
+const exposeDialogTitle = computed(() => {
+  if (!exposeTargetPath.value) return ''
+  return isExposed(exposeTargetPath.value) ? 'Remove from monitoring' : 'Expose to monitoring'
+})
+
+const exposeDialogDescription = computed(() => {
+  if (!exposeTargetPath.value) return ''
+  const name = getFolderName(exposeTargetPath.value)
+  return isExposed(exposeTargetPath.value)
+    ? `Are you sure you want to remove '${name}' from monitoring?`
+    : `Are you sure you want to expose '${name}' to monitoring?`
+})
+
+function getProbeProjectForPath(projPath: string): ProbeProject | undefined {
+  // Match by checking if the probe path corresponds to the project path
+  const beadsPath = projPath.endsWith('.beads') ? projPath : `${projPath}/.beads`
+  return probeProjects.value.find(p => p.path === beadsPath || p.path === projPath)
+}
+
+function isExposed(projPath: string): boolean {
+  const proj = getProbeProjectForPath(projPath)
+  return proj?.expose === true
+}
+
+function isRegistered(projPath: string): boolean {
+  return !!getProbeProjectForPath(projPath)
+}
+
+async function refreshProbeProjects() {
+  if (!probeEnabled.value) return
+  try {
+    probeProjects.value = await listProbeProjects(getExternalUrl())
+  } catch {
+    probeProjects.value = []
+  }
+}
+
+function requestToggleExpose(projPath: string) {
+  exposeTargetPath.value = projPath
+  isExposeDialogOpen.value = true
+}
+
+async function confirmToggleExpose() {
+  const projPath = exposeTargetPath.value
+  if (!projPath) return
+
+  isExposeDialogOpen.value = false
+  const baseUrl = getExternalUrl()
+  if (!baseUrl) return
+
+  togglingPath.value = projPath
+  try {
+    const beadsPath = projPath.endsWith('.beads') ? projPath : `${projPath}/.beads`
+    const existing = getProbeProjectForPath(projPath)
+
+    if (existing) {
+      // Already registered — toggle expose
+      await patchProbeProject(baseUrl, existing.name, { expose: !existing.expose })
+    } else {
+      // Not registered — register with expose: true
+      await registerOrExposeProject(baseUrl, beadsPath, true)
+    }
+
+    await refreshProbeProjects()
+  } catch {
+    // Silently fail — user can retry
+  } finally {
+    togglingPath.value = null
+    exposeTargetPath.value = null
+  }
+}
+
+// Refresh probe projects when probe is enabled
+watch(probeEnabled, (active) => {
+  if (active) refreshProbeProjects()
+}, { immediate: true })
+
+// Also refresh when projects change (new project added)
+watch(() => projects.value.length, () => {
+  if (probeEnabled.value) refreshProbeProjects()
+})
 </script>
 
 <template>
@@ -206,47 +298,18 @@ const currentIsFavorite = computed(() => isFavorite(beadsPath.value))
         Select Project
       </Button>
 
-      <template v-if="isCustomPath">
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger as-child>
-              <Button
-                variant="ghost"
-                size="icon"
-                class="h-7 w-7"
-                @click="handleToggleFavorite"
-              >
-                <svg
-                  class="w-3 h-3"
-                  :class="currentIsFavorite ? 'text-yellow-500 fill-yellow-500' : 'text-muted-foreground'"
-                  viewBox="0 0 24 24"
-                  :fill="currentIsFavorite ? 'currentColor' : 'none'"
-                  stroke="currentColor"
-                  stroke-width="2"
-                >
-                  <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
-                </svg>
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>
-              {{ currentIsFavorite ? 'Remove selected from favorites' : 'Add to favorites' }}
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
-      </template>
-
     </div>
 
-    <!-- Favorites -->
-    <div v-if="favorites.length > 0" class="space-y-1">
+    <!-- Projects -->
+    <div v-if="projects.length > 0" class="space-y-1">
       <div class="flex items-center gap-2 w-full">
         <button
           class="flex items-center gap-2 text-[10px] text-muted-foreground hover:text-foreground transition-colors flex-1"
-          @click="isFavoritesCollapsed = !isFavoritesCollapsed"
+          @click="isProjectsCollapsed = !isProjectsCollapsed"
         >
           <svg
             class="w-3 h-3 transition-transform"
-            :class="{ '-rotate-90': isFavoritesCollapsed }"
+            :class="{ '-rotate-90': isProjectsCollapsed }"
             xmlns="http://www.w3.org/2000/svg"
             viewBox="0 0 24 24"
             fill="none"
@@ -257,11 +320,11 @@ const currentIsFavorite = computed(() => isFavorite(beadsPath.value))
           >
             <polyline points="6 9 12 15 18 9" />
           </svg>
-          <span class="uppercase tracking-wide">Favorites</span>
-          <span class="ml-auto">({{ favorites.length }})</span>
+          <span class="uppercase tracking-wide">Projects</span>
+          <span class="ml-auto">({{ projects.length }})</span>
         </button>
         <!-- Sort mode toggle (hidden when collapsed) -->
-        <template v-if="!isFavoritesCollapsed">
+        <template v-if="!isProjectsCollapsed">
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger as-child>
@@ -294,7 +357,7 @@ const currentIsFavorite = computed(() => isFavorite(beadsPath.value))
           </TooltipProvider>
         </template>
         <!-- Reset to A-Z (hidden when collapsed) -->
-        <template v-if="hasReordered && !isFavoritesCollapsed">
+        <template v-if="hasReordered && !isProjectsCollapsed">
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger as-child>
@@ -312,15 +375,15 @@ const currentIsFavorite = computed(() => isFavorite(beadsPath.value))
           </TooltipProvider>
         </template>
       </div>
-      <div v-show="!isFavoritesCollapsed" ref="favoritesListRef" class="flex flex-col gap-1">
-        <div v-for="fav in sortedFavorites" :key="fav.path" :data-path="fav.path" class="relative group">
+      <div v-show="!isProjectsCollapsed" ref="projectsListRef" class="flex flex-col gap-1">
+        <div v-for="proj in sortedProjects" :key="proj.path" :data-path="proj.path" class="relative group">
           <Button
-            :variant="beadsPath === fav.path ? 'default' : 'ghost'"
+            :variant="beadsPath === proj.path ? 'default' : 'ghost'"
             size="sm"
             class="h-7 justify-start text-xs gap-0 w-full pr-6"
-            :class="{ 'opacity-50 cursor-wait': isLoading && beadsPath !== fav.path }"
+            :class="{ 'opacity-50 cursor-wait': isLoading && beadsPath !== proj.path }"
             :disabled="isLoading"
-            @click="handleSelectFavorite(fav.path)"
+            @click="handleSelectProject(proj.path)"
           >
             <!-- Drag handle -->
             <span
@@ -333,9 +396,9 @@ const currentIsFavorite = computed(() => isFavorite(beadsPath.value))
                 <circle cx="8" cy="20" r="2" /><circle cx="16" cy="20" r="2" />
               </svg>
             </span>
-            <!-- Loading spinner for active favorite -->
+            <!-- Loading spinner for active project -->
             <svg
-              v-if="isLoading && beadsPath === fav.path"
+              v-if="isLoading && beadsPath === proj.path"
               class="w-3 h-3 shrink-0 animate-spin mr-1"
               viewBox="0 0 24 24"
               fill="none"
@@ -345,22 +408,47 @@ const currentIsFavorite = computed(() => isFavorite(beadsPath.value))
               <circle cx="12" cy="12" r="10" stroke-opacity="0.25" />
               <path d="M12 2a10 10 0 0 1 10 10" stroke-linecap="round" />
             </svg>
-            <!-- Star icon when not loading -->
+            <!-- Probe expose toggle (external mode) -->
+            <button
+              v-if="probeEnabled"
+              class="shrink-0 mr-1 p-0 rounded transition-colors"
+              :class="isExposed(proj.path)
+                ? 'text-green-500'
+                : 'text-muted-foreground/40 hover:text-green-500'"
+              :disabled="togglingPath === proj.path"
+              @click.stop.prevent="requestToggleExpose(proj.path)"
+              :title="isExposed(proj.path) ? 'Exposed to monitoring (click to disable)' : 'Not exposed (click to expose)'"
+            >
+              <svg v-if="togglingPath === proj.path" class="w-3.5 h-3.5 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10" stroke-opacity="0.25" />
+                <path d="M12 2a10 10 0 0 1 10 10" stroke-linecap="round" />
+              </svg>
+              <svg v-else class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10" />
+                <line x1="2" y1="12" x2="22" y2="12" />
+                <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+              </svg>
+            </button>
+            <!-- Folder icon (when probe disabled) -->
             <svg
               v-else
-              class="w-3 h-3 shrink-0 mr-1"
-              :class="beadsPath === fav.path ? 'text-yellow-300 fill-yellow-300' : 'text-yellow-500 fill-yellow-500'"
+              class="w-3 h-3 shrink-0 mr-1 text-muted-foreground"
               viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
             >
-              <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+              <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
             </svg>
-            <span class="truncate flex-1 text-left">{{ fav.name }}</span>
+            <span class="truncate flex-1 text-left">{{ proj.name }}</span>
           </Button>
           <!-- Remove button - outside Button to avoid click capture -->
           <button
             v-if="!isLoading"
             class="absolute right-0.5 top-1/2 -translate-y-1/2 p-1 rounded opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
-            @click.stop.prevent="handleRemoveFavorite(fav.path, $event)"
+            @click.stop.prevent="handleRemoveProject(proj.path, $event)"
           >
             <svg
               class="w-3.5 h-3.5"
@@ -384,15 +472,25 @@ const currentIsFavorite = computed(() => isFavorite(beadsPath.value))
       @select="handleSelectFolder"
     />
 
-    <!-- Remove Favorite Confirmation Dialog -->
+    <!-- Remove Project Confirmation Dialog -->
     <ConfirmDialog
       v-model:open="isRemoveDialogOpen"
-      title="Remove from favorites"
-      :description="`Are you sure you want to remove '${favoriteToRemoveName}' from your favorites?`"
+      title="Remove project"
+      :description="`Are you sure you want to remove '${projectToRemoveName}' from your projects?`"
       confirm-text="Remove"
       cancel-text="Cancel"
       variant="destructive"
-      @confirm="confirmRemoveFavorite"
+      @confirm="confirmRemoveProject"
+    />
+
+    <!-- Probe Expose Confirmation Dialog -->
+    <ConfirmDialog
+      v-model:open="isExposeDialogOpen"
+      :title="exposeDialogTitle"
+      :description="exposeDialogDescription"
+      confirm-text="Confirm"
+      cancel-text="Cancel"
+      @confirm="confirmToggleExpose"
     />
   </div>
 </template>

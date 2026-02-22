@@ -8,6 +8,7 @@ import {
   sortIssues,
   filterIssues,
   groupIssues,
+  computeReadyIssues,
   statusOrder,
   priorityOrder,
   typeOrder,
@@ -372,5 +373,47 @@ describe('groupIssues', () => {
 
     const result = groupIssues(all, all)
     expect(result[0]!.children.map(c => c.id)).toEqual(['e.1', 'e.2', 'e.3'])
+  })
+})
+
+// ---------------------------------------------------------------------------
+// computeReadyIssues
+// ---------------------------------------------------------------------------
+describe('computeReadyIssues', () => {
+  it('returns open issues without blockers', () => {
+    const issues = [
+      makeIssue({ id: '1', status: 'open' }),
+      makeIssue({ id: '2', status: 'open' }),
+    ]
+    expect(computeReadyIssues(issues).map(i => i.id)).toEqual(['1', '2'])
+  })
+
+  it('excludes issues with blockedBy', () => {
+    const issues = [
+      makeIssue({ id: '1', status: 'open' }),
+      makeIssue({ id: '2', status: 'open', blockedBy: ['1'] }),
+    ]
+    expect(computeReadyIssues(issues).map(i => i.id)).toEqual(['1'])
+  })
+
+  it('excludes non-open statuses', () => {
+    const issues = [
+      makeIssue({ id: '1', status: 'open' }),
+      makeIssue({ id: '2', status: 'in_progress' }),
+      makeIssue({ id: '3', status: 'closed' }),
+      makeIssue({ id: '4', status: 'blocked' }),
+    ]
+    expect(computeReadyIssues(issues).map(i => i.id)).toEqual(['1'])
+  })
+
+  it('treats empty blockedBy as not blocked', () => {
+    const issues = [
+      makeIssue({ id: '1', status: 'open', blockedBy: [] }),
+    ]
+    expect(computeReadyIssues(issues)).toHaveLength(1)
+  })
+
+  it('returns empty array for empty input', () => {
+    expect(computeReadyIssues([])).toEqual([])
   })
 })

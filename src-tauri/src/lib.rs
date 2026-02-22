@@ -25,6 +25,10 @@ static LAST_KNOWN_MTIME: LazyLock<Mutex<HashMap<String, std::time::SystemTime>>>
 // Configurable CLI binary name (default: "bd")
 static CLI_BINARY: LazyLock<Mutex<String>> = LazyLock::new(|| Mutex::new("bd".to_string()));
 
+// Global child process handle for beads-probe
+static PROBE_CHILD: LazyLock<Mutex<Option<std::process::Child>>> =
+    LazyLock::new(|| Mutex::new(None));
+
 // Per-project mutex to prevent concurrent bd/Dolt access.
 // bd 0.55 uses embedded Dolt which crashes (SIGSEGV) when two bd processes
 // access the same database simultaneously. This serializes all bd calls per project.
@@ -898,6 +902,19 @@ fn uses_jsonl_files() -> bool {
 fn supports_list_all_flag() -> bool {
     match get_cli_client_info() {
         Some((CliClient::Bd, major, minor, _)) => major > 0 || minor >= 55,
+        _ => false,
+    }
+}
+
+/// Returns true if `bd delete --hard` is supported.
+/// The --hard flag was removed in bd 0.50.0.
+/// - br: NO
+/// - bd < 0.50.0: YES
+/// - bd >= 0.50.0: NO (only --force needed)
+/// - unknown: NO (safe default)
+fn supports_delete_hard_flag() -> bool {
+    match get_cli_client_info() {
+        Some((CliClient::Bd, major, minor, _)) => major == 0 && minor < 50,
         _ => false,
     }
 }
@@ -2645,8 +2662,12 @@ async fn bd_close(id: String, options: CwdOptions) -> Result<serde_json::Value, 
 
 #[tauri::command]
 async fn bd_delete(id: String, options: CwdOptions) -> Result<serde_json::Value, String> {
-    log::info!("[bd_delete] Deleting issue: {} with --force --hard", id);
-    execute_bd("delete", &[id.clone(), "--force".to_string(), "--hard".to_string()], options.cwd.as_deref())?;
+    let mut args = vec![id.clone(), "--force".to_string()];
+    if supports_delete_hard_flag() {
+        args.push("--hard".to_string());
+    }
+    log::info!("[bd_delete] Deleting issue: {} with args: {:?}", id, args);
+    execute_bd("delete", &args, options.cwd.as_deref())?;
 
     // Sync after delete to push deletion to remote and prevent resurrection
     sync_bd_database(options.cwd.as_deref());
@@ -4015,11 +4036,178 @@ fn get_watcher_status(
 }
 
 // ============================================================================
+// External Data Source Commands
+// ============================================================================
+
+#[tauri::command]
+async fn fetch_external_data(url: String) -> Result<String, String> {
+    log_info!("[probe] GET {}", url);
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .build()
+        .map_err(|e| format!("HTTP client error: {}", e))?;
+
+    let response = client
+        .get(&url)
+        .header("Accept", "application/json")
+        .send()
+        .await
+        .map_err(|e| format!("Request failed: {}", e))?;
+
+    if !response.status().is_success() {
+        let err = format!("HTTP {}: {}", response.status().as_u16(), response.status().canonical_reason().unwrap_or("Unknown"));
+        log_error!("[probe] GET failed: {}", err);
+        return Err(err);
+    }
+
+    response.text().await.map_err(|e| format!("Failed to read response: {}", e))
+}
+
+#[tauri::command]
+async fn check_external_health(url: String) -> Result<bool, String> {
+    let health_url = format!("{}/health", url.trim_end_matches('/'));
+    log_info!("[probe] Health check: {}", health_url);
+
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(5))
+        .build()
+        .map_err(|e| format!("HTTP client error: {}", e))?;
+
+    match client.get(&health_url).send().await {
+        Ok(response) => Ok(response.status().is_success()),
+        Err(_) => Ok(false),
+    }
+}
+
+#[tauri::command]
+async fn post_external_data(url: String, body: String) -> Result<String, String> {
+    log_info!("[probe] POST {}", url);
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .build()
+        .map_err(|e| format!("HTTP client error: {}", e))?;
+
+    let response = client
+        .post(&url)
+        .header("Content-Type", "application/json")
+        .header("Accept", "application/json")
+        .body(body)
+        .send()
+        .await
+        .map_err(|e| format!("Request failed: {}", e))?;
+
+    if !response.status().is_success() {
+        let status = response.status();
+        let text = response.text().await.unwrap_or_default();
+        return Err(format!("HTTP {}: {}", status.as_u16(), text));
+    }
+
+    response.text().await.map_err(|e| format!("Failed to read response: {}", e))
+}
+
+#[tauri::command]
+async fn delete_external_data(url: String) -> Result<String, String> {
+    log_info!("[probe] DELETE {}", url);
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .build()
+        .map_err(|e| format!("HTTP client error: {}", e))?;
+
+    let response = client
+        .delete(&url)
+        .header("Accept", "application/json")
+        .send()
+        .await
+        .map_err(|e| format!("Request failed: {}", e))?;
+
+    if !response.status().is_success() {
+        let status = response.status();
+        let text = response.text().await.unwrap_or_default();
+        return Err(format!("HTTP {}: {}", status.as_u16(), text));
+    }
+
+    response.text().await.map_err(|e| format!("Failed to read response: {}", e))
+}
+
+#[tauri::command]
+async fn patch_external_data(url: String, body: String) -> Result<String, String> {
+    log_info!("[probe] PATCH {}", url);
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .build()
+        .map_err(|e| format!("HTTP client error: {}", e))?;
+
+    let response = client
+        .patch(&url)
+        .header("Content-Type", "application/json")
+        .header("Accept", "application/json")
+        .body(body)
+        .send()
+        .await
+        .map_err(|e| format!("Request failed: {}", e))?;
+
+    if !response.status().is_success() {
+        let status = response.status();
+        let text = response.text().await.unwrap_or_default();
+        return Err(format!("HTTP {}: {}", status.as_u16(), text));
+    }
+
+    response.text().await.map_err(|e| format!("Failed to read response: {}", e))
+}
+
+// ============================================================================
+// Probe Launcher
+// ============================================================================
+
+#[tauri::command]
+async fn launch_probe(port: u16) -> Result<String, String> {
+    use std::process::Stdio;
+
+    let health_url = format!("http://127.0.0.1:{}/health", port);
+
+    // Check if probe is already reachable via HTTP health endpoint
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(2))
+        .build()
+        .map_err(|e| format!("HTTP client error: {}", e))?;
+
+    if let Ok(resp) = client.get(&health_url).send().await {
+        if resp.status().is_success() {
+            log_info!("[probe] Already running on port {}", port);
+            return Ok("already running".to_string());
+        }
+    }
+
+    // Determine binary: BEADS_PROBE_BIN env var, fallback to "beads-probe"
+    let bin = env::var("BEADS_PROBE_BIN").unwrap_or_else(|_| "beads-probe".to_string());
+    log_info!("[probe] Launching: {} --port {}", bin, port);
+
+    let child = Command::new(&bin)
+        .arg("--port")
+        .arg(port.to_string())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .map_err(|e| format!("Failed to spawn {}: {}", bin, e))?;
+
+    // Store child handle so it lives as long as the app
+    if let Ok(mut guard) = PROBE_CHILD.lock() {
+        *guard = Some(child);
+    }
+
+    log_info!("[probe] Launched on port {}", port);
+    Ok("launched".to_string())
+}
+
+// ============================================================================
 // App Entry Point
 // ============================================================================
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Load .env file (dev only — in prod there's no .env, env vars come from the system)
+    let _ = dotenvy::dotenv();
+
     tauri::Builder::default()
         .manage(Mutex::new(WatcherState::default()))
         .plugin(tauri_plugin_shell::init())
@@ -4134,6 +4322,12 @@ pub fn run() {
             start_watching,
             stop_watching,
             get_watcher_status,
+            fetch_external_data,
+            check_external_health,
+            post_external_data,
+            delete_external_data,
+            patch_external_data,
+            launch_probe,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -48,7 +48,7 @@ const { filters, toggleStatus, toggleType, togglePriority, toggleAssignee, clear
 const { columns, toggleColumn, setColumns, resetColumns } = useColumnConfig()
 const { beadsPath, hasStoredPath } = useBeadsPath()
 const { success: notifySuccess, error: notifyError } = useNotification()
-const { favorites } = useFavorites()
+const { projects } = useProjects()
 const {
   issues,
   filteredIssues,
@@ -90,15 +90,34 @@ if (import.meta.client && !selectedIssue.value) {
   isRightSidebarOpen.value = false
 }
 
-// Current favorite name for header subtitle
-const currentFavoriteName = computed(() => {
-  const favorite = favorites.value.find(f => f.path === beadsPath.value)
-  return favorite?.name
+// Probe enabled toggle (dev-only — hidden in production until probe is a public feature)
+const isDev = import.meta.dev
+const probeEnabled = isDev ? useLocalStorage('beads:probeEnabled', false) : ref(false)
+
+// React to probe toggle: launch/register or unregister
+watch(probeEnabled, async (enabled) => {
+  if (enabled) {
+    await launchProbeIfNeeded()
+    ensureProbeRegistration(beadsPath.value)
+  } else {
+    probeUnregisterProject(beadsPath.value)
+  }
 })
 
-// Show onboarding when no project is selected (no stored path and no favorites)
+// Current project name for header subtitle
+const currentProjectName = computed(() => {
+  const project = projects.value.find(f => f.path === beadsPath.value)
+  return project?.name
+})
+
+// Whether the current project is exposed to the probe (read from PathSelector)
+const isCurrentProjectExposed = computed(() => {
+  return pathSelectorRef.value?.isCurrentExposed || mobilePathSelectorRef.value?.isCurrentExposed || false
+})
+
+// Show onboarding when no project is selected (no stored path and no projects)
 const showOnboarding = computed(() => {
-  return favorites.value.length === 0 && !hasStoredPath.value
+  return projects.value.length === 0 && !hasStoredPath.value
 })
 
 // Refs to PathSelector to open folder picker (desktop and mobile)
@@ -157,23 +176,11 @@ const checkViewport = () => {
 // Sync status composable (for auto-sync indicator and error dialog)
 const { showErrorDialog: showSyncErrorDialog, lastSyncError, closeErrorDialog: closeSyncErrorDialog } = useSyncStatus()
 
-// File watcher: native fs watcher on .beads/ directory (replaces 1s mtime polling)
-// Falls back to adaptive polling if watcher fails to start
-const onWatcherChanged = async () => {
-  // Watcher detected a change — fetch data immediately
-  const path = beadsPath.value && beadsPath.value !== '.' ? beadsPath.value : undefined
-  skipMtimeCheck = true // Skip mtime check in pollFn since watcher already detected change
-  const readyData = await fetchPollData()
-  if (readyData) {
-    updateFromPollData(issues.value, readyData)
-  }
-  // Snapshot mtime AFTER operations so next poll cycle ignores our own changes
-  await bdCheckChanged(path)
-  skipMtimeCheck = false
-}
-
-const { watcherActive, startListening, stopListening, switchProject, notifySelfWrite } = useBeadsWatcher({
-  onChanged: onWatcherChanged,
+// Change detection: native file watcher via Tauri events
+const { active: changeDetectionActive, startListening, stopListening, notifySelfWrite } = useChangeDetection({
+  onChanged: async () => {
+    await pollForChanges()
+  },
 })
 
 // Polling for external changes — optimized with 5 layers:
@@ -187,7 +194,7 @@ let skipMtimeCheck = false // Set by watcher/fast check to avoid redundant bdChe
 
 // Fast change detection (cheap mtime stat, ~0ms) — runs every 1s when active
 const checkMtimeChanged = async (): Promise<boolean> => {
-  if (isLoading.value || isUpdating.value || showOnboarding.value || !beadsPath.value || favorites.value.length === 0) {
+  if (isLoading.value || isUpdating.value || showOnboarding.value || !beadsPath.value || projects.value.length === 0) {
     return false
   }
   const path = beadsPath.value && beadsPath.value !== '.' ? beadsPath.value : undefined
@@ -198,7 +205,7 @@ const checkMtimeChanged = async (): Promise<boolean> => {
 
 const pollForChanges = async () => {
   // Don't poll if no active project
-  if (isLoading.value || isUpdating.value || showOnboarding.value || !beadsPath.value || favorites.value.length === 0) {
+  if (isLoading.value || isUpdating.value || showOnboarding.value || !beadsPath.value || projects.value.length === 0) {
     return
   }
 
@@ -229,7 +236,7 @@ const pollForChanges = async () => {
     // so the next check ignores changes caused by our own poll cycle
     await bdCheckChanged(path)
 
-    // Tell watcher to ignore self-triggered events from our sync/poll writes
+    // Tell change detection backend to ignore self-triggered events
     notifySelfWrite()
   } catch {
     // Ignore polling errors
@@ -241,7 +248,7 @@ const pollForChanges = async () => {
 // Adaptive polling with fast mtime detection (degrades gracefully if watcher unavailable)
 const { start: startPolling, stop: stopPolling } = useAdaptivePolling(pollForChanges, {
   checkFn: checkMtimeChanged,
-  watcherActive,
+  watcherActive: changeDetectionActive,
 })
 
 onMounted(async () => {
@@ -263,22 +270,30 @@ onMounted(async () => {
     const migrationNeeded = await checkMigrationNeeded()
     if (!migrationNeeded) {
       if (import.meta.client) {
-        // Start native file watcher (fire-and-forget — doesn't block data loading)
+        // Start change detection — native file watcher
         if (beadsPath.value) {
           startListening(beadsPath.value)
         }
 
         // Start adaptive polling (handles visibility, focus, idle internally)
-        // When watcher is active, polling uses 30s safety-net instead of 1s mtime checks
+        // When change detection is active, polling uses 30s safety-net instead of 1s mtime checks
         startPolling()
 
         // Fetch available relation types + detect bd >= 0.50 for dot-notation parent-child
         initRelationTypes()
       }
+      // Auto-launch probe if enabled (must complete before fetch)
+      await launchProbeIfNeeded()
+      // Auto-register with probe if enabled (fire-and-forget, never blocks UI)
+      ensureProbeRegistration(beadsPath.value)
+
       // Sequential: bd commands can't run concurrently (Dolt SIGSEGV on parallel access)
       fetchIssues().then(() => fetchStats(issues.value))
     }
   }
+
+  // Track current path for handlePathChange unregistration
+  previousBeadsPath = beadsPath.value
 })
 
 onUnmounted(() => {
@@ -287,6 +302,8 @@ onUnmounted(() => {
     stopListening()
     stopPolling()
     stopPeriodicCheck()
+    // Auto-unregister from probe (fire-and-forget)
+    probeUnregisterProject(beadsPath.value)
   }
 })
 
@@ -346,8 +363,8 @@ const handleRepair = async () => {
 }
 
 const handleRepairAll = async () => {
-  const favoritePaths = favorites.value.map(f => f.path)
-  const results = await repairAll(favoritePaths)
+  const projectPaths = projects.value.map(f => f.path)
+  const results = await repairAll(projectPaths)
 
   if (results.failed === 0) {
     notifySuccess('All databases repaired', `${results.success} project(s) repaired successfully.`)
@@ -364,7 +381,7 @@ const handleMigrateToDolt = async () => {
   if (success) {
     notifySuccess('Migration complete', 'Project has been migrated to the Dolt backend.')
 
-    // Start watcher + polling that were deferred during migration
+    // Start change detection + polling that were deferred during migration
     if (import.meta.client) {
       if (beadsPath.value) {
         await startListening(beadsPath.value)
@@ -379,14 +396,26 @@ const handleMigrateToDolt = async () => {
   }
 }
 
+let previousBeadsPath: string | undefined
+
 const handlePathChange = async () => {
+  // Show loading indicator immediately
+  isLoading.value = true
+
+  // Capture the old path before it changes (setPath was already called in PathSelector)
+  const oldPath = previousBeadsPath
+  previousBeadsPath = beadsPath.value
+
+  // Unregister old project from probe (fire-and-forget)
+  if (oldPath) probeUnregisterProject(oldPath)
+
   selectIssue(null)
   isEditMode.value = false
   isCreatingNew.value = false
   clearIssues()  // Reset issue list so new-issue detection doesn't flash all rows
-  // Stop polling + watcher during project switch to prevent:
+  // Stop polling + change detection during project switch to prevent:
   // 1. Concurrent bd calls from old project's poll cycle
-  // 2. Watcher detecting bd writes during fetchIssues and triggering cascade polls
+  // 2. Change detection events triggering stale refreshes
   stopPolling()
   await stopListening()
   // Pre-flight checks in parallel: cleanup stale locks + migration check + mtime reset
@@ -396,22 +425,24 @@ const handlePathChange = async () => {
     checkMigrationNeeded(),
   ])
   if (!migrationNeeded) {
+    // Register new project with probe before fetching (probe needs to know the project)
+    await ensureProbeRegistration(beadsPath.value)
     // IMPORTANT: bd commands must run sequentially — concurrent Dolt embedded access
     // causes SIGSEGV crashes (nil pointer dereference in dolthub/driver).
     await fetchIssues()
     // Fire-and-forget: stats update doesn't block issue list display
     fetchStats(issues.value)
   }
-  // Resume watcher + polling AFTER data is loaded (avoids self-triggered cascade)
+  // Resume change detection + polling AFTER data is loaded (avoids self-triggered cascade)
   if (beadsPath.value) {
     await startListening(beadsPath.value)
-    notifySelfWrite()  // Arm cooldown so watcher ignores bd's recent .beads/ writes
+    notifySelfWrite()  // Arm cooldown so backend ignores bd's recent .beads/ writes
   }
   startPolling()
 }
 
 const handleReset = () => {
-  // Last favorite removed - clear all data to show onboarding
+  // Last project removed - clear all data to show onboarding
   clearIssues()
   clearStats()
   isEditMode.value = false
@@ -653,10 +684,11 @@ watch(
     <div id="zoomable-content" class="grid grid-rows-[auto_1fr] overflow-hidden">
       <!-- Header -->
       <AppHeader
-        :favorite-name="currentFavoriteName"
+        :project-name="currentProjectName"
         :edit-context="editContext"
         :edit-id="editId"
         :show-refresh="!showOnboarding"
+        :is-exposed="isCurrentProjectExposed"
         @refresh="handleRefresh"
       />
 
@@ -1107,6 +1139,22 @@ watch(
             <circle cx="12" cy="12" r="3" />
           </svg>
         </button>
+
+        <!-- Probe enabled indicator (dev-only) -->
+        <span
+          v-if="probeEnabled && isDev"
+          class="flex items-center gap-1 text-green-500"
+          title="Probe broadcasting enabled"
+        >
+          <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4.9 19.1C1 15.2 1 8.8 4.9 4.9" />
+            <path d="M7.8 16.2c-2.3-2.3-2.3-6.1 0-8.4" />
+            <circle cx="12" cy="12" r="2" fill="currentColor" />
+            <path d="M16.2 7.8c2.3 2.3 2.3 6.1 0 8.4" />
+            <path d="M19.1 4.9C23 8.8 23 15.2 19.1 19.1" />
+          </svg>
+          <span class="uppercase text-[10px] font-semibold tracking-wider">Probe</span>
+        </span>
       </div>
 
       <!-- Center spacer -->
@@ -1177,12 +1225,12 @@ watch(
           </DialogDescription>
         </DialogHeader>
         <div class="flex justify-between mt-4">
-          <Button v-if="favorites.length > 1" variant="secondary" :disabled="isRepairing" @click="handleRepairAll">
+          <Button v-if="projects.length > 1" variant="secondary" :disabled="isRepairing" @click="handleRepairAll">
             <svg v-if="isRepairing && repairProgress" class="animate-spin -ml-1 mr-2 h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
               <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
               <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
             </svg>
-            Repair All ({{ favorites.length }})
+            Repair All ({{ projects.length }})
           </Button>
           <div class="flex gap-2 ml-auto">
             <Button variant="outline" :disabled="isRepairing" @click="dismissRepair">

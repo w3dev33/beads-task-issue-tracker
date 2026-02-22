@@ -1,5 +1,7 @@
-import type { Issue, CreateIssuePayload, UpdateIssuePayload, DashboardStats } from '~/types/issue'
+import type { Issue, CreateIssuePayload, UpdateIssuePayload } from '~/types/issue'
 import { invoke } from '@tauri-apps/api/core'
+import { matchProbeProject } from '~/utils/probe-adapter'
+import type { ProbeMetricsResponse, ProbeProject } from '~/utils/probe-adapter'
 
 // Type declarations for Tauri detection
 declare global {
@@ -12,6 +14,237 @@ declare global {
 // Check if running in Tauri
 function isTauri(): boolean {
   return typeof window !== 'undefined' && (!!window.__TAURI__ || !!window.__TAURI_INTERNALS__)
+}
+
+// ============================================================================
+// External Data Source
+// ============================================================================
+
+function parseLocalStorageValue(raw: string | null, fallback: string): string {
+  if (!raw) return fallback
+  // VueUse's useLocalStorage may store strings JSON-wrapped (e.g. "true" → '"true"')
+  // Handle both raw and JSON-wrapped values
+  if (raw.startsWith('"') && raw.endsWith('"')) {
+    try { return JSON.parse(raw) } catch { /* fall through */ }
+  }
+  return raw
+}
+
+function isProbeEnabled(): boolean {
+  // Probe is dev-only until it becomes a public feature
+  if (!import.meta.dev) return false
+  if (typeof window === 'undefined') return false
+  const raw = localStorage.getItem('beads:probeEnabled')
+  if (!raw) return false
+  // VueUse stores booleans as JSON: "true" or "false"
+  try { return JSON.parse(raw) === true } catch { return raw === 'true' }
+}
+
+export function getExternalUrl(): string {
+  if (typeof window === 'undefined') return 'http://localhost:9100'
+  return parseLocalStorageValue(localStorage.getItem('beads:dataSourceUrl'), 'http://localhost:9100')
+}
+
+export async function fetchExternalData(url: string): Promise<string> {
+  if (isTauri()) {
+    return invoke<string>('fetch_external_data', { url })
+  }
+  throw new Error('External data source is only available in the desktop app')
+}
+
+export async function checkExternalHealth(url: string): Promise<boolean> {
+  if (isTauri()) {
+    logFrontend('info', `[probe] Health check: ${url}`)
+    const ok = await invoke<boolean>('check_external_health', { url })
+    logFrontend('info', `[probe] Health check result: ${ok ? 'connected' : 'disconnected'}`)
+    return ok
+  }
+  return false
+}
+
+async function postExternalData(url: string, body: string): Promise<string> {
+  if (isTauri()) {
+    return invoke<string>('post_external_data', { url, body })
+  }
+  throw new Error('External data source is only available in the desktop app')
+}
+
+async function deleteExternalData(url: string): Promise<string> {
+  if (isTauri()) {
+    return invoke<string>('delete_external_data', { url })
+  }
+  throw new Error('External data source is only available in the desktop app')
+}
+
+export async function registerProbeProject(baseUrl: string, beadsPath: string): Promise<{ registered: boolean; project: string; path: string }> {
+  const raw = await postExternalData(
+    `${baseUrl}/projects`,
+    JSON.stringify({ path: beadsPath }),
+  )
+  return JSON.parse(raw)
+}
+
+export async function unregisterProbeProject(baseUrl: string, projectName: string): Promise<void> {
+  await deleteExternalData(`${baseUrl}/projects/${encodeURIComponent(projectName)}`)
+}
+
+async function patchExternalData(url: string, body: string): Promise<string> {
+  if (isTauri()) {
+    return invoke<string>('patch_external_data', { url, body })
+  }
+  throw new Error('External data source is only available in the desktop app')
+}
+
+export async function patchProbeProject(baseUrl: string, projectName: string, data: { expose?: boolean }): Promise<void> {
+  await patchExternalData(
+    `${baseUrl}/projects/${encodeURIComponent(projectName)}`,
+    JSON.stringify(data),
+  )
+}
+
+/**
+ * Register a project with the probe and set expose flag.
+ * If already registered (409), patch the expose flag instead.
+ */
+export async function registerOrExposeProject(baseUrl: string, beadsPath: string, expose: boolean): Promise<{ project: string }> {
+  logFrontend('info', `[probe] Register/expose project: ${beadsPath} (expose: ${expose})`)
+  try {
+    const raw = await postExternalData(
+      `${baseUrl}/projects`,
+      JSON.stringify({ path: beadsPath, expose }),
+    )
+    const result = JSON.parse(raw)
+    logFrontend('info', `[probe] Project registered: ${result.project}`)
+    return result
+  } catch (error) {
+    // If already registered (409), try to find and patch
+    const msg = error instanceof Error ? error.message : String(error)
+    if (msg.includes('409')) {
+      logFrontend('info', '[probe] Project already registered (409), patching expose flag')
+      // Find the project name from the list
+      const projects = await listProbeProjects(baseUrl)
+      const match = matchProbeProject(projects, beadsPath)
+      if (match) {
+        await patchProbeProject(baseUrl, match.name, { expose })
+        logFrontend('info', `[probe] Project patched: ${match.name} (expose: ${expose})`)
+        return { project: match.name }
+      }
+    }
+    logFrontend('error', `[probe] Failed to register/expose project: ${msg}`)
+    throw error
+  }
+}
+
+/**
+ * Auto-register a project with the probe (fire-and-forget).
+ * Silently handles 409 (already registered) and all errors.
+ */
+export async function ensureProbeRegistration(beadsPath: string): Promise<void> {
+  if (!isProbeEnabled()) return
+  const url = getExternalUrl()
+  try {
+    await registerProbeProject(url, beadsPath)
+    await logFrontend('info', `[probe] Auto-registered project: ${beadsPath}`)
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error)
+    if (msg.includes('409')) {
+      // Already registered — success
+      await logFrontend('info', `[probe] Project already registered: ${beadsPath}`)
+    } else {
+      await logFrontend('warn', `[probe] Auto-register failed (non-blocking): ${msg}`)
+    }
+  }
+}
+
+/**
+ * Unregister a project from the probe (fire-and-forget).
+ * Silently handles all errors (project not found = ok).
+ */
+export async function probeUnregisterProject(beadsPath: string): Promise<void> {
+  if (!isProbeEnabled()) return
+  const url = getExternalUrl()
+  try {
+    const projects = await listProbeProjects(url)
+    const match = matchProbeProject(projects, beadsPath)
+    if (match) {
+      await unregisterProbeProject(url, match.name)
+      await logFrontend('info', `[probe] Unregistered project: ${match.name}`)
+    }
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error)
+    await logFrontend('warn', `[probe] Unregister failed (non-blocking): ${msg}`)
+  }
+}
+
+/**
+ * Launch beads-probe if not already running.
+ * Waits for the probe to be ready before returning (up to 5s).
+ */
+export async function launchProbeIfNeeded(): Promise<void> {
+  if (!isProbeEnabled()) return
+  if (!isTauri()) return
+  const url = getExternalUrl()
+  const port = parseInt(new URL(url).port || '9100')
+  try {
+    const result = await invoke<string>('launch_probe', { port })
+    await logFrontend('info', `[probe] launch_probe: ${result}`)
+    // If we just launched, wait for the probe to be ready
+    if (result === 'launched') {
+      const healthUrl = url.replace(/\/$/, '')
+      for (let i = 0; i < 10; i++) {
+        await new Promise(r => setTimeout(r, 500))
+        const ok = await checkExternalHealth(healthUrl)
+        if (ok) {
+          await logFrontend('info', `[probe] Ready after ${(i + 1) * 500}ms`)
+          return
+        }
+      }
+      await logFrontend('warn', '[probe] Launched but not ready after 5s')
+    }
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error)
+    await logFrontend('warn', `[probe] Failed to launch probe: ${msg}`)
+  }
+}
+
+/**
+ * Find the probe project name for a given beads path.
+ * Matches against registered projects (path or path/.beads).
+ */
+export async function getProbeProjectName(beadsPath: string): Promise<string | null> {
+  const url = getExternalUrl()
+  const projects = await listProbeProjects(url)
+  return matchProbeProject(projects, beadsPath)?.name ?? null
+}
+
+export async function listProbeProjects(baseUrl: string): Promise<ProbeProject[]> {
+  const raw = await fetchExternalData(`${baseUrl}/projects`)
+  const list = JSON.parse(raw) as ProbeProject[]
+  logFrontend('info', `[probe] Listed ${list.length} project(s)`)
+  return list
+}
+
+async function fetchProbeMetrics(): Promise<ProbeMetricsResponse> {
+  const baseUrl = getExternalUrl()
+  await logFrontend('info', `[probe] Fetching metrics (url: ${baseUrl})`)
+
+  // Find the project name by matching the current beads path against registered projects
+  const currentPath = typeof window !== 'undefined' ? localStorage.getItem('beads:path') || '.' : '.'
+  let projectPath: string
+  try { projectPath = JSON.parse(currentPath) || '.' } catch { projectPath = '.' }
+
+  const projects = await listProbeProjects(baseUrl)
+  const match = matchProbeProject(projects, projectPath)
+  if (!match) {
+    await logFrontend('warn', `[probe] Current project not registered: ${projectPath}`)
+    throw new Error('Current project is not registered with the probe')
+  }
+
+  await logFrontend('info', `[probe] Fetching metrics for project: ${match.name}`)
+  const raw = await fetchExternalData(`${baseUrl}/metrics/${encodeURIComponent(match.name)}`)
+  const metrics = JSON.parse(raw) as ProbeMetricsResponse
+  await logFrontend('info', `[probe] Metrics received: ${metrics.counts.total} issues (open: ${metrics.counts.open}, in_progress: ${metrics.counts.in_progress}, closed: ${metrics.counts.closed})`)
+  return metrics
 }
 
 // Check if error is a schema migration error (bd 0.49.4 bug)

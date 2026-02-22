@@ -1,7 +1,7 @@
 # Codebase Map - Beads Task-Issue Tracker
 
 > Auto-generated comprehensive map of the codebase for faster AI reasoning.
-> Last updated: 2026-02-21 | App version: 1.21.0
+> Last updated: 2026-02-22 | App version: 1.21.0
 
 ## Architecture Overview
 
@@ -62,11 +62,11 @@
 | `useAppMenu.ts` | `useAppMenu()` | Tauri native menu bar setup |
 | `useTauriWindow.ts` | `useTauriWindow()` | Window drag for custom title bar |
 
-#### Polling & Watchers
+#### Polling & Change Detection
 | File | Exports | Purpose |
 |------|---------|---------|
 | `useAdaptivePolling.ts` | `useAdaptivePolling()` | Smart polling: 5s active, 30s blurred, 60s idle, paused when hidden. Cheap mtime check (1s) + expensive data fetch |
-| `useBeadsWatcher.ts` | `useBeadsWatcher()` | Native file watcher on `.beads/` via Tauri events. 300ms debounce + 3s cooldown |
+| `useChangeDetection.ts` | `useChangeDetection()` | Unified change detection — auto-selects backend by mode: native file watcher (direct) or SSE via probe `/events/:project` (probe). Handles mode switching reactively. 300ms debounce + 3s cooldown on both backends |
 
 #### Page Orchestration
 | File | Exports | Purpose |
@@ -155,7 +155,8 @@
 
 | File | Key Exports | Purpose |
 |------|-------------|---------|
-| `bd-api.ts` (645 lines) | `bdList()`, `bdCreate()`, `bdUpdate()`, `bdShow()`, `bdClose()`, `bdDelete()`, `bdPollData()`, `bdCheckChanged()`, `bdSync()`, `bdMigrateToDolt()`, `bdCheckNeedsMigration()`, etc. | Tauri invoke bridge — all 53 commands. Falls back to web API in browser mode |
+| `bd-api.ts` (~650 lines) | `bdList()`, `bdCreate()`, `bdUpdate()`, `bdShow()`, `bdClose()`, `bdDelete()`, `bdPollData()`, `bdCheckChanged()`, `bdSync()`, `bdMigrateToDolt()`, `bdCheckNeedsMigration()`, `getProbeProjectName()`, etc. | Tauri invoke bridge — all 53 commands. Falls back to web API in browser mode. Probe project resolution via `getProbeProjectName()` |
+| `probe-adapter.ts` | `probeMetricsToIssues()`, `probeMetricsToPollData()`, `matchProbeProject()` | Probe response → app types adapter. `matchProbeProject()`: pure path matching with `.beads` suffix normalization |
 | `issue-helpers.ts` | `deduplicateIssues()`, `naturalCompare()`, `sortIssues()`, `filterIssues()`, `groupIssues()`, `computeStatsFromIssues()` | Pure functions extracted from useIssues + useDashboard for testability. Sorting, filtering, epic grouping, dashboard KPIs |
 | `favorites-helpers.ts` | `normalizePath()`, `deduplicateFavorites()`, `sortFavorites()`, `isFavorite()`, `createFavoriteEntry()` | Pure functions extracted from useFavorites for testability |
 | `markdown.ts` | `renderMarkdown()`, `extractImagesFromMarkdown()`, `extractImagesFromExternalRef()`, `extractMarkdownFromExternalRef()`, `extractNonImageRefs()` | Markdown rendering + image/ref extraction. Filters `cleared:` prefixes |
@@ -201,7 +202,7 @@ interface DashboardStats { total, open, inProgress, blocked, closed, ready, byTy
 |------|---------|
 | `src/lib.rs` (4140 lines) | All Tauri commands, data structures, helpers. Single-file backend |
 | `src/main.rs` | Entry point — calls `lib::run()` |
-| `tauri.conf.json` | Window config (1400x900, overlay title bar), bundle, CSP, dev port 3133 |
+| `tauri.conf.json` | Window config (1400x900, overlay title bar), bundle, CSP (connect-src includes `http://localhost:*` for probe SSE), dev port 3133 |
 | `Cargo.toml` | Deps: tauri 2.9.5, serde, reqwest, notify 7, dirs 6 |
 | `capabilities/default.json` | Tauri capability permissions |
 
@@ -331,11 +332,15 @@ User Action → Vue Component → Composable → bd-api.ts → Tauri invoke()
   → Rust Command → bd CLI → .beads/ SQLite
   → JSON response → Rust transform → Frontend state → Reactive UI update
 
-File Watcher: .beads/ change → notify crate → Tauri event → useBeadsWatcher
-  → useAdaptivePolling → bdPollData() → refresh all data
+Change Detection (useChangeDetection — auto-selects by mode):
+  Direct: .beads/ change → notify crate → Tauri event → watcher backend
+    → pollForChanges() → bdPollData() → refresh all data
+  Probe:  .beads/ change → probe SSE /events/:project → SSE backend
+    → pollForChanges() → bdPollData() → refresh all data
 
 Polling: useAdaptivePolling → bdCheckChanged() (mtime) → if changed → bdPollData()
   → useIssues + useDashboard update
+  (30s safety-net when change detection active, 5s/1s fallback otherwise)
 ```
 
 ---
@@ -368,5 +373,6 @@ Polling: useAdaptivePolling → bdCheckChanged() (mtime) → if changed → bdPo
 | `open-url.test.ts` | 19 | `isValidUrl`, `isLocalPath`, `normalizeUrl` |
 | `dashboard-stats.test.ts` | 11 | `computeStatsFromIssues` |
 | `hash.test.ts` | 6 | `hashPath` |
+| `probe-adapter.test.ts` | 8 | `matchProbeProject` — path matching with `.beads` suffix normalization |
 
-**Total: 179 tests** | **Strategy**: Extract pure functions from composables into `app/utils/` for unit testing. Composables remain thin reactive wrappers.
+**Total: 192 tests** | **Strategy**: Extract pure functions from composables into `app/utils/` for unit testing. Composables remain thin reactive wrappers.

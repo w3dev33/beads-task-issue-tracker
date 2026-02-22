@@ -25,7 +25,7 @@ const emit = defineEmits<{
   select: [path: string]
 }>()
 
-const { favorites, addFavorite, isFavorite } = useFavorites()
+const { projects, addProject, isProject } = useProjects()
 
 const currentPath = ref(props.currentPath || '~')
 const pathInput = ref('')
@@ -105,8 +105,8 @@ const handleCancel = () => {
   emit('update:open', false)
 }
 
-const handleAddToFavorites = () => {
-  addFavorite(currentPath.value)
+const handleAddProject = () => {
+  addProject(currentPath.value)
   // Also select the folder and close the dialog for better UX
   emit('select', currentPath.value)
   emit('update:open', false)
@@ -117,7 +117,7 @@ const currentFolderName = computed(() => {
   return getFolderName(currentPath.value) || '/'
 })
 
-const isCurrentFavorite = computed(() => isFavorite(currentPath.value))
+const isCurrentProject = computed(() => isProject(currentPath.value))
 </script>
 
 <template>
@@ -191,11 +191,11 @@ const isCurrentFavorite = computed(() => isFavorite(currentPath.value))
                 <path d="M109.884 7H98.7939" stroke="currentColor" stroke-width="12.6599" stroke-linecap="round" stroke-linejoin="round"/>
               </svg>
             </Badge>
-            <Badge v-if="isCurrentFavorite" variant="outline" class="text-yellow-500 border-yellow-500/50">
-              <svg class="w-3 h-3 mr-1 fill-yellow-500" viewBox="0 0 24 24">
-                <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+            <Badge v-if="isCurrentProject" variant="outline" class="text-primary border-primary/50">
+              <svg class="w-3 h-3 mr-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="20 6 9 17 4 12" />
               </svg>
-              Favorite
+              Added
             </Badge>
           </div>
         </div>
@@ -263,27 +263,29 @@ const isCurrentFavorite = computed(() => isFavorite(currentPath.value))
           Cancel
         </Button>
 
-        <!-- If already a favorite, show "Open" button -->
-        <Button v-if="isCurrentFavorite" @click="handleSelect">
+        <!-- If already a project, show "Open" button -->
+        <Button v-if="isCurrentProject" @click="handleSelect">
           <svg class="w-4 h-4 mr-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
           </svg>
           Open
         </Button>
 
-        <!-- If not a favorite, show "Add to Favorites" button (disabled if no .beads) -->
-        <Button v-else :disabled="!hasBeads" @click="handleAddToFavorites">
+        <!-- If not a project yet, show "Add Project" button (disabled if no .beads) -->
+        <Button v-else :disabled="!hasBeads" @click="handleAddProject">
           <svg
             class="w-4 h-4 mr-2"
-            :class="hasBeads ? 'text-yellow-500' : ''"
             viewBox="0 0 24 24"
-            :fill="hasBeads ? 'currentColor' : 'none'"
+            fill="none"
             stroke="currentColor"
             stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
           >
-            <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+            <path d="M12 5v14" />
+            <path d="M5 12h14" />
           </svg>
-          Add to Favorites
+          Add Project
         </Button>
       </DialogFooter>
     </DialogContent>

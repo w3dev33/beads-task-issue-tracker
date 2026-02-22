@@ -323,13 +323,19 @@ export function useIssueDialogs() {
           }
         }
         selectedIds.value = selectedIds.value.filter(id => !successfullyDeleted.includes(id))
+        if (successfullyDeleted.length > 0) {
+          notifySuccess(`${successfullyDeleted.length} issue(s) deleted`)
+        }
       } else if (selectedIssue.value) {
-        const success = await deleteIssue(selectedIssue.value.id)
+        const issueId = selectedIssue.value.id
+        const issueTitle = selectedIssue.value.title
+        const success = await deleteIssue(issueId)
         if (!success) {
           notifyError('Failed to delete issue', issueError.value || 'Could not delete the issue')
         } else {
           isEditMode.value = false
           isCreatingNew.value = false
+          notifySuccess(`Issue ${issueId} deleted`, issueTitle)
         }
       }
       await fetchIssues()
@@ -357,9 +363,13 @@ export function useIssueDialogs() {
           }
         }
       }
-      const epicSuccess = await deleteIssue(epicToDelete.value.id)
+      const epicId = epicToDelete.value.id
+      const epicTitle = epicToDelete.value.title
+      const epicSuccess = await deleteIssue(epicId)
       if (!epicSuccess) {
-        notifyError('Failed to delete issue', issueError.value || `Could not delete ${epicToDelete.value.id}`)
+        notifyError('Failed to delete issue', issueError.value || `Could not delete ${epicId}`)
+      } else {
+        notifySuccess(`Epic ${epicId} deleted`, epicTitle)
       }
 
       if (epicSuccess && selectedIssue.value?.id === epicToDelete.value.id) {

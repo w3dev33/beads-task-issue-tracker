@@ -279,20 +279,31 @@ export function useIssues() {
       }
 
       // Only update if data actually changed
-      const currentSignature = JSON.stringify(issues.value.map(i => i.id + i.updatedAt))
-      const newSignature = JSON.stringify(newIssues.map(i => i.id + i.updatedAt))
+      // Signature includes status+priority+title so probe mode (no updatedAt) still detects changes
+      const sig = (i: Issue) => `${i.id}|${i.updatedAt}|${i.status}|${i.priority}|${i.title}`
+      const currentSignature = JSON.stringify(issues.value.map(sig))
+      const newSignature = JSON.stringify(newIssues.map(sig))
 
       if (currentSignature !== newSignature) {
-        // Detect newly added issues (skip initial load)
+        // Detect newly added + externally modified issues (skip initial load)
         if (issues.value.length > 0) {
-          const existingIds = new Set(issues.value.map(i => i.id))
-          const newIds = newIssues.map(i => i.id)
-          const addedIds = newIds.filter(id => !existingIds.has(id))
+          const existingSigs = new Map(issues.value.map(i => [i.id, sig(i)]))
+          const addedIds: string[] = []
+          const modifiedIds: string[] = []
+
+          for (const issue of newIssues) {
+            const oldSig = existingSigs.get(issue.id)
+            if (!oldSig) {
+              addedIds.push(issue.id)
+            } else if (oldSig !== sig(issue)) {
+              modifiedIds.push(issue.id)
+            }
+          }
 
           // If most IDs changed, this is a project switch — don't flash
           const isProjectSwitch = addedIds.length > issues.value.length * 0.5
           if (!isProjectSwitch) {
-            for (const id of addedIds) {
+            for (const id of [...addedIds, ...modifiedIds]) {
               markAsNewlyAdded(id)
             }
           }
@@ -460,6 +471,7 @@ export function useIssues() {
       return null
     } finally {
       isLoading.value = false
+
     }
   }
 
@@ -487,6 +499,7 @@ export function useIssues() {
       return null
     } finally {
       isUpdating.value = false
+
     }
   }
 
@@ -506,6 +519,7 @@ export function useIssues() {
       return false
     } finally {
       isLoading.value = false
+
     }
   }
 
@@ -539,6 +553,7 @@ export function useIssues() {
       return false
     } finally {
       isUpdating.value = false
+
     }
   }
 
@@ -564,6 +579,7 @@ export function useIssues() {
       return false
     } finally {
       isUpdating.value = false
+
     }
   }
 
@@ -587,6 +603,7 @@ export function useIssues() {
       return false
     } finally {
       isUpdating.value = false
+
     }
   }
 
@@ -610,6 +627,7 @@ export function useIssues() {
       return false
     } finally {
       isUpdating.value = false
+
     }
   }
 
@@ -633,6 +651,7 @@ export function useIssues() {
       return false
     } finally {
       isUpdating.value = false
+
     }
   }
 
@@ -658,6 +677,7 @@ export function useIssues() {
       return false
     } finally {
       isUpdating.value = false
+
     }
   }
 

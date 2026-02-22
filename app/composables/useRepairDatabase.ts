@@ -48,17 +48,17 @@ export function useRepairDatabase() {
     }
   }
 
-  // Repair all favorite projects
-  const repairAll = async (favoritePaths: string[]): Promise<{ success: number; failed: number; errors: string[] }> => {
+  // Repair all projects
+  const repairAll = async (projectPaths: string[]): Promise<{ success: number; failed: number; errors: string[] }> => {
     isRepairing.value = true
     repairError.value = null
     const results = { success: 0, failed: 0, errors: [] as string[] }
 
-    repairProgress.value = { current: 0, total: favoritePaths.length, currentPath: '' }
+    repairProgress.value = { current: 0, total: projectPaths.length, currentPath: '' }
 
-    for (let i = 0; i < favoritePaths.length; i++) {
-      const path = favoritePaths[i]!
-      repairProgress.value = { current: i + 1, total: favoritePaths.length, currentPath: path }
+    for (let i = 0; i < projectPaths.length; i++) {
+      const path = projectPaths[i]!
+      repairProgress.value = { current: i + 1, total: projectPaths.length, currentPath: path }
 
       try {
         const result = await bdRepairDatabase(path)

@@ -1,16 +1,22 @@
 /**
- * Pure helper functions for favorites management.
- * Extracted from useFavorites composable for testability.
+ * Pure helper functions for project management.
+ * Extracted from useProjects composable for testability.
  */
 import { getFolderName } from '~/utils/path'
 
-export interface Favorite {
+export interface Project {
   path: string
   name: string
   addedAt: string
 }
 
-export type FavoritesSortMode = 'alpha' | 'alpha-desc' | 'manual'
+/** @deprecated Use Project instead */
+export type Favorite = Project
+
+export type ProjectSortMode = 'alpha' | 'alpha-desc' | 'manual'
+
+/** @deprecated Use ProjectSortMode instead */
+export type FavoritesSortMode = ProjectSortMode
 
 /**
  * Normalize path by stripping trailing slashes for consistent comparison.
@@ -20,43 +26,52 @@ export function normalizePath(p: string): string {
 }
 
 /**
- * Deduplicate favorites by normalized path, keeping first occurrence.
+ * Deduplicate projects by normalized path, keeping first occurrence.
  */
-export function deduplicateFavorites(favorites: Favorite[]): Favorite[] {
+export function deduplicateProjects(projects: Project[]): Project[] {
   const seen = new Set<string>()
-  return favorites.filter((fav) => {
-    const key = normalizePath(fav.path)
+  return projects.filter((proj) => {
+    const key = normalizePath(proj.path)
     if (seen.has(key)) return false
     seen.add(key)
     return true
   })
 }
 
+/** @deprecated Use deduplicateProjects instead */
+export const deduplicateFavorites = deduplicateProjects
+
 /**
- * Sort favorites according to the given mode.
+ * Sort projects according to the given mode.
  */
-export function sortFavorites(favorites: Favorite[], mode: FavoritesSortMode): Favorite[] {
+export function sortProjects(projects: Project[], mode: ProjectSortMode): Project[] {
   if (mode === 'alpha') {
-    return [...favorites].sort((a, b) => a.name.localeCompare(b.name))
+    return [...projects].sort((a, b) => a.name.localeCompare(b.name))
   }
   if (mode === 'alpha-desc') {
-    return [...favorites].sort((a, b) => b.name.localeCompare(a.name))
+    return [...projects].sort((a, b) => b.name.localeCompare(a.name))
   }
-  return favorites
+  return projects
 }
 
+/** @deprecated Use sortProjects instead */
+export const sortFavorites = sortProjects
+
 /**
- * Check if a path is already in the favorites list (normalized comparison).
+ * Check if a path is already in the projects list (normalized comparison).
  */
-export function isFavorite(favorites: Favorite[], path: string): boolean {
+export function isProject(projects: Project[], path: string): boolean {
   const normalized = normalizePath(path)
-  return favorites.some((f) => normalizePath(f.path) === normalized)
+  return projects.some((f) => normalizePath(f.path) === normalized)
 }
 
+/** @deprecated Use isProject instead */
+export const isFavorite = isProject
+
 /**
- * Create a new Favorite entry from a path and optional name.
+ * Create a new Project entry from a path and optional name.
  */
-export function createFavoriteEntry(path: string, name?: string): Favorite {
+export function createProjectEntry(path: string, name?: string): Project {
   const normalized = normalizePath(path)
   return {
     path: normalized,
@@ -64,3 +79,6 @@ export function createFavoriteEntry(path: string, name?: string): Favorite {
     addedAt: new Date().toISOString(),
   }
 }
+
+/** @deprecated Use createProjectEntry instead */
+export const createFavoriteEntry = createProjectEntry

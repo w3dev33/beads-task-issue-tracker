@@ -303,7 +303,7 @@ watch(() => props.selectedId, (id) => {
     <Table @click.self="$emit('deselect')">
       <TableHeader>
         <TableRow class="bg-secondary/30 hover:bg-secondary/30">
-          <TableHead v-if="multiSelectMode" class="w-10 px-2">
+          <TableHead v-if="multiSelectMode" class="w-10 px-2 !py-1.5">
             <button
               class="flex items-center justify-center w-4 h-4 rounded border transition-colors"
               :class="isAllSelected
@@ -392,7 +392,7 @@ watch(() => props.selectedId, (id) => {
                 @click="multiSelectMode ? toggleSelect(group.epic.id) : $emit('select', group.epic)"
                 @dblclick="!multiSelectMode && $emit('edit', group.epic)"
               >
-                <TableCell v-if="multiSelectMode" class="w-10 px-2 !py-0.5">
+                <TableCell v-if="multiSelectMode" class="w-10 px-2 !py-1.5">
                   <button
                     class="flex items-center justify-center w-4 h-4 rounded border transition-colors"
                     :class="isSelected(group.epic.id)
@@ -405,7 +405,7 @@ watch(() => props.selectedId, (id) => {
                     </svg>
                   </button>
                 </TableCell>
-                <TableCell v-for="col in visibleColumns" :key="col.id" class="!py-0.5" :class="col.id === 'title' ? 'whitespace-normal max-w-md' : ''">
+                <TableCell v-for="col in visibleColumns" :key="col.id" class="!py-1.5" :class="col.id === 'title' ? 'whitespace-normal max-w-md' : ''">
                   <template v-if="col.id === 'id'">
                     <div class="flex items-center gap-2">
                       <!-- Expand/collapse chevron button -->
@@ -558,7 +558,7 @@ watch(() => props.selectedId, (id) => {
                   @click="multiSelectMode ? toggleSelect(child.id) : $emit('select', child)"
                   @dblclick="!multiSelectMode && $emit('edit', child)"
                 >
-                  <TableCell v-if="multiSelectMode" class="w-10 px-2 !py-0.5">
+                  <TableCell v-if="multiSelectMode" class="w-10 px-2 !py-1.5">
                     <button
                       class="flex items-center justify-center w-4 h-4 rounded border transition-colors"
                       :class="isSelected(child.id)
@@ -571,7 +571,7 @@ watch(() => props.selectedId, (id) => {
                       </svg>
                     </button>
                   </TableCell>
-                  <TableCell v-for="col in visibleColumns" :key="col.id" class="!py-0.5" :class="col.id === 'title' ? 'whitespace-normal max-w-md' : ''">
+                  <TableCell v-for="col in visibleColumns" :key="col.id" class="!py-1.5" :class="col.id === 'title' ? 'whitespace-normal max-w-md' : ''">
                     <template v-if="col.id === 'id'">
                       <div class="pl-10">
                         <CopyableId :value="child.id" :display-value="getShortId(child.id)" />
@@ -663,7 +663,7 @@ watch(() => props.selectedId, (id) => {
                 @click="multiSelectMode ? toggleSelect(issue.id) : $emit('select', issue)"
                 @dblclick="!multiSelectMode && $emit('edit', issue)"
               >
-                <TableCell v-if="multiSelectMode" class="w-10 px-2 !py-0.5">
+                <TableCell v-if="multiSelectMode" class="w-10 px-2 !py-1.5">
                   <button
                     class="flex items-center justify-center w-4 h-4 rounded border transition-colors"
                     :class="isSelected(issue.id)
@@ -676,7 +676,7 @@ watch(() => props.selectedId, (id) => {
                     </svg>
                   </button>
                 </TableCell>
-                <TableCell v-for="col in visibleColumns" :key="col.id" class="!py-0.5" :class="col.id === 'title' ? 'whitespace-normal max-w-md' : ''">
+                <TableCell v-for="col in visibleColumns" :key="col.id" class="!py-1.5" :class="col.id === 'title' ? 'whitespace-normal max-w-md' : ''">
                   <template v-if="col.id === 'id'">
                     <div class="pl-7">
                       <CopyableId :value="issue.id" :display-value="getShortId(issue.id)" />
@@ -769,7 +769,7 @@ watch(() => props.selectedId, (id) => {
             @click="multiSelectMode ? toggleSelect(issue.id) : $emit('select', issue)"
             @dblclick="!multiSelectMode && $emit('edit', issue)"
           >
-            <TableCell v-if="multiSelectMode" class="w-10 px-2 !py-0.5">
+            <TableCell v-if="multiSelectMode" class="w-10 px-2 !py-1.5">
               <button
                 class="flex items-center justify-center w-4 h-4 rounded border transition-colors"
                 :class="isSelected(issue.id)
@@ -782,7 +782,7 @@ watch(() => props.selectedId, (id) => {
                 </svg>
               </button>
             </TableCell>
-            <TableCell v-for="col in visibleColumns" :key="col.id" class="!py-0.5" :class="col.id === 'title' ? 'whitespace-normal max-w-md' : ''">
+            <TableCell v-for="col in visibleColumns" :key="col.id" class="!py-1.5" :class="col.id === 'title' ? 'whitespace-normal max-w-md' : ''">
               <template v-if="col.id === 'id'">
                 <div class="pl-7">
                   <CopyableId :value="issue.id" :display-value="getShortId(issue.id)" />

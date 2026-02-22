@@ -1,6 +1,7 @@
 import { fsExists } from '~/utils/bd-api'
 import { getFolderName } from '~/utils/path'
 import { useNotification } from '~/composables/useNotification'
+import type { Project, ProjectSortMode } from '~/utils/favorites-helpers'
 
 // Retry once after 500ms to handle transient startup failures (Tauri backend not ready)
 async function fsExistsWithRetry(path: string): Promise<boolean> {
@@ -10,13 +11,8 @@ async function fsExistsWithRetry(path: string): Promise<boolean> {
   return fsExists(path)
 }
 
-export type FavoritesSortMode = 'alpha' | 'alpha-desc' | 'manual'
-
-export interface Favorite {
-  path: string
-  name: string
-  addedAt: string
-}
+// Re-export for backward compatibility
+export type { Project as Favorite, Project, ProjectSortMode as FavoritesSortMode, ProjectSortMode }
 
 // Normalize path by stripping trailing slashes for consistent comparison
 function normalizePath(p: string): string {
@@ -24,8 +20,8 @@ function normalizePath(p: string): string {
 }
 
 // Shared state across all components
-const favorites = ref<Favorite[]>([])
-const sortMode = ref<FavoritesSortMode>('alpha')
+const projects = ref<Project[]>([])
+const sortMode = ref<ProjectSortMode>('alpha')
 const hasReordered = ref(false)
 let isInitialized = false
 let isValidating = false
@@ -42,31 +38,32 @@ function initSortModeFromStorage() {
 
 function initFromStorage() {
   if (import.meta.client && !isInitialized) {
+    // Read from existing localStorage key (kept for backward compatibility)
     const stored = localStorage.getItem('beads:favorites')
     if (stored) {
       try {
-        const parsedFavorites = JSON.parse(stored) as Favorite[]
+        const parsed = JSON.parse(stored) as Project[]
         // Deduplicate by normalized path (keep first occurrence)
         const seen = new Set<string>()
-        const deduped = parsedFavorites.filter((fav) => {
-          const key = normalizePath(fav.path)
+        const deduped = parsed.filter((proj) => {
+          const key = normalizePath(proj.path)
           if (seen.has(key)) return false
           seen.add(key)
           return true
         })
-        favorites.value = deduped
+        projects.value = deduped
 
-        // Validate favorites paths exist asynchronously
-        if (parsedFavorites.length > 0 && !isValidating) {
+        // Validate project paths exist asynchronously
+        if (parsed.length > 0 && !isValidating) {
           isValidating = true
           Promise.all(
-            parsedFavorites.map(async (fav) => ({
-              ...fav,
-              exists: await fsExistsWithRetry(fav.path),
+            parsed.map(async (proj) => ({
+              ...proj,
+              exists: await fsExistsWithRetry(proj.path),
             }))
           ).then((results) => {
-            const validFavorites = results.filter((f) => f.exists)
-            const invalidCount = results.length - validFavorites.length
+            const validProjects = results.filter((f) => f.exists)
+            const invalidCount = results.length - validProjects.length
 
             if (invalidCount > 0) {
               const invalidNames = results
@@ -75,13 +72,13 @@ function initFromStorage() {
                 .join(', ')
               const { warning } = useNotification()
               warning(
-                `${invalidCount} favori${invalidCount > 1 ? 's' : ''} supprimé${invalidCount > 1 ? 's' : ''}`,
+                `${invalidCount} projet${invalidCount > 1 ? 's' : ''} supprimé${invalidCount > 1 ? 's' : ''}`,
                 `Chemin${invalidCount > 1 ? 's' : ''} inaccessible${invalidCount > 1 ? 's' : ''} : ${invalidNames}`
               )
-              // Remove invalid favorites
-              favorites.value = validFavorites.map(({ exists, ...fav }) => fav)
-              localStorage.setItem('beads:favorites', JSON.stringify(favorites.value))
-              console.warn(`[useFavorites] Removed ${invalidCount} favorites with invalid paths`)
+              // Remove invalid projects
+              projects.value = validProjects.map(({ exists, ...proj }) => proj)
+              localStorage.setItem('beads:favorites', JSON.stringify(projects.value))
+              console.warn(`[useProjects] Removed ${invalidCount} projects with invalid paths`)
             }
             isValidating = false
           }).catch(() => {
@@ -89,7 +86,7 @@ function initFromStorage() {
           })
         }
       } catch {
-        favorites.value = []
+        projects.value = []
       }
     }
     initSortModeFromStorage()
@@ -97,7 +94,7 @@ function initFromStorage() {
   }
 }
 
-export function useFavorites() {
+export function useProjects() {
   // Initialize from localStorage
   initFromStorage()
 
@@ -105,7 +102,7 @@ export function useFavorites() {
   if (import.meta.client && !watcherRegistered) {
     watcherRegistered = true
     watch(
-      favorites,
+      projects,
       (newValue) => {
         localStorage.setItem('beads:favorites', JSON.stringify(newValue))
       },
@@ -113,20 +110,20 @@ export function useFavorites() {
     )
   }
 
-  const sortedFavorites = computed<Favorite[]>(() => {
+  const sortedProjects = computed<Project[]>(() => {
     if (sortMode.value === 'alpha') {
-      return [...favorites.value].sort((a, b) => a.name.localeCompare(b.name))
+      return [...projects.value].sort((a, b) => a.name.localeCompare(b.name))
     }
     if (sortMode.value === 'alpha-desc') {
-      return [...favorites.value].sort((a, b) => b.name.localeCompare(a.name))
+      return [...projects.value].sort((a, b) => b.name.localeCompare(a.name))
     }
-    return favorites.value
+    return projects.value
   })
 
-  const addFavorite = (path: string, name?: string) => {
+  const addProject = (path: string, name?: string) => {
     const normalized = normalizePath(path)
     // Don't add duplicates (compare normalized paths)
-    if (favorites.value.some((f) => normalizePath(f.path) === normalized)) {
+    if (projects.value.some((f) => normalizePath(f.path) === normalized)) {
       return false
     }
 
@@ -134,7 +131,7 @@ export function useFavorites() {
     const folderName = name || getFolderName(path)
 
     // Use array reassignment instead of push() for guaranteed reactivity
-    favorites.value = [...favorites.value, {
+    projects.value = [...projects.value, {
       path: normalized,
       name: folderName,
       addedAt: new Date().toISOString(),
@@ -142,39 +139,39 @@ export function useFavorites() {
     return true
   }
 
-  const removeFavorite = (path: string) => {
+  const removeProject = (path: string) => {
     const normalized = normalizePath(path)
-    const index = favorites.value.findIndex((f) => normalizePath(f.path) === normalized)
+    const index = projects.value.findIndex((f) => normalizePath(f.path) === normalized)
     if (index !== -1) {
       // Use array reassignment (filter) instead of splice for guaranteed reactivity
-      favorites.value = favorites.value.filter((_, i) => i !== index)
+      projects.value = projects.value.filter((_, i) => i !== index)
       return true
     }
     return false
   }
 
-  const isFavorite = (path: string) => {
+  const isProject = (path: string) => {
     const normalized = normalizePath(path)
-    return favorites.value.some((f) => normalizePath(f.path) === normalized)
+    return projects.value.some((f) => normalizePath(f.path) === normalized)
   }
 
-  const renameFavorite = (path: string, newName: string) => {
-    const favorite = favorites.value.find((f) => f.path === path)
-    if (favorite) {
-      favorite.name = newName
+  const renameProject = (path: string, newName: string) => {
+    const project = projects.value.find((f) => f.path === path)
+    if (project) {
+      project.name = newName
       return true
     }
     return false
   }
 
-  const reorderFavorites = (newOrder: Favorite[]) => {
-    favorites.value = newOrder
+  const reorderProjects = (newOrder: Project[]) => {
+    projects.value = newOrder
     sortMode.value = 'manual'
     hasReordered.value = true
     localStorage.setItem('beads:favoritesSortMode', 'manual')
   }
 
-  const setSortMode = (mode: FavoritesSortMode) => {
+  const setSortMode = (mode: ProjectSortMode) => {
     sortMode.value = mode
     localStorage.setItem('beads:favoritesSortMode', mode)
   }
@@ -186,16 +183,28 @@ export function useFavorites() {
   }
 
   return {
-    favorites: readonly(favorites),
-    sortedFavorites,
+    // New names
+    projects: readonly(projects),
+    sortedProjects,
     sortMode: readonly(sortMode),
     hasReordered: readonly(hasReordered),
-    addFavorite,
-    removeFavorite,
-    isFavorite,
-    renameFavorite,
-    reorderFavorites,
+    addProject,
+    removeProject,
+    isProject,
+    renameProject,
+    reorderProjects,
     setSortMode,
     resetSortOrder,
+    // Backward-compatible aliases
+    favorites: readonly(projects),
+    sortedFavorites: sortedProjects,
+    addFavorite: addProject,
+    removeFavorite: removeProject,
+    isFavorite: isProject,
+    renameFavorite: renameProject,
+    reorderFavorites: reorderProjects,
   }
 }
+
+/** @deprecated Use useProjects instead */
+export const useFavorites = useProjects

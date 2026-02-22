@@ -27,3 +27,4 @@ dirs = "6.0"
 reqwest = { version = "0.12", features = ["json", "rustls-tls"], default-features = false }
 notify = "7.0"
 notify-debouncer-mini = "0.5"
+dotenvy = "0.15"
