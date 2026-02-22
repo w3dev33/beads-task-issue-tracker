@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.22.0] - 2026-02-22
+
+> Requires **bd 0.55+** for optimal performance. Compatible with bd 0.50+ (with fallback).
+
+### Improvements
+- **Rename favorites to projects** across UI and composables
+- **Delete issue notification** — Shows a notification when an issue is deleted from the UI (single, multi-select, epic)
+- **Unified change detection** — Replace `useBeadsWatcher` with `useChangeDetection` composable (native file watcher)
+
+### Fixes
+- **Fix bd delete flags** for bd 0.50+ (`--hard` flag removed)
+
 ## [1.21.0] - 2026-02-21
 
 > Requires **bd 0.55+** for optimal performance. Compatible with bd 0.50+ (with fallback).
