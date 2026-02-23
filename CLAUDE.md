@@ -39,6 +39,18 @@ All steps mandatory. Work is NOT complete until `git push` succeeds.
 - When the session is long and context is getting large, proactively run `/continue-task` before auto-compact triggers
 - If a `PreCompact` hook fires with "auto" trigger, immediately run `/continue-task` instead of letting compact proceed blindly
 
+### bd Version Policy
+- **Stay on bd 0.49.x** — this is the last stable version with embedded Dolt (CGO) and SQLite backend. It was installed via Homebrew (`brew install bd`) and compiled locally with CGO support.
+- **Do NOT upgrade to bd 0.50–0.56+** — versions 0.50+ progressively removed embedded Dolt in favor of server mode (`dolt sql-server`). Version 0.56 removed CGO entirely. Server mode is a regression for standalone desktop apps: no file watcher support, requires polling, server lifecycle management, single-project-per-port limitation.
+- **Pre-compiled binaries from GitHub releases (0.50+) lack CGO** — even versions that still have embedded Dolt in source code (0.50–0.55) ship without CGO in their release binaries, making embedded mode non-functional.
+- **The branch `feat/bd-056-server-mode`** contains all the work to support bd 0.56 (server mode detection, adaptive polling fix, migration logic, DoltServerBanner). It can be merged if/when bd provides a viable path for standalone apps (e.g., change notification mechanism, multi-database server support).
+- **GitHub issue [#2050](https://github.com/steveyegge/beads/issues/2050)** tracks our feedback to the bd team about server mode regressions.
+- Always preserve backward compatibility with bd 0.49 — use version-gated helpers (`supports_bd_sync()`, `supports_daemon_flag()`, etc.) in the Rust backend to branch behavior by CLI version.
+
+### bd Backward Compatibility
+- Never assume all projects use Dolt — check `project_uses_dolt()` before skipping legacy paths
+- Use version-gated helpers in `src-tauri/src/lib.rs` for any feature that depends on a specific bd version
+
 ### Dev Server
 Always kill zombies before starting: `pkill -f "beads-issue-tracker" 2>/dev/null && pnpm tauri:dev`
 
@@ -52,7 +64,7 @@ Always kill zombies before starting: `pkill -f "beads-issue-tracker" 2>/dev/null
 5. **Update `.claude/codebase-map.md`** to reflect any structural changes (new files, composables, commands, etc.)
 
 **Release notes must include:**
-- bd compatibility version (e.g., `> Requires **bd 0.49.3+**`)
+- bd compatibility version (e.g., `> Requires **bd 0.49.x** — do not use bd 0.50–0.56+`)
 - **Never upload DMG manually** — GitHub Actions handles artifacts
 - macOS unsigned certificate notice:
   ```

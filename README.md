@@ -100,6 +100,8 @@ This means the attachment storage lives inside the `.beads` directory and gets v
 ## Prerequisites
 
 > **Important**: This app requires the Beads CLI (or a compatible fork) to be installed on your system. It acts as a graphical interface for the `bd` command-line tool.
+>
+> **Recommended: bd 0.49.x** — This is the last stable version with embedded Dolt and native file watcher support. Do **not** upgrade to bd 0.50–0.56+ which switched to server mode, introducing regressions for standalone desktop use (polling instead of file watching, server lifecycle management, single-project-per-port). See [beads#2050](https://github.com/steveyegge/beads/issues/2050) for details.
 
 1. **Install the Beads CLI** (`bd`)
 
