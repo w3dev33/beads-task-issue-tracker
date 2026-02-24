@@ -132,6 +132,12 @@ The app **auto-detects** which CLI is installed. You can switch between `br` and
 curl -fsSL https://raw.githubusercontent.com/steveyegge/beads/main/scripts/install.sh | bash
 ```
 
+### Using Both Side by Side
+
+`br` and `bd` can be installed simultaneously. The app lets you switch between them at any time via Settings — useful for comparing behavior or transitioning gradually.
+
+If you use an AI coding assistant (Claude Code, Cursor, etc.) to pilot your issues, configure its skills/commands to use the CLI of your choice (`br` or `bd`). The app will reflect changes from either one in real time.
+
 ## Installation
 
 ### Download
