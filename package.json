@@ -32,12 +32,7 @@
     "postinstall": "nuxt prepare",
     "tauri:dev": "cargo tauri dev",
     "tauri:build": "cargo tauri build",
-    "prebuild": "npm version patch --no-git-tag-version && node scripts/sync-version.js",
-    "sync-version": "node scripts/sync-version.js",
-    "version:minor": "npm version minor --no-git-tag-version && node scripts/sync-version.js",
-    "version:major": "npm version major --no-git-tag-version && node scripts/sync-version.js",
-    "version:set": "npm version",
-    "test": "vitest run",
+"test": "vitest run",
     "test:watch": "vitest"
   },
   "dependencies": {
