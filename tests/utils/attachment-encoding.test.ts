@@ -39,8 +39,8 @@ describe('splitRefs', () => {
     expect(splitRefs('/path/a.png')).toEqual(['/path/a.png'])
   })
 
-  it('preserves cleared: sentinels', () => {
-    expect(splitRefs('cleared:abc-123|/path/a.png')).toEqual(['cleared:abc-123', '/path/a.png'])
+  it('handles refs with colons', () => {
+    expect(splitRefs('redmine-123|https://example.com')).toEqual(['redmine-123', 'https://example.com'])
   })
 })
 

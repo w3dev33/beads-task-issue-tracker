@@ -93,14 +93,14 @@ export function isUrl(path: string): boolean {
 }
 
 /**
- * Extract non-image, non-markdown references from externalRef field
- * Returns array of URLs/IDs that are not cleared: sentinels
+ * Extract external references from externalRef field
+ * Returns array of URLs/IDs (filters out empty strings)
  */
 export function extractNonImageRefs(externalRef: string | undefined): string[] {
   if (!externalRef) return []
 
   return splitRefs(externalRef)
-    .filter(ref => !ref.startsWith('cleared:'))
+    .filter(ref => ref.length > 0)
 }
 
 // Configure DOMPurify to allow our custom attributes

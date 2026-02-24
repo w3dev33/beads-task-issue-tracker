@@ -619,24 +619,6 @@ export async function bdPurgeOrphanAttachments(path?: string): Promise<PurgeResu
   return { deletedCount: 0, deletedFolders: [] }
 }
 
-export async function bdCleanupEmptyAttachmentFolder(issueId: string, path?: string): Promise<boolean> {
-  if (isTauri()) {
-    return invoke<boolean>('cleanup_empty_attachment_folder', {
-      projectPath: path || '.',
-      issueId,
-    })
-  }
-  // No server implementation needed
-  return false
-}
-
-export async function bdDeleteAttachmentFile(filePath: string): Promise<boolean> {
-  if (isTauri()) {
-    return invoke<boolean>('delete_attachment_file', { filePath })
-  }
-  // No server implementation needed
-  return false
-}
 
 // ============================================================================
 // Debug / Logging API

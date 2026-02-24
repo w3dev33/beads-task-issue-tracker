@@ -133,29 +133,28 @@ describe('extractImagesFromMarkdown', () => {
 })
 
 // ---------------------------------------------------------------------------
-// extractNonImageRefs — now returns all non-cleared: refs
-// (external_ref no longer contains attachment paths)
+// extractNonImageRefs — returns all non-empty refs
+// (external_ref contains only real external references)
 // ---------------------------------------------------------------------------
 describe('extractNonImageRefs', () => {
   it('returns empty array for undefined', () => {
     expect(extractNonImageRefs(undefined)).toEqual([])
   })
 
-  it('returns all non-cleared refs', () => {
+  it('returns all refs', () => {
     const ref = 'https://redmine.example.com/issues/42|REDMINE-123'
     const result = extractNonImageRefs(ref)
     expect(result).toEqual(['https://redmine.example.com/issues/42', 'REDMINE-123'])
   })
 
-  it('filters out cleared: prefixes', () => {
-    const ref = 'cleared:abc|https://example.com'
-    const result = extractNonImageRefs(ref)
-    expect(result).toEqual(['https://example.com'])
+  it('returns empty for empty string', () => {
+    expect(extractNonImageRefs('')).toEqual([])
   })
 
-  it('returns empty when only cleared refs', () => {
-    const ref = 'cleared:abc|cleared:def'
-    expect(extractNonImageRefs(ref)).toEqual([])
+  it('filters out empty segments', () => {
+    const ref = 'https://example.com||REDMINE-123'
+    const result = extractNonImageRefs(ref)
+    expect(result).toEqual(['https://example.com', 'REDMINE-123'])
   })
 
   it('trims whitespace', () => {

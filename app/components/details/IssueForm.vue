@@ -15,7 +15,6 @@ import {
   SelectValue,
 } from '~/components/ui/select'
 import { LabelMultiSelect } from '~/components/ui/label-multiselect'
-import { splitRefs, joinRefs } from '~/utils/attachment-encoding'
 import { invoke } from '@tauri-apps/api/core'
 
 interface EpicOption {
@@ -42,10 +41,10 @@ const emit = defineEmits<{
   cancel: []
 }>()
 
-// Filter out "cleared:" placeholder from externalRef for display
+// Clean externalRef for display
 const cleanExternalRef = (ref: string | undefined): string => {
   if (!ref) return ''
-  return joinRefs(splitRefs(ref).filter(r => !r.startsWith('cleared:')))
+  return ref
 }
 
 const form = reactive({
@@ -183,7 +182,7 @@ const attachFile = async () => {
   const { open } = await import('@tauri-apps/plugin-dialog')
 
   const selected = await open({
-    multiple: false,
+    multiple: true,
     filters: [
       { name: 'All supported files', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp', 'md', 'markdown'] },
       { name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp'] },
@@ -191,17 +190,18 @@ const attachFile = async () => {
     ],
   })
 
-  if (selected) {
-    try {
-      // Copy the file to .beads/attachments/{issue-id}/ — no external_ref modification
-      const issueId = props.issue?.id || `new-${Date.now()}`
-      await invoke<string>('copy_file_to_attachments', {
-        projectPath: beadsPath.value,
-        sourcePath: selected,
-        issueId,
-      })
-    } catch (error) {
-      console.error('Failed to copy file:', error)
+  if (selected && selected.length > 0) {
+    const issueId = props.issue?.id || `new-${Date.now()}`
+    for (const sourcePath of selected) {
+      try {
+        await invoke<string>('copy_file_to_attachments', {
+          projectPath: beadsPath.value,
+          sourcePath,
+          issueId,
+        })
+      } catch (error) {
+        console.error('Failed to copy file:', sourcePath, error)
+      }
     }
   }
 }

@@ -1078,9 +1078,8 @@ fn ensure_refs_migrated_v3(beads_dir: &std::path::Path, working_dir: &str) {
         Err(_) => return,
     };
 
-    // Quick scan: does any line have empty or non-real external refs?
+    // Quick scan: does any line have non-real external refs?
     let mut needs_migration = false;
-    let mut seen_scan: std::collections::HashSet<String> = std::collections::HashSet::new();
     for line in content.lines() {
         if line.trim().is_empty() { continue; }
         let v: serde_json::Value = match serde_json::from_str(line) {
@@ -1088,18 +1087,8 @@ fn ensure_refs_migrated_v3(beads_dir: &std::path::Path, working_dir: &str) {
             Err(_) => continue,
         };
         let ext_ref = v.get("external_ref").and_then(|r| r.as_str()).unwrap_or("");
-        // Empty ref → needs cleared: sentinel
-        if ext_ref.is_empty() {
-            needs_migration = true;
-            break;
-        }
-        // Duplicate ref → needs dedup
-        if seen_scan.contains(ext_ref) {
-            needs_migration = true;
-            break;
-        }
-        seen_scan.insert(ext_ref.to_string());
-        // Non-real ref (att:, paths, etc.)
+        // Non-real ref (att:, paths, cleared: sentinels, etc.)
+        if ext_ref.is_empty() { continue; }
         for r in ext_ref.split(|c: char| c == '\n' || c == '|') {
             let trimmed = r.trim();
             if !trimmed.is_empty() && !is_real_external_ref(trimmed) {
@@ -1171,16 +1160,19 @@ fn ensure_refs_migrated_v3(beads_dir: &std::path::Path, working_dir: &str) {
         };
 
         let mut new_ref = if real_refs.is_empty() {
-            format!("cleared:{}", issue_id)
+            String::new()
         } else {
             real_refs.join("|")
         };
 
-        if seen_refs.contains(&new_ref) {
-            log_info!("[sync] Duplicate external_ref '{}' for issue {}, using cleared sentinel", new_ref, issue_id);
-            new_ref = format!("cleared:{}", issue_id);
+        // Deduplicate: if another issue already has this exact ref, clear it
+        if !new_ref.is_empty() && seen_refs.contains(&new_ref) {
+            log_info!("[sync] Duplicate external_ref '{}' for issue {}, clearing", new_ref, issue_id);
+            new_ref = String::new();
         }
-        seen_refs.insert(new_ref.clone());
+        if !new_ref.is_empty() {
+            seen_refs.insert(new_ref.clone());
+        }
 
         if new_ref != ext_ref {
             v["external_ref"] = serde_json::Value::String(new_ref);
@@ -2168,80 +2160,14 @@ async fn bd_migrate_to_dolt(cwd: Option<String>) -> Result<MigrateResult, String
         }
     }
 
-    // Step 7: Restore full external_ref for issues that were truncated during import
-    // bd import rejects long/multiline external_ref, but bd update accepts them
-    let mut extref_restored = 0u32;
-    for line in jsonl_content.lines() {
-        let trimmed = line.trim();
-        if trimmed.is_empty() { continue; }
-        if let Ok(v) = serde_json::from_str::<serde_json::Value>(trimmed) {
-            if v.get("status").and_then(|s| s.as_str()) == Some("tombstone") { continue; }
-            let ext_ref = match v.get("external_ref").and_then(|e| e.as_str()) {
-                // Restore if: multiline, long (truncated during import), or contains relative attachment paths
-                Some(s) if s.contains('\n') || s.len() > 100 || s.contains("attachments/") => s,
-                _ => continue,
-            };
-            let issue_id = match v.get("id").and_then(|i| i.as_str()) {
-                Some(id) => id.to_string(),
-                None => continue,
-            };
-            // Re-prefix if needed
-            let issue_id = reprefix_id(&issue_id, &prefix, &prefix_counts);
-
-            // Convert relative attachment paths to absolute
-            // Paths may be: "attachments/..." or ".beads/attachments/..."
-            let abs_ext_ref: String = ext_ref
-                .lines()
-                .map(|line| {
-                    let l = line.trim();
-                    if l.is_empty() || l.starts_with("cleared:") || l.starts_with('/') || l.starts_with("http") {
-                        l.to_string()
-                    } else if l.starts_with(".beads/attachments/") {
-                        // .beads/attachments/... → join with working_dir (parent of .beads/)
-                        std::path::Path::new(&working_dir).join(l).to_string_lossy().to_string()
-                    } else if l.starts_with("attachments/") {
-                        // attachments/... → join with beads_dir (.beads/)
-                        beads_dir.join(l).to_string_lossy().to_string()
-                    } else {
-                        l.to_string()
-                    }
-                })
-                .collect::<Vec<_>>()
-                .join("\n");
-
-            let update_output = new_command(&binary)
-                .args(&["update", &issue_id, "--external-ref", &abs_ext_ref])
-                .current_dir(&working_dir)
-                .env("PATH", get_extended_path())
-                .env("BEADS_PATH", &working_dir)
-                .output();
-
-            match update_output {
-                Ok(o) if o.status.success() => { extref_restored += 1; }
-                Ok(o) => {
-                    let stderr = String::from_utf8_lossy(&o.stderr);
-                    log_info!("[bd_migrate] Failed to restore external_ref for {}: {}", issue_id, stderr.trim());
-                }
-                Err(e) => {
-                    log_info!("[bd_migrate] Failed to run bd update for {}: {}", issue_id, e);
-                }
-            }
-        }
-    }
-
-    if extref_restored > 0 {
-        log_info!("[bd_migrate] Restored full external_ref for {} issues", extref_restored);
-    }
-
     Ok(MigrateResult {
         success: true,
         message: format!(
-            "Migration to Dolt completed (via init+import). {} Labels: {}. Deps: {}. Comments: {}. Attachments: {}.",
+            "Migration to Dolt completed (via init+import). {} Labels: {}. Deps: {}. Comments: {}.",
             stdout.trim(),
             labels_restored,
             deps_restored,
             comments_restored,
-            extref_restored
         ),
     })
 }
@@ -2746,13 +2672,7 @@ async fn bd_update(id: String, updates: UpdatePayload) -> Result<Option<Issue>, 
     }
     if let Some(ref ext) = updates.external_ref {
         args.push("--external-ref".to_string());
-        if ext.is_empty() {
-            // Use issue ID as unique sentinel to satisfy UNIQUE constraint
-            // Frontend filters out "cleared:" prefixes for display
-            args.push(format!("cleared:{}", id));
-        } else {
-            args.push(ext.clone());
-        }
+        args.push(ext.clone());
     }
     if let Some(est) = updates.estimate_minutes {
         args.push("--estimate".to_string());
@@ -3846,86 +3766,6 @@ fn base64_encode(data: &[u8]) -> String {
 }
 
 #[tauri::command]
-async fn delete_attachment_file(file_path: String) -> Result<bool, String> {
-    log::info!("[delete_attachment_file] path: {}", file_path);
-
-    let path = PathBuf::from(&file_path);
-
-    // Check if file exists before canonicalize (canonicalize requires the path to exist)
-    if !path.exists() {
-        log::info!("[delete_attachment_file] File does not exist: {}", file_path);
-        return Ok(false);
-    }
-
-    // Security: Canonicalize to resolve symlinks/.. and verify inside .beads/attachments/
-    let canonical = path.canonicalize()
-        .map_err(|e| format!("Failed to resolve path: {}", e))?;
-    let canonical_str = canonical.to_string_lossy();
-    if !canonical_str.contains("/.beads/attachments/") {
-        log::warn!("[delete_attachment_file] Refusing to delete file outside attachments: {} (resolved: {})", file_path, canonical_str);
-        return Err("Can only delete files inside .beads/attachments/".to_string());
-    }
-
-    // Delete the file
-    fs::remove_file(&path)
-        .map_err(|e| format!("Failed to delete file: {}", e))?;
-
-    log::info!("[delete_attachment_file] Deleted: {}", file_path);
-    Ok(true)
-}
-
-#[tauri::command]
-async fn cleanup_empty_attachment_folder(project_path: String, issue_id: String) -> Result<bool, String> {
-    log::info!("[cleanup_empty_attachment_folder] project: {}, issue: {}", project_path, issue_id);
-
-    // Calculate absolute project path
-    let abs_project_path = if project_path == "." || project_path.is_empty() {
-        env::current_dir().map_err(|e| format!("Failed to get current directory: {}", e))?
-    } else {
-        let p = PathBuf::from(&project_path);
-        if p.is_relative() {
-            let cwd = env::current_dir()
-                .map_err(|e| format!("Failed to get current directory: {}", e))?;
-            cwd.join(&p)
-        } else {
-            p
-        }
-    };
-
-    let abs_project_path = abs_project_path
-        .canonicalize()
-        .map_err(|e| format!("Failed to resolve project path: {}", e))?;
-
-    // Build attachment folder path for this issue
-    let attachment_dir = abs_project_path
-        .join(".beads")
-        .join("attachments")
-        .join(&issue_id);
-
-    // If folder doesn't exist, nothing to do
-    if !attachment_dir.exists() || !attachment_dir.is_dir() {
-        log::info!("[cleanup_empty_attachment_folder] Folder does not exist: {:?}", attachment_dir);
-        return Ok(false);
-    }
-
-    // Check if folder is empty
-    let entries = fs::read_dir(&attachment_dir)
-        .map_err(|e| format!("Failed to read attachment directory: {}", e))?;
-
-    let is_empty = entries.count() == 0;
-
-    if is_empty {
-        log::info!("[cleanup_empty_attachment_folder] Deleting empty folder: {:?}", attachment_dir);
-        fs::remove_dir(&attachment_dir)
-            .map_err(|e| format!("Failed to remove empty folder: {}", e))?;
-        Ok(true)
-    } else {
-        log::info!("[cleanup_empty_attachment_folder] Folder not empty, keeping: {:?}", attachment_dir);
-        Ok(false)
-    }
-}
-
-#[tauri::command]
 async fn purge_orphan_attachments(project_path: String) -> Result<PurgeResult, String> {
     log::info!("[purge_orphan_attachments] project: {}", project_path);
 
@@ -4947,8 +4787,6 @@ pub fn run() {
             delete_attachment,
             read_text_file,
             write_text_file,
-            delete_attachment_file,
-            cleanup_empty_attachment_folder,
             purge_orphan_attachments,
             check_refs_migration,
             migrate_attachment_refs,

@@ -177,22 +177,30 @@ export function useIssueDialogs() {
     }
   }
 
-  // Attach image — copy file to filesystem, no external_ref modification
-  const handleAttachImage = async (path: string) => {
+  // Attach files — copy to filesystem, no external_ref modification
+  const handleAttachImage = async (paths: string | string[]) => {
     if (!selectedIssue.value) return
 
-    try {
-      const { invoke } = await import('@tauri-apps/api/core')
-      await invoke<string>('copy_file_to_attachments', {
-        projectPath: beadsPath.value,
-        sourcePath: path,
-        issueId: selectedIssue.value.id,
-      })
-    } catch (error) {
-      console.error('Failed to copy file:', error)
+    const filePaths = Array.isArray(paths) ? paths : [paths]
+    const { invoke } = await import('@tauri-apps/api/core')
+
+    for (const sourcePath of filePaths) {
+      try {
+        await invoke<string>('copy_file_to_attachments', {
+          projectPath: beadsPath.value,
+          sourcePath,
+          issueId: selectedIssue.value.id,
+        })
+      } catch (error) {
+        console.error('Failed to copy file:', sourcePath, error)
+      }
     }
 
-    // Refresh issue to show the new attachment
+    // Clear attachment cache so IssuePreview reloads from filesystem
+    const { clearCache } = useAttachments()
+    clearCache(selectedIssue.value.id)
+
+    // Refresh issue to show the new attachments
     await fetchIssue(selectedIssue.value.id)
   }
 
@@ -213,6 +221,10 @@ export function useIssueDialogs() {
         issueId: selectedIssue.value.id,
         filename: detachImagePath.value,
       })
+
+      // Clear attachment cache so IssuePreview reloads from filesystem
+      const { clearCache } = useAttachments()
+      clearCache(selectedIssue.value.id)
 
       // Refresh issue to update the attachments
       await fetchIssue(selectedIssue.value.id)

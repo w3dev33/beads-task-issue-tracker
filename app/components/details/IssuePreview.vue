@@ -35,8 +35,8 @@ const loadAttachments = async () => {
   attachedMarkdown.value = result.markdown
 }
 
-// Reload when issue changes
-watch(() => props.issue?.id, () => loadAttachments(), { immediate: true })
+// Reload when issue changes (watch the whole object so fetchIssue triggers reload)
+watch(() => props.issue, () => loadAttachments(), { immediate: true })
 
 // Total attachment count (images + markdown)
 const totalAttachments = computed(() => attachedImages.value.length + attachedMarkdown.value.length)
@@ -73,21 +73,21 @@ const handleMarkdownClick = (file: AttachmentFile) => {
 const attachFile = async () => {
   const { open } = await import('@tauri-apps/plugin-dialog')
   const selected = await open({
-    multiple: false,
+    multiple: true,
     filters: [
       { name: 'All supported files', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp', 'md', 'markdown'] },
       { name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp'] },
       { name: 'Markdown', extensions: ['md', 'markdown'] },
     ],
   })
-  if (selected) {
+  if (selected && selected.length > 0) {
     emit('attach-image', selected)
   }
 }
 
 const emit = defineEmits<{
   'navigate-to-issue': [id: string]
-  'attach-image': [path: string]
+  'attach-image': [paths: string[]]
   'detach-image': [path: string]
   'create-child': [parentId: string]
   'open-add-blocker': [issueId: string]
