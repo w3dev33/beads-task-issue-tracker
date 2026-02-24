@@ -2,20 +2,20 @@
 
 A lightweight, standalone desktop application for managing [Beads](https://github.com/steveyegge/beads) issues outside of your IDE.
 
-![Beads Task-Issue Tracker](docs/screenshots/app-overview-1.17.1.png)
+![Beads Task-Issue Tracker](docs/screenshots/app-overview-1.23.0.png)
 
 ## Why This App?
 
-[bd Beads](https://github.com/steveyegge/beads) is an AI-native issue tracker that stores issues directly in your codebase (in a `.beads` folder).
+[Beads](https://github.com/steveyegge/beads) is an AI-native issue tracker that stores issues directly in your codebase (in a `.beads` folder). Compatible with both [`br`](https://github.com/Dicklesworthstone/beads_rust) (Rust, recommended) and [`bd`](https://github.com/steveyegge/beads) (Go).
 
 > [!IMPORTANT]
 > **A human interface for AI-piloted issue tracking**
 >
-> The `bd` CLI is designed for AI agents — they create issues, update statuses, and pilot workflows programmatically. But **humans need visibility and control** over what the AI is doing.
+> The Beads CLI (`br` or `bd`) is designed for AI agents — they create issues, update statuses, and pilot workflows programmatically. But **humans need visibility and control** over what the AI is doing.
 >
-> This application lets you **observe** what the AI is driving, and **step in** to edit, correct, or redirect at any point. The workflow is collaborative — the AI pilots through `bd`, and you use this app as your control panel.
+> This application lets you **observe** what the AI is driving, and **step in** to edit, correct, or redirect at any point. The workflow is collaborative — the AI pilots through the CLI, and you use this app as your control panel.
 >
-> We follow the `bd` CLI — we don't define the format, we read what `bd` writes and present it for humans. If `bd` evolves, we adapt. If `bd` ever becomes purely machine-to-machine with no human-interpretable output, we freeze at the last meaningful version.
+> We follow the Beads CLI — we don't define the format, we read what it writes and present it for humans. If the CLI evolves, we adapt. If it ever becomes purely machine-to-machine with no human-interpretable output, we freeze at the last meaningful version.
 >
 > *See **[docs/philosophy.md](docs/philosophy.md)** for the full design rationale.*
 
@@ -32,7 +32,7 @@ This project is a reimplementation of the Beads UI as a native desktop app using
 ## Features
 
 ### Live Updates — No Polling
-The app uses a **native file watcher** on the `.beads` directory. When an AI agent (or anyone) creates, updates, or closes an issue via `bd`, the change appears in real time — no refresh button, no polling interval. This is critical when monitoring AI-driven workflows where issues change rapidly.
+The app uses a **native file watcher** on the `.beads` directory. When an AI agent (or anyone) creates, updates, or closes an issue via `br` or `bd`, the change appears in real time — no refresh button, no polling interval. This is critical when monitoring AI-driven workflows where issues change rapidly.
 
 ### Dependencies & Relations
 - **Add/remove blockers** from the issue preview via a search modal
@@ -54,7 +54,7 @@ The app uses a **native file watcher** on the `.beads` directory. When an AI age
 - **Gallery Navigation**: Browse multiple attached files with arrow keys or buttons
 
 ### Filtering & Display
-- **Extended Status Support**: All `bd` statuses handled — `deferred`, `pinned`, `hooked`, and `tombstone` (deleted) issues filtered from default view
+- **Extended Status Support**: All Beads statuses handled — `deferred`, `pinned`, `hooked`, and `tombstone` (deleted) issues filtered from default view
 - **Advanced Filters**: Multi-select filters by type, status, priority, labels, and assignee
 - **Exclusion Filters**: Hide specific issues by criteria (inverse filtering)
 - **Search**: Find issues by title, ID, or description
@@ -69,65 +69,68 @@ The app uses a **native file watcher** on the `.beads` directory. When an AI age
 - **Zoom Controls**: Adjust UI scale from 75% to 150% (Alt+Click to reset)
 
 ### Settings & Tools
-- **CLI Client Selector**: Switch between [`bd`](https://github.com/steveyegge/beads) (Go) and [`br`](https://github.com/Dicklesworthstone/beads_rust) (Rust) via Settings (`Cmd/Ctrl+,`)
+- **Dual CLI support**: Auto-detects [`br`](https://github.com/Dicklesworthstone/beads_rust) (Rust, recommended) and [`bd`](https://github.com/steveyegge/beads) (Go) — switch between them via Settings (`Cmd/Ctrl+,`), feature profiles adapt automatically
 - **Theme System**: 4 themes — Classic Light, Classic Dark, Dark Flat, and Neon — with per-theme badge styling, glow effects, and one-click cycling via the header icon
 - **Debug Panel**: Live log viewer with auto-refresh, accessible via `Cmd/Ctrl+Shift+L`
 - **Database Repair**: Automatic detection and repair of schema migration issues
 - **Keyboard Shortcuts**: `Cmd/Ctrl+,` (settings), `Cmd/Ctrl+F` (search in markdown), `Cmd/Ctrl+Shift+L` (debug logs), arrow keys (gallery navigation)
+
+## How Attachments Work
+
+The Beads CLI has no built-in attachment support. This app implements its own **filesystem-based attachment system** using the `.beads/attachments/` directory as the sole source of truth.
+
+When you attach files to an issue:
+1. Files are copied into `.beads/attachments/{issue-id}/`
+2. The app detects attachments by scanning the filesystem directory
+3. Multiple files (images and markdown) can be attached in a single operation
+4. Files are categorized automatically by extension (image, markdown, or external reference)
+
+This means the attachment storage lives inside the `.beads` directory and gets versioned alongside your issues.
+
+> **For developers**: If you want to script attachment creation (e.g., automatically attach files when creating issues), see the detailed technical documentation in **[docs/attachments.md](docs/attachments.md)**.
 
 ## My Workflow
 
 Beyond just viewing issues, this app is part of a broader development workflow powered by [Claude Code](https://claude.ai/code):
 
 - **Centralized task management**: Beads issues live in the codebase, making them accessible to AI coding assistants
-- **AI-driven development**: Claude Code can read, create, and update issues directly, keeping context within the coding session
+- **AI-driven development**: Claude Code can read, create, and update issues directly via `br` or `bd`, keeping context within the coding session
 - **External bug sync**: Custom commands can import bugs from external systems (Jira, Redmine, etc.) into Beads
 - **Daily planning**: Quickly review and prioritize tasks for the day without switching contexts
 
-## How Attachments Work
-
-The `bd` CLI has no built-in attachment support. This app implements its own attachment system by repurposing the `--external-ref` field — originally designed for storing a single external reference (like `gh-9` or `jira-ABC`) — to hold file paths.
-
-When you attach a file to an issue:
-1. The file is copied into `.beads/attachments/{issue-id}/`
-2. Its absolute path is stored in the issue's `external_ref` field via `bd update --external-ref`
-3. The app parses each line of `external_ref` and categorizes it by extension (image, markdown, or external reference)
-
-This means the attachment storage lives inside the `.beads` directory and gets versioned alongside your issues.
-
-> **For developers**: If you want to script attachment creation (e.g., automatically attach files when creating issues), see the detailed technical documentation in **[docs/attachments.md](docs/attachments.md)**.
-
 ## Prerequisites
 
-> **Important**: This app requires the Beads CLI (or a compatible fork) to be installed on your system. It acts as a graphical interface for the `bd` command-line tool.
->
-> **Recommended: bd 0.49.x** — This is the last stable version with embedded Dolt and native file watcher support. Do **not** upgrade to bd 0.50–0.56+ which switched to server mode, introducing regressions for standalone desktop use (polling instead of file watching, server lifecycle management, single-project-per-port). See [beads#2050](https://github.com/steveyegge/beads/issues/2050) for details.
+> **Important**: This app requires a Beads CLI to be installed on your system. It acts as a graphical interface for the Beads command-line tool.
 
-1. **Install the Beads CLI** (`bd`)
+### Recommended: `br` (beads_rust)
 
-   Follow the installation instructions on the official repository:
+[**beads_rust**](https://github.com/Dicklesworthstone/beads_rust) (`br`) is our **recommended CLI** — it's faster, more optimized, and built on the proven SQLite + JSONL architecture. This is our primary choice going forward.
 
-   **[https://github.com/steveyegge/beads](https://github.com/steveyegge/beads)**
-
-   ```bash
-   # Quick install (check the repo for the latest method)
-   curl -fsSL https://raw.githubusercontent.com/steveyegge/beads/main/scripts/install.sh | bash
-   ```
-
-   **Alternative**: You can also use [beads_rust](https://github.com/Dicklesworthstone/beads_rust) (`br`), a Rust port frozen at the classic SQLite + JSONL architecture. After installing, go to **Settings** (`Cmd/Ctrl+,`) and select `br` as the CLI client.
+1. **Install `br`** — follow the instructions at [github.com/Dicklesworthstone/beads_rust](https://github.com/Dicklesworthstone/beads_rust)
 
 2. **Initialize Beads in your project**
-
    ```bash
    cd your-project
-   bd init
+   br init
    ```
 
 3. **Verify installation**
-
    ```bash
-   bd --version
+   br --version
    ```
+
+The app **auto-detects** which CLI is installed. You can switch between `br` and `bd` at any time via **Settings** (`Cmd/Ctrl+,`).
+
+### Also supported: `bd` 0.49.x (Go)
+
+[**bd**](https://github.com/steveyegge/beads) (`bd`) version 0.49.x remains fully supported as a fallback. This is the last stable Go version with embedded Dolt and native file watcher support.
+
+> **Do not** upgrade to bd 0.50–0.56+ which switched to server mode, introducing regressions for standalone desktop use. See [beads#2050](https://github.com/steveyegge/beads/issues/2050) for details. If `bd` with Dolt regains comparable reactivity and performance in future versions, we'll reconsider.
+
+```bash
+# Install bd (check the repo for the latest method)
+curl -fsSL https://raw.githubusercontent.com/steveyegge/beads/main/scripts/install.sh | bash
+```
 
 ## Installation
 

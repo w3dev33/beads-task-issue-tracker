@@ -1,5 +1,24 @@
 # Changelog
 
+## [1.23.0] - 2026-02-24
+
+> **Recommended CLI: [`br`](https://github.com/Dicklesworthstone/beads_rust) (beads_rust)** — faster, more optimized, and our primary choice going forward. `bd 0.49.x` remains supported as a fallback. If `bd` with Dolt regains comparable reactivity and performance in future versions, we'll reconsider.
+
+### Attachments Overhaul
+- **Filesystem-only attachments**: The `.beads/attachments/` directory is now the sole source of truth — no more reliance on `external_ref` for path storage
+- **Auto-migration v3**: Existing projects are automatically migrated on first open (backup created, refs cleaned, files preserved)
+- **Multi-file attach**: Attach multiple images or markdown files in a single operation
+- **Removed `cleared:{id}` sentinel**: Empty `external_ref` now uses native empty string (converted to `null` internally by `br`/`bd`) — simpler, no more sentinel values
+- **Attachment refresh fix**: Cache invalidation after attach/detach + proper watch on issue object changes
+
+### Notifications
+- **External status change toasts**: Toast notifications when issues are closed, deleted, or reopened externally (via CLI or another tool)
+- **Tombstone detection**: `br delete --hard` creates tombstone status — now properly detected and surfaced as a delete notification
+
+### Code Cleanup
+- **Removed dead code**: `delete_attachment_file`, `cleanup_empty_attachment_folder` (Rust + TS), legacy external_ref path restoration in migration
+- **Native logger**: All debug logging uses the native `logFrontend()` → Rust `log::info!` pipeline (log file: `~/Library/Logs/com.beads.manager/beads.log`)
+
 ## [1.22.0] - 2026-02-22
 
 > Requires **bd 0.55+** for optimal performance. Compatible with bd 0.50+ (with fallback).

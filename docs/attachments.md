@@ -18,8 +18,8 @@ The **filesystem** is the sole source of truth for attachments. The `external_re
 ### Adding an attachment
 
 1. User clicks "Attach" in the issue preview or form
-2. File is selected (filtered by allowed extensions)
-3. Tauri backend copies the file to `.beads/attachments/{issue-id}/`
+2. One or more files are selected (multi-file supported, filtered by allowed extensions)
+3. Tauri backend copies each file to `.beads/attachments/{issue-id}/`
    - Filename is sanitized (diacritics stripped, kebab-case)
    - Duplicates: `image.png` → `image-1.png` → `image-2.png`
 4. Frontend refreshes the attachment list from the filesystem
@@ -53,11 +53,9 @@ The `external_ref` field is reserved for **real external references only**:
 - GitHub URLs: `https://github.com/org/repo/issues/42`
 - Other URLs or IDs
 
-### UNIQUE Constraint Workaround
+### UNIQUE Constraint
 
-`bd` enforces a `UNIQUE` constraint on `external_ref`. When an issue has no external reference, we use a sentinel: `cleared:{issue-id}`.
-
-The frontend filters out `cleared:` sentinels in display.
+`bd`/`br` enforce a `UNIQUE` constraint on `external_ref`. When an issue has no external reference, we pass an empty string `""` which is internally converted to `null` — no conflict, no sentinel needed.
 
 ## Allowed File Types
 
