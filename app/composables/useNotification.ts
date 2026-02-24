@@ -11,20 +11,19 @@ const notifications = ref<Notification[]>([])
 let nextId = 0
 
 export function useNotification() {
-  const addNotification = (message: string, description?: string, type: NotificationType = 'info') => {
+  const addNotification = (message: string, description?: string, type: NotificationType = 'info', durationMs = 3000) => {
     const id = nextId++
     notifications.value.push({ id, message, description, type })
 
-    // Auto-remove after 3 seconds
     setTimeout(() => {
       notifications.value = notifications.value.filter(n => n.id !== id)
-    }, 3000)
+    }, durationMs)
   }
 
-  const notify = (message: string, description?: string) => addNotification(message, description, 'info')
-  const success = (message: string, description?: string) => addNotification(message, description, 'success')
-  const error = (message: string, description?: string) => addNotification(message, description, 'error')
-  const warning = (message: string, description?: string) => addNotification(message, description, 'warning')
+  const notify = (message: string, description?: string, durationMs?: number) => addNotification(message, description, 'info', durationMs)
+  const success = (message: string, description?: string, durationMs?: number) => addNotification(message, description, 'success', durationMs)
+  const error = (message: string, description?: string, durationMs?: number) => addNotification(message, description, 'error', durationMs)
+  const warning = (message: string, description?: string, durationMs?: number) => addNotification(message, description, 'warning', durationMs)
 
   const dismiss = (id: number) => {
     notifications.value = notifications.value.filter(n => n.id !== id)

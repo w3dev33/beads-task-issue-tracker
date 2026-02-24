@@ -734,7 +734,20 @@ struct AppConfig {
 }
 
 fn default_cli_binary() -> String {
-    "bd".to_string()
+    // Auto-detect: prefer br (Rust), fallback to bd (Go)
+    for bin in &["br", "bd"] {
+        if let Ok(output) = std::process::Command::new(bin)
+            .arg("--version")
+            .current_dir(std::env::temp_dir())
+            .output()
+        {
+            if output.status.success() {
+                return bin.to_string();
+            }
+        }
+    }
+    // Neither found — default to br (will fail later with clear error)
+    "br".to_string()
 }
 
 impl Default for AppConfig {
@@ -2646,7 +2659,13 @@ async fn bd_update(id: String, updates: UpdatePayload) -> Result<Option<Issue>, 
 async fn bd_close(id: String, options: CwdOptions) -> Result<serde_json::Value, String> {
     log_info!("[bd_close] Closing issue: {} with cwd: {:?}", id, options.cwd);
 
-    let output = execute_bd("close", std::slice::from_ref(&id), options.cwd.as_deref())?;
+    let mut args = vec![id.clone()];
+    // br supports --suggest-next for showing newly unblocked issues
+    if matches!(get_cli_client_info(), Some((CliClient::Br, _, _, _))) {
+        args.push("--suggest-next".to_string());
+    }
+
+    let output = execute_bd("close", &args, options.cwd.as_deref())?;
 
     log_info!("[bd_close] Raw output: {}", output.chars().take(500).collect::<String>());
 
@@ -2658,6 +2677,45 @@ async fn bd_close(id: String, options: CwdOptions) -> Result<serde_json::Value, 
 
     log_info!("[bd_close] Issue {} closed successfully", id);
     Ok(result)
+}
+
+#[tauri::command]
+async fn bd_search(query: String, options: CwdOptions) -> Result<Vec<Issue>, String> {
+    log_info!("[bd_search] Searching for: {} with cwd: {:?}", query, options.cwd);
+
+    let args = vec![query];
+    let output = execute_bd("search", &args, options.cwd.as_deref())?;
+
+    log_info!("[bd_search] Raw output: {}", output.chars().take(500).collect::<String>());
+
+    let trimmed = output.trim();
+    if trimmed.is_empty() || trimmed == "[]" {
+        return Ok(vec![]);
+    }
+
+    let raw: Vec<BdRawIssue> = serde_json::from_str(trimmed)
+        .map_err(|e| {
+            log_error!("[bd_search] Failed to parse JSON: {}", e);
+            format!("Failed to parse search results: {}", e)
+        })?;
+
+    Ok(raw.into_iter().map(transform_issue).collect())
+}
+
+#[tauri::command]
+async fn bd_label_add(id: String, label: String, options: CwdOptions) -> Result<(), String> {
+    log_info!("[bd_label_add] Adding label '{}' to issue {}", label, id);
+    let args = vec![id, label];
+    execute_bd("label add", &args, options.cwd.as_deref())?;
+    Ok(())
+}
+
+#[tauri::command]
+async fn bd_label_remove(id: String, label: String, options: CwdOptions) -> Result<(), String> {
+    log_info!("[bd_label_remove] Removing label '{}' from issue {}", label, id);
+    let args = vec![id, label];
+    execute_bd("label remove", &args, options.cwd.as_deref())?;
+    Ok(())
 }
 
 #[tauri::command]
@@ -4237,11 +4295,9 @@ pub fn run() {
             log::info!("=== Beads Task-Issue Tracker starting ===");
             log::info!("[startup] Extended PATH: {}", get_extended_path());
 
-            // Load config and set CLI binary
+            // Load config and set CLI binary (auto-detects br→bd if no config exists)
             let config = load_config();
-            if config.cli_binary != "bd" {
-                log::info!("[startup] Using custom CLI binary: {}", config.cli_binary);
-            }
+            log::info!("[startup] CLI binary: {}", config.cli_binary);
             *CLI_BINARY.lock().unwrap() = config.cli_binary.clone();
 
             // Check if CLI binary is accessible
@@ -4298,6 +4354,9 @@ pub fn run() {
             validate_cli_binary,
             bd_update,
             bd_close,
+            bd_search,
+            bd_label_add,
+            bd_label_remove,
             bd_delete,
             bd_comments_add,
             bd_dep_add,

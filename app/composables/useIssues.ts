@@ -1,5 +1,5 @@
 import type { Issue, CreateIssuePayload, UpdateIssuePayload } from '~/types/issue'
-import { bdList, bdCount, bdShow, bdCreate, bdUpdate, bdClose, bdDelete, bdAddComment, bdAddDependency, bdRemoveDependency, bdAddRelation, bdRemoveRelation, bdPurgeOrphanAttachments, bdPollData, type BdListOptions, type PollData } from '~/utils/bd-api'
+import { bdList, bdCount, bdShow, bdCreate, bdUpdate, bdClose, bdDelete, bdAddComment, bdAddDependency, bdRemoveDependency, bdAddRelation, bdRemoveRelation, bdPurgeOrphanAttachments, bdPollData, bdSearch, bdLabelAdd, bdLabelRemove, type BdListOptions, type PollData } from '~/utils/bd-api'
 import { useProjectStorage } from '~/composables/useProjectStorage'
 import {
   deduplicateIssues,
@@ -508,12 +508,12 @@ export function useIssues() {
     error.value = null
 
     try {
-      await bdClose(id, getPath())
+      const result = await bdClose(id, getPath())
       await fetchIssues()
       if (selectedIssue.value?.id === id) {
         await fetchIssue(id)
       }
-      return true
+      return result
     } catch (e) {
       error.value = e instanceof Error ? e.message : 'Failed to close issue'
       return false
@@ -691,6 +691,51 @@ export function useIssues() {
     newlyAddedIds.value = new Set()
   }
 
+  // br-only: Full-text search via CLI (replaces client-side filtering when br is active)
+  const searchIssues = async (query: string) => {
+    error.value = null
+    try {
+      const results = await bdSearch(query, getPath())
+      issues.value = deduplicateIssues(results || [])
+    } catch (e) {
+      error.value = e instanceof Error ? e.message : 'Search failed'
+    }
+  }
+
+  // br-only: Granular label add (uses `br label add` instead of full update)
+  const addLabel = async (id: string, label: string) => {
+    isUpdating.value = true
+    error.value = null
+    try {
+      await bdLabelAdd(id, label, getPath())
+      // Refresh the issue to reflect the change
+      await fetchIssue(id)
+      return true
+    } catch (e) {
+      error.value = e instanceof Error ? e.message : 'Failed to add label'
+      return false
+    } finally {
+      isUpdating.value = false
+    }
+  }
+
+  // br-only: Granular label remove (uses `br label remove` instead of full update)
+  const removeLabel = async (id: string, label: string) => {
+    isUpdating.value = true
+    error.value = null
+    try {
+      await bdLabelRemove(id, label, getPath())
+      // Refresh the issue to reflect the change
+      await fetchIssue(id)
+      return true
+    } catch (e) {
+      error.value = e instanceof Error ? e.message : 'Failed to remove label'
+      return false
+    } finally {
+      isUpdating.value = false
+    }
+  }
+
   return {
     issues,
     filteredIssues,
@@ -732,5 +777,9 @@ export function useIssues() {
     checkForChanges,
     clearIssues,
     newlyAddedIds,
+    // br-only features
+    searchIssues,
+    addLabel,
+    removeLabel,
   }
 }

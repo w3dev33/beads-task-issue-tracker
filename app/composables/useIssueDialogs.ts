@@ -135,9 +135,26 @@ export function useIssueDialogs() {
     const issueTitle = selectedIssue.value.title
     isClosing.value = true
     try {
-      await closeIssue(issueId)
+      const result = await closeIssue(issueId)
       await fetchStats(issues.value)
-      notifySuccess(`Issue ${issueId} closed`, issueTitle)
+
+      // br --suggest-next: enrich the close notification with unblocked issues
+      let closeDesc = issueTitle
+      let hasSuggestions = false
+      if (result && typeof result === 'object') {
+        const data = result as Record<string, unknown>
+        const suggested = data.unblocked as Array<{ id: string; title?: string }> | undefined
+        if (suggested?.length) {
+          hasSuggestions = true
+          const unblockedList = suggested.map(s => s.id).join(', ')
+          const unblockedMsg = suggested.length === 1
+            ? `Unblocked: ${unblockedList}`
+            : `${suggested.length} unblocked: ${unblockedList}`
+          closeDesc = closeDesc ? `${closeDesc} — ${unblockedMsg}` : unblockedMsg
+        }
+      }
+      // Longer duration when showing unblocked issues so user has time to read
+      notifySuccess(`Issue ${issueId} closed`, closeDesc, hasSuggestions ? 6000 : undefined)
     } catch {
       notifyError(`Failed to close ${issueId}`, issueTitle)
     } finally {

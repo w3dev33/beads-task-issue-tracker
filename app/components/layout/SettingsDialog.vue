@@ -59,6 +59,9 @@ async function selectClient(client: 'bd' | 'br') {
     const version = await setCliBinaryPath(client)
     selectedClient.value = client
     switchResult.value = { success: true, message: version }
+    // Update shared CLI client state
+    const { setBinary } = useCliClient()
+    setBinary(client)
   } catch (error) {
     switchResult.value = {
       success: false,
@@ -126,33 +129,7 @@ async function testConnection() {
         <div class="space-y-3">
           <Label>CLI Client</Label>
           <div class="grid grid-cols-2 gap-3">
-            <!-- bd option -->
-            <button
-              class="relative flex flex-col items-start gap-1.5 rounded-lg border-2 p-3 text-left transition-colors"
-              :class="selectedClient === 'bd'
-                ? 'border-primary bg-primary/5'
-                : 'border-muted hover:border-muted-foreground/25 hover:bg-muted/50'"
-              :disabled="isSwitching"
-              @click="selectClient('bd')"
-            >
-              <div class="flex items-center gap-2">
-                <div
-                  class="flex h-5 w-5 items-center justify-center rounded-full border-2 transition-colors"
-                  :class="selectedClient === 'bd' ? 'border-primary' : 'border-muted-foreground/40'"
-                >
-                  <div
-                    v-if="selectedClient === 'bd'"
-                    class="h-2.5 w-2.5 rounded-full bg-primary"
-                  />
-                </div>
-                <span class="font-mono font-semibold text-sm">bd</span>
-              </div>
-              <p class="text-xs text-muted-foreground pl-7">
-                Original Beads CLI (Go)
-              </p>
-            </button>
-
-            <!-- br option -->
+            <!-- br option (preferred) -->
             <button
               class="relative flex flex-col items-start gap-1.5 rounded-lg border-2 p-3 text-left transition-colors"
               :class="selectedClient === 'br'
@@ -175,6 +152,32 @@ async function testConnection() {
               </div>
               <p class="text-xs text-muted-foreground pl-7">
                 Beads Rust (SQLite + JSONL)
+              </p>
+            </button>
+
+            <!-- bd option (legacy) -->
+            <button
+              class="relative flex flex-col items-start gap-1.5 rounded-lg border-2 p-3 text-left transition-colors"
+              :class="selectedClient === 'bd'
+                ? 'border-primary bg-primary/5'
+                : 'border-muted hover:border-muted-foreground/25 hover:bg-muted/50'"
+              :disabled="isSwitching"
+              @click="selectClient('bd')"
+            >
+              <div class="flex items-center gap-2">
+                <div
+                  class="flex h-5 w-5 items-center justify-center rounded-full border-2 transition-colors"
+                  :class="selectedClient === 'bd' ? 'border-primary' : 'border-muted-foreground/40'"
+                >
+                  <div
+                    v-if="selectedClient === 'bd'"
+                    class="h-2.5 w-2.5 rounded-full bg-primary"
+                  />
+                </div>
+                <span class="font-mono font-semibold text-sm">bd</span>
+              </div>
+              <p class="text-xs text-muted-foreground pl-7">
+                Original Beads CLI (Go)
               </p>
             </button>
           </div>

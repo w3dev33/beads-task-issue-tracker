@@ -481,6 +481,28 @@ export async function bdUpdate(id: string, payload: UpdateIssuePayload, path?: s
   })
 }
 
+export async function bdSearch(query: string, path?: string): Promise<Issue[]> {
+  if (isTauri()) {
+    return invoke<Issue[]>('bd_search', { query, options: { cwd: path } })
+  }
+  // Web: no search support — client-side filtering handles it
+  return []
+}
+
+export async function bdLabelAdd(id: string, label: string, path?: string): Promise<void> {
+  if (isTauri()) {
+    return invoke<void>('bd_label_add', { id, label, options: { cwd: path } })
+  }
+  throw new Error('Label operations are only available in the desktop app')
+}
+
+export async function bdLabelRemove(id: string, label: string, path?: string): Promise<void> {
+  if (isTauri()) {
+    return invoke<void>('bd_label_remove', { id, label, options: { cwd: path } })
+  }
+  throw new Error('Label operations are only available in the desktop app')
+}
+
 export async function bdClose(id: string, path?: string): Promise<unknown> {
   if (isTauri()) {
     return invoke('bd_close', { id, options: { cwd: path } })

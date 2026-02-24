@@ -48,6 +48,7 @@ const { filters, toggleStatus, toggleType, togglePriority, toggleAssignee, clear
 const { columns, toggleColumn, setColumns, resetColumns } = useColumnConfig()
 const { beadsPath, hasStoredPath } = useBeadsPath()
 const { success: notifySuccess, error: notifyError } = useNotification()
+const { isBr, init: initCliClient } = useCliClient()
 const { projects } = useProjects()
 const {
   issues,
@@ -255,6 +256,9 @@ onMounted(async () => {
   checkViewport()
   if (import.meta.client) {
     window.addEventListener('resize', checkViewport)
+
+    // Detect CLI client (br vs bd) for feature gating
+    await initCliClient()
 
     // Check for updates after initial load + start periodic check (hourly)
     // (these don't call bd CLI, safe to run before migration check)
@@ -585,10 +589,29 @@ const handleNavigateToIssue = async (id: string) => {
 const searchValue = ref('')
 const isSearchActive = computed(() => !!searchValue.value?.trim())
 
+// Debounced br search to avoid spawning too many CLI processes
+let searchTimeout: ReturnType<typeof setTimeout> | null = null
+
 watch(searchValue, async (value) => {
-  setSearch(value)
-  // When search changes, refetch with ignoreFilters if search is active
-  await fetchIssues(!!value.trim())
+  if (searchTimeout) clearTimeout(searchTimeout)
+
+  const term = value.trim()
+  if (isBr.value && term) {
+    // br: delegate to full-text search via Tauri — skip client-side setSearch
+    // to avoid flickering (client-side filter would render first, then br results replace)
+    searchTimeout = setTimeout(async () => {
+      const { searchIssues } = useIssues()
+      await searchIssues(term)
+    }, 300)
+  } else if (isBr.value && !term) {
+    // br: search cleared — restore the full list
+    setSearch('')
+    await fetchIssues()
+  } else {
+    // bd: client-side filtering (existing behavior)
+    setSearch(value)
+    await fetchIssues(!!term)
+  }
 })
 
 // Available labels computed from all issues
