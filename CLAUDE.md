@@ -3,7 +3,7 @@
 ## Context Documents
 
 - **[.claude/codebase-map.md](.claude/codebase-map.md)** — Architecture, all pages, components, composables, utils, Tauri commands, types, data flow
-- **[docs/attachments.md](docs/attachments.md)** — Attachment system via `external_ref` field, UNIQUE constraint workaround (`cleared:{id}` sentinel)
+- **[docs/attachments.md](docs/attachments.md)** — Attachment system (filesystem-only, `external_ref` reserved for real external refs)
 
 Consult these before starting any task.
 
@@ -50,6 +50,13 @@ All steps mandatory. Work is NOT complete until `git push` succeeds.
 ### bd Backward Compatibility
 - Never assume all projects use Dolt — check `project_uses_dolt()` before skipping legacy paths
 - Use version-gated helpers in `src-tauri/src/lib.rs` for any feature that depends on a specific bd version
+
+### Logging
+- **Never use `console.log`** — always use the native logger so logs end up in the app log file.
+- **Frontend (TypeScript)**: `logFrontend('info', '[context] message')` — import from `~/utils/bd-api`. Calls the Rust `log_frontend` Tauri command which writes via `log::info!("[frontend] ...")`.
+- **Backend (Rust)**: `log_info!("[context] message")`, `log_error!(...)` macros — write directly to the native log.
+- Levels: `'info'`, `'warn'`, `'error'`
+- **Log file**: `~/Library/Logs/com.beads.manager/beads.log` — readable via `tail -f` or in the app.
 
 ### Dev Server
 Always kill zombies before starting: `pkill -f "beads-issue-tracker" 2>/dev/null && pnpm tauri:dev`

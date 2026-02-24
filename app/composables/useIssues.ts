@@ -78,6 +78,35 @@ export function useEpicExpand() {
   return { isEpicExpanded, toggleEpicExpand, expandEpic }
 }
 
+/**
+ * Detect and notify status transitions (close, reopen, delete) between two issue snapshots.
+ */
+function notifyStatusTransitions(oldIssues: Issue[], newIssues: Issue[]) {
+  const { success: notifySuccess } = useNotification()
+  const oldStatusMap = new Map(oldIssues.map(i => [i.id, { status: i.status, title: i.title }]))
+
+  for (const issue of newIssues) {
+    const old = oldStatusMap.get(issue.id)
+    if (old && old.status !== issue.status) {
+      if (issue.status === 'closed') {
+        notifySuccess(`Issue ${issue.id} closed`, issue.title)
+      } else if (issue.status === 'tombstone') {
+        notifySuccess(`Issue ${issue.id} deleted`, old.title)
+      } else if (old.status === 'closed') {
+        notifySuccess(`Issue ${issue.id} reopened`, issue.title)
+      }
+    }
+  }
+
+  // Detect deleted issues (present before, completely absent now)
+  const newIds = new Set(newIssues.map(i => i.id))
+  for (const old of oldIssues) {
+    if (!newIds.has(old.id)) {
+      notifySuccess(`Issue ${old.id} deleted`, old.title)
+    }
+  }
+}
+
 export function useIssues() {
   const { filters } = useFilters()
   const { beadsPath } = useBeadsPath()
@@ -161,17 +190,19 @@ export function useIssues() {
       const newSignature = JSON.stringify(newIssues.map(i => i.id + i.updatedAt))
 
       if (currentSignature !== newSignature) {
-        // Detect newly added issues (skip initial load)
+        // Detect status transitions and deletions (skip initial load and project switches)
         if (issues.value.length > 0) {
           const existingIds = new Set(issues.value.map(i => i.id))
           const addedIds = newIssues.filter(i => !existingIds.has(i.id))
 
-          // If most IDs changed, this is a project switch — don't flash
+          // If most IDs changed, this is a project switch — don't flash or notify
           const isProjectSwitch = addedIds.length > issues.value.length * 0.5
           if (!isProjectSwitch) {
             for (const issue of addedIds) {
               markAsNewlyAdded(issue.id)
             }
+
+            notifyStatusTransitions(issues.value, newIssues)
           }
         }
         issues.value = newIssues
@@ -306,6 +337,7 @@ export function useIssues() {
             for (const id of [...addedIds, ...modifiedIds]) {
               markAsNewlyAdded(id)
             }
+            notifyStatusTransitions(issues.value, newIssues)
           }
         }
         issues.value = newIssues
