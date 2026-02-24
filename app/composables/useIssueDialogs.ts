@@ -1,5 +1,5 @@
 import type { Issue, ChildIssue } from '~/types/issue'
-import { bdDeleteAttachmentFile, bdCleanupEmptyAttachmentFolder, bdAvailableRelationTypes, checkBdCompatibility } from '~/utils/bd-api'
+import { bdAvailableRelationTypes, checkBdCompatibility } from '~/utils/bd-api'
 
 // Singleton state — shared across all callers
 
@@ -177,51 +177,28 @@ export function useIssueDialogs() {
     }
   }
 
-  // Attach image
+  // Attach image — copy file to filesystem, no external_ref modification
   const handleAttachImage = async (path: string) => {
     if (!selectedIssue.value) return
 
-    const currentRef = selectedIssue.value.externalRef || ''
-
-    // Check for duplicates by filename
-    const selectedFilename = path.split('/').pop() || path
-    const existingRefs = currentRef ? currentRef.split('\n').filter(Boolean) : []
-    const isDuplicate = existingRefs.some((ref) => {
-      const refFilename = ref.split('/').pop() || ref
-      return refFilename === selectedFilename
-    })
-
-    if (isDuplicate) {
-      notify('File already attached', selectedFilename)
-      return
-    }
-
     try {
-      // Copy the file to .beads/attachments/{issue-id}/
       const { invoke } = await import('@tauri-apps/api/core')
-      const copiedPath = await invoke<string>('copy_file_to_attachments', {
+      await invoke<string>('copy_file_to_attachments', {
         projectPath: beadsPath.value,
         sourcePath: path,
         issueId: selectedIssue.value.id,
       })
-
-      // Append copied path to externalRef
-      const newRef = currentRef ? `${currentRef}\n${copiedPath}` : copiedPath
-      await updateIssue(selectedIssue.value.id, { externalRef: newRef })
     } catch (error) {
       console.error('Failed to copy file:', error)
-      // Fallback: use original path if copy fails
-      const newRef = currentRef ? `${currentRef}\n${path}` : path
-      await updateIssue(selectedIssue.value.id, { externalRef: newRef })
     }
 
     // Refresh issue to show the new attachment
     await fetchIssue(selectedIssue.value.id)
   }
 
-  // Detach image
-  const confirmDetachImage = (path: string) => {
-    detachImagePath.value = path
+  // Detach image — delete file from filesystem, no external_ref modification
+  const confirmDetachImage = (filename: string) => {
+    detachImagePath.value = filename
     isDetachDialogOpen.value = true
   }
 
@@ -230,51 +207,17 @@ export function useIssueDialogs() {
 
     isDetaching.value = true
     try {
-      const imagePath = detachImagePath.value
-
-      // Remove image path from externalRef
-      const currentRef = selectedIssue.value.externalRef || ''
-      const lines = currentRef.split('\n')
-
-      console.log('[detach] Current externalRef:', currentRef)
-      console.log('[detach] Lines:', lines)
-      console.log('[detach] Target to remove:', imagePath)
-
-      const newRef = lines
-        .filter((line) => {
-          const trimmed = line.trim()
-          const keep = trimmed !== imagePath
-          console.log(`[detach] Line "${trimmed}" === target? ${!keep}, keep: ${keep}`)
-          return keep
-        })
-        .join('\n')
-
-      console.log('[detach] New externalRef:', newRef)
-
-      // bd CLI has UNIQUE constraint on external_ref - can't set to empty string
-      if (newRef.trim()) {
-        await updateIssue(selectedIssue.value.id, { externalRef: newRef })
-      } else {
-        console.log('[detach] Cannot clear external_ref, using placeholder')
-        await updateIssue(selectedIssue.value.id, { externalRef: `cleared:${selectedIssue.value.id}` })
-      }
-
-      // If the image is in .beads/attachments/, delete the file
-      if (imagePath.includes('.beads/attachments/')) {
-        console.log('[detach] Deleting attachment file:', imagePath)
-        await bdDeleteAttachmentFile(imagePath).catch((e) => {
-          console.warn('[detach] Failed to delete attachment file:', e)
-        })
-      }
-
-      // Cleanup empty attachment folder for this issue
-      const projPath = beadsPath.value && beadsPath.value !== '.' ? beadsPath.value : undefined
-      bdCleanupEmptyAttachmentFolder(selectedIssue.value.id, projPath).catch(() => {
-        // Silently ignore cleanup errors
+      const { invoke } = await import('@tauri-apps/api/core')
+      await invoke('delete_attachment', {
+        projectPath: beadsPath.value,
+        issueId: selectedIssue.value.id,
+        filename: detachImagePath.value,
       })
 
       // Refresh issue to update the attachments
       await fetchIssue(selectedIssue.value.id)
+    } catch (error) {
+      console.error('Failed to delete attachment:', error)
     } finally {
       isDetaching.value = false
       isDetachDialogOpen.value = false

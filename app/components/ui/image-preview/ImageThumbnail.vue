@@ -24,8 +24,6 @@ const hasError = ref(false)
 // Check if src is a URL (http/https)
 const isRemoteUrl = computed(() => isUrl(props.src))
 
-const { beadsPath } = useBeadsPath()
-
 onMounted(async () => {
   // For URLs, use directly without loading via backend
   if (isRemoteUrl.value) {
@@ -34,25 +32,12 @@ onMounted(async () => {
     return
   }
 
-  // For local paths, load via backend
-  if (!beadsPath.value) {
-    // Wait for beadsPath to be available
-    const checkPath = setInterval(async () => {
-      if (beadsPath.value) {
-        clearInterval(checkPath)
-        await loadImage()
-      }
-    }, 100)
-    return
-  }
   await loadImage()
 })
 
 const loadImage = async () => {
-  // Absolute paths used directly, relative paths get .beads prefix
-  const fullPath = props.src.startsWith('/')
-    ? props.src
-    : `${beadsPath.value}/.beads/${props.src}`
+  // src is already an absolute path (resolved by useAttachments)
+  const fullPath = props.src
   try {
     const imageData = await readImageFile(fullPath)
     if (imageData) {

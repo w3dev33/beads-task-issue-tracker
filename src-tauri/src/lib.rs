@@ -915,6 +915,7 @@ fn uses_jsonl_files() -> bool {
 fn supports_list_all_flag() -> bool {
     match get_cli_client_info() {
         Some((CliClient::Bd, major, minor, _)) => major > 0 || minor >= 55,
+        Some((CliClient::Br, _, _, _)) => true, // br always supports --all
         _ => false,
     }
 }
@@ -1060,6 +1061,187 @@ fn execute_bd(command: &str, args: &[String], cwd: Option<&str>) -> Result<Strin
     Ok(stdout)
 }
 
+/// Auto-run refs migration v3 (filesystem-only attachments) if needed.
+/// Called synchronously before br sync to prevent UNIQUE constraint errors.
+fn ensure_refs_migrated_v3(beads_dir: &std::path::Path, working_dir: &str) {
+    if beads_dir.join(".migrated-attachments").exists() {
+        return;
+    }
+    let jsonl_path = beads_dir.join("issues.jsonl");
+    if !jsonl_path.exists() {
+        let _ = std::fs::write(beads_dir.join(".migrated-attachments"), "");
+        return;
+    }
+
+    let content = match std::fs::read_to_string(&jsonl_path) {
+        Ok(c) => c,
+        Err(_) => return,
+    };
+
+    // Quick scan: does any line have empty or non-real external refs?
+    let mut needs_migration = false;
+    let mut seen_scan: std::collections::HashSet<String> = std::collections::HashSet::new();
+    for line in content.lines() {
+        if line.trim().is_empty() { continue; }
+        let v: serde_json::Value = match serde_json::from_str(line) {
+            Ok(v) => v,
+            Err(_) => continue,
+        };
+        let ext_ref = v.get("external_ref").and_then(|r| r.as_str()).unwrap_or("");
+        // Empty ref → needs cleared: sentinel
+        if ext_ref.is_empty() {
+            needs_migration = true;
+            break;
+        }
+        // Duplicate ref → needs dedup
+        if seen_scan.contains(ext_ref) {
+            needs_migration = true;
+            break;
+        }
+        seen_scan.insert(ext_ref.to_string());
+        // Non-real ref (att:, paths, etc.)
+        for r in ext_ref.split(|c: char| c == '\n' || c == '|') {
+            let trimmed = r.trim();
+            if !trimmed.is_empty() && !is_real_external_ref(trimmed) {
+                needs_migration = true;
+                break;
+            }
+        }
+        if needs_migration { break; }
+    }
+
+    // Also check if attachment folders need renaming
+    let attachments_dir_check = beads_dir.join("attachments");
+    let mut needs_folder_work = false;
+    if attachments_dir_check.exists() {
+        if let Ok(entries) = std::fs::read_dir(&attachments_dir_check) {
+            for entry in entries.flatten() {
+                if !entry.path().is_dir() { continue; }
+                let name = entry.file_name().to_string_lossy().to_string();
+                if issue_short_id(&name) != name {
+                    needs_folder_work = true;
+                    break;
+                }
+            }
+        }
+    }
+
+    if !needs_migration && !needs_folder_work {
+        let _ = std::fs::write(beads_dir.join(".migrated-attachments"), "");
+        return;
+    }
+
+    log_info!("[sync] Auto-migrating v3 (refs={}, folders={}) for: {}", needs_migration, needs_folder_work, working_dir);
+
+    // Backup
+    let backup_path = beads_dir.join("issues.jsonl.bak-refs-v3-migration");
+    if std::fs::copy(&jsonl_path, &backup_path).is_err() {
+        log_error!("[sync] Failed to backup JSONL for v3 migration, skipping");
+        return;
+    }
+
+    // Migrate: strip non-real refs, deduplicate
+    let mut refs_updated: u32 = 0;
+    let mut output_lines: Vec<String> = Vec::new();
+    let mut seen_refs: std::collections::HashSet<String> = std::collections::HashSet::new();
+
+    for line in content.lines() {
+        if line.trim().is_empty() {
+            output_lines.push(line.to_string());
+            continue;
+        }
+        let mut v: serde_json::Value = match serde_json::from_str(line) {
+            Ok(v) => v,
+            Err(_) => { output_lines.push(line.to_string()); continue; }
+        };
+
+        let issue_id = v.get("id").and_then(|i| i.as_str()).unwrap_or("").to_string();
+
+        let ext_ref = v.get("external_ref").and_then(|r| r.as_str()).unwrap_or("").to_string();
+
+        // Parse existing refs, keep only real external ones
+        let real_refs: Vec<String> = if ext_ref.is_empty() {
+            vec![]
+        } else {
+            ext_ref.split(|c: char| c == '\n' || c == '|')
+                .map(|r| r.trim())
+                .filter(|r| is_real_external_ref(r))
+                .map(String::from)
+                .collect()
+        };
+
+        let mut new_ref = if real_refs.is_empty() {
+            format!("cleared:{}", issue_id)
+        } else {
+            real_refs.join("|")
+        };
+
+        if seen_refs.contains(&new_ref) {
+            log_info!("[sync] Duplicate external_ref '{}' for issue {}, using cleared sentinel", new_ref, issue_id);
+            new_ref = format!("cleared:{}", issue_id);
+        }
+        seen_refs.insert(new_ref.clone());
+
+        if new_ref != ext_ref {
+            v["external_ref"] = serde_json::Value::String(new_ref);
+            refs_updated += 1;
+            output_lines.push(serde_json::to_string(&v).unwrap_or_else(|_| line.to_string()));
+            continue;
+        }
+
+        // Track existing refs that weren't modified too
+        if let Some(ext_ref) = v.get("external_ref").and_then(|r| r.as_str()) {
+            seen_refs.insert(ext_ref.to_string());
+        }
+
+        output_lines.push(line.to_string());
+    }
+
+    if refs_updated > 0 {
+        let new_content = output_lines.join("\n");
+        if std::fs::write(&jsonl_path, &new_content).is_err() {
+            log_error!("[sync] Failed to write migrated JSONL");
+            return;
+        }
+        log_info!("[sync] Refs v3 migration: {} ref(s) cleaned", refs_updated);
+    }
+
+    // Rename attachment folders: {full-id}/ → {short-id}/
+    let attachments_dir = beads_dir.join("attachments");
+    if attachments_dir.exists() {
+        let mut renamed = 0u32;
+        if let Ok(entries) = std::fs::read_dir(&attachments_dir) {
+            let dirs: Vec<_> = entries.flatten()
+                .filter(|e| e.path().is_dir())
+                .collect();
+            for entry in dirs {
+                let folder_name = entry.file_name().to_string_lossy().to_string();
+                let short = issue_short_id(&folder_name);
+                if short != folder_name {
+                    let target = attachments_dir.join(short);
+                    if target.exists() {
+                        log_warn!("[sync] Cannot rename '{}' → '{}': target already exists", folder_name, short);
+                        continue;
+                    }
+                    if std::fs::rename(entry.path(), &target).is_ok() {
+                        renamed += 1;
+                    } else {
+                        log_warn!("[sync] Failed to rename '{}' → '{}'", folder_name, short);
+                    }
+                }
+            }
+        }
+        if renamed > 0 {
+            log_info!("[sync] Renamed {} attachment folder(s) to short IDs", renamed);
+        }
+    }
+
+    let _ = std::fs::write(beads_dir.join(".migrated-attachments"), "");
+    // Signal for the frontend to show a notification
+    let _ = std::fs::write(beads_dir.join(".migrated-attachments-notify"), "");
+    log_info!("[sync] Migration v3 complete (refs cleaned + folders renamed)");
+}
+
 /// Sync the beads database before read operations to ensure data is up-to-date
 /// Uses bidirectional sync to preserve local changes while getting remote updates
 /// Has a cooldown to avoid redundant syncs within the same poll cycle
@@ -1092,6 +1274,9 @@ fn sync_bd_database(cwd: Option<&str>) {
     }
 
     log_info!("[sync] Starting bidirectional sync for: {}", working_dir);
+
+    // Auto-migrate refs v3 before sync if needed (prevents UNIQUE constraint errors)
+    ensure_refs_migrated_v3(&beads_dir, &working_dir);
 
     // Run bd sync (bidirectional - exports local changes AND imports remote changes)
     let binary = get_cli_binary();
@@ -2745,12 +2930,12 @@ async fn bd_delete(id: String, options: CwdOptions) -> Result<serde_json::Value,
 
     if let Some(path) = abs_project_path {
         if let Ok(abs_path) = path.canonicalize() {
-            let attachments_dir = abs_path.join(".beads").join("attachments").join(&id);
-            if attachments_dir.exists() && attachments_dir.is_dir() {
-                if let Err(e) = fs::remove_dir_all(&attachments_dir) {
+            let att_dir = abs_path.join(".beads").join("attachments").join(issue_short_id(&id));
+            if att_dir.exists() && att_dir.is_dir() {
+                if let Err(e) = fs::remove_dir_all(&att_dir) {
                     log::warn!("[bd_delete] Failed to remove attachments folder: {}", e);
                 } else {
-                    log::info!("[bd_delete] Removed attachments folder: {:?}", attachments_dir);
+                    log::info!("[bd_delete] Removed attachments folder: {:?}", att_dir);
                 }
             }
         }
@@ -3800,8 +3985,9 @@ async fn purge_orphan_attachments(project_path: String) -> Result<PurgeResult, S
             None => continue,
         };
 
-        // Check if this folder corresponds to an existing issue
-        if !existing_ids.contains(&folder_name) {
+        // Check if this folder corresponds to an existing issue (folders use short IDs)
+        let is_owned = existing_ids.iter().any(|id| issue_short_id(id) == folder_name);
+        if !is_owned {
             log::info!("[purge_orphan_attachments] Deleting orphan folder: {}", folder_name);
             if let Err(e) = fs::remove_dir_all(&path) {
                 log::warn!("[purge_orphan_attachments] Failed to delete {}: {}", folder_name, e);
@@ -3820,6 +4006,270 @@ async fn purge_orphan_attachments(project_path: String) -> Result<PurgeResult, S
     })
 }
 
+/// Sanitize a filename for safe storage and br JSONL compatibility.
+/// Converts to kebab-case, strips diacritics, removes unsafe chars.
+/// Example: "Screenshot 2026-02-24 à 10.30.png" → "screenshot-2026-02-24-a-10-30.png"
+fn sanitize_filename(filename: &str) -> String {
+    // Split into stem and extension
+    let (stem, ext) = match filename.rfind('.') {
+        Some(pos) => (&filename[..pos], &filename[pos..]),
+        None => (filename, ""),
+    };
+
+    // Strip diacritics by replacing common accented chars, then lowercase + kebab-case
+    let mut sanitized = String::with_capacity(stem.len());
+    for c in stem.chars() {
+        let replacement = match c {
+            'à' | 'á' | 'â' | 'ã' | 'ä' | 'å' | 'À' | 'Á' | 'Â' | 'Ã' | 'Ä' | 'Å' => "a",
+            'è' | 'é' | 'ê' | 'ë' | 'È' | 'É' | 'Ê' | 'Ë' => "e",
+            'ì' | 'í' | 'î' | 'ï' | 'Ì' | 'Í' | 'Î' | 'Ï' => "i",
+            'ò' | 'ó' | 'ô' | 'õ' | 'ö' | 'Ò' | 'Ó' | 'Ô' | 'Õ' | 'Ö' => "o",
+            'ù' | 'ú' | 'û' | 'ü' | 'Ù' | 'Ú' | 'Û' | 'Ü' => "u",
+            'ñ' | 'Ñ' => "n",
+            'ç' | 'Ç' => "c",
+            'ß' => "ss",
+            'æ' | 'Æ' => "ae",
+            'œ' | 'Œ' => "oe",
+            'ý' | 'ÿ' | 'Ý' => "y",
+            'A'..='Z' => { sanitized.push((c as u8 + 32) as char); continue; },
+            'a'..='z' | '0'..='9' => { sanitized.push(c); continue; },
+            '-' => { sanitized.push('-'); continue; },
+            ' ' | '_' | '.' => { sanitized.push('-'); continue; },
+            _ => "-",
+        };
+        sanitized.push_str(replacement);
+    }
+
+    // Collapse multiple consecutive dashes and trim
+    let mut result = String::with_capacity(sanitized.len());
+    let mut prev_dash = false;
+    for c in sanitized.chars() {
+        if c == '-' {
+            if !prev_dash {
+                result.push('-');
+            }
+            prev_dash = true;
+        } else {
+            result.push(c);
+            prev_dash = false;
+        }
+    }
+    let result = result.trim_matches('-');
+
+    let ext_lower = ext.to_lowercase();
+    if result.is_empty() {
+        format!("file{}", ext_lower)
+    } else {
+        format!("{}{}", result, ext_lower)
+    }
+}
+
+// ============================================================================
+// Attachment helpers
+// ============================================================================
+
+/// Image file extensions supported for attachment preview
+const IMAGE_EXTENSIONS: &[&str] = &["png", "jpg", "jpeg", "gif", "webp", "bmp", "svg", "ico", "tiff", "tif"];
+
+/// Markdown file extensions supported for attachment preview
+const MARKDOWN_EXTENSIONS: &[&str] = &["md", "markdown"];
+
+/// Extract the short ID from a full issue ID by stripping the project prefix.
+/// e.g. "beads-manager-2qk" → "2qk", "kybio-1pxe" → "1pxe",
+///      "kybio-front-nuxt-4-466d" → "466d", "beads-manager-02e.1" → "02e.1"
+/// Falls back to the full ID if no prefix separator is found.
+fn issue_short_id(full_id: &str) -> &str {
+    // The short ID is after the last '-' that isn't followed by another segment
+    // containing only digits (which would be part of the prefix like "nuxt-4").
+    // Strategy: find the last '-' where everything after it matches [a-z0-9.]+ (the short ID).
+    // But "kybio-front-nuxt-4-466d": after last '-' is "466d" ✓
+    // "kybio-front-nuxt-4": after last '-' is "4" which could be a short ID or prefix part.
+    // Since we only call this with real issue IDs (not project names), the last segment is always the short ID.
+    match full_id.rfind('-') {
+        Some(pos) => &full_id[pos + 1..],
+        None => full_id,
+    }
+}
+
+/// Resolve the attachment directory for an issue.
+/// Always uses short ID: .beads/attachments/{short_id}/
+fn resolve_attachment_dir(attachments_dir: &std::path::Path, issue_id: &str) -> PathBuf {
+    attachments_dir.join(issue_short_id(issue_id))
+}
+
+/// Classify a filename as "image", "markdown", or "other"
+fn classify_attachment(filename: &str) -> &'static str {
+    let lower = filename.to_lowercase();
+    if IMAGE_EXTENSIONS.iter().any(|ext| lower.ends_with(&format!(".{}", ext))) {
+        "image"
+    } else if MARKDOWN_EXTENSIONS.iter().any(|ext| lower.ends_with(&format!(".{}", ext))) {
+        "markdown"
+    } else {
+        "other"
+    }
+}
+
+/// Resolve a duplicate filename: image.png → image-1.png → image-2.png
+fn resolve_duplicate_filename(dir: &std::path::Path, name: &str) -> String {
+    if !dir.join(name).exists() {
+        return name.to_string();
+    }
+    let (stem, ext) = match name.rfind('.') {
+        Some(pos) => (&name[..pos], &name[pos..]),
+        None => (name, ""),
+    };
+    for i in 1..1000 {
+        let candidate = format!("{}-{}{}", stem, i, ext);
+        if !dir.join(&candidate).exists() {
+            return candidate;
+        }
+    }
+    // Fallback with timestamp
+    let ts = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis();
+    format!("{}-{}{}", stem, ts, ext)
+}
+
+// ============================================================================
+// Attachment Refs Migration v3 — filesystem-only
+// ============================================================================
+
+/// Check if a ref is a "real" external reference (Redmine, GitHub, or other URL/ID).
+/// Returns false for att: refs, local file paths, cleared: sentinels.
+fn is_real_external_ref(r: &str) -> bool {
+    let trimmed = r.trim();
+    if trimmed.is_empty() { return false; }
+    if trimmed.starts_with("cleared:") { return false; }
+    if trimmed.starts_with("att:") { return false; }
+    // Local file paths (absolute or relative .beads/)
+    if trimmed.starts_with('/') { return false; }
+    if trimmed.starts_with(".beads/") { return false; }
+    // Anything with path separators inside .beads or attachments is local
+    if trimmed.contains("/attachments/") || trimmed.contains("/.beads/") { return false; }
+    true
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct RefsMigrationStatus {
+    needs_migration: bool,
+    ref_count: u32,
+    just_migrated: bool,
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct MigrateRefsResult {
+    success: bool,
+    refs_updated: u32,
+}
+
+/// Check if a project needs attachment refs migration v3.
+/// v3 strips all attachment refs (att:, local paths) from external_ref,
+/// keeping only real external refs (Redmine, GitHub, URLs).
+/// Returns quickly if the .migrated-attachments marker file exists.
+#[tauri::command]
+async fn check_refs_migration(cwd: Option<String>) -> Result<RefsMigrationStatus, String> {
+    let working_dir = cwd
+        .or_else(|| env::var("BEADS_PATH").ok())
+        .unwrap_or_else(|| {
+            env::current_dir()
+                .map(|p| p.to_string_lossy().to_string())
+                .unwrap_or_else(|_| ".".to_string())
+        });
+
+    let beads_dir = PathBuf::from(&working_dir).join(".beads");
+    if !beads_dir.exists() {
+        return Ok(RefsMigrationStatus { needs_migration: false, ref_count: 0, just_migrated: false });
+    }
+
+    // Already migrated to v3?
+    if beads_dir.join(".migrated-attachments").exists() {
+        // Check if auto-migration just ran (notify signal)
+        let notify_path = beads_dir.join(".migrated-attachments-notify");
+        let just_migrated = notify_path.exists();
+        if just_migrated {
+            let _ = std::fs::remove_file(&notify_path);
+        }
+        return Ok(RefsMigrationStatus { needs_migration: false, ref_count: 0, just_migrated });
+    }
+
+    let jsonl_path = beads_dir.join("issues.jsonl");
+    if !jsonl_path.exists() {
+        let _ = std::fs::write(beads_dir.join(".migrated-attachments"), "");
+        return Ok(RefsMigrationStatus { needs_migration: false, ref_count: 0, just_migrated: false });
+    }
+
+    // Scan JSONL for refs that need cleanup (non-real external refs)
+    let content = std::fs::read_to_string(&jsonl_path)
+        .map_err(|e| format!("Failed to read issues.jsonl: {}", e))?;
+
+    let mut ref_count: u32 = 0;
+
+    for line in content.lines() {
+        if line.trim().is_empty() { continue; }
+        let v: serde_json::Value = match serde_json::from_str(line) {
+            Ok(v) => v,
+            Err(_) => continue,
+        };
+        if let Some(ext_ref) = v.get("external_ref").and_then(|r| r.as_str()) {
+            if ext_ref.is_empty() { continue; }
+            let refs: Vec<&str> = ext_ref.split(|c: char| c == '\n' || c == '|').collect();
+            for r in &refs {
+                let trimmed = r.trim();
+                if !trimmed.is_empty() && !is_real_external_ref(trimmed) {
+                    ref_count += 1;
+                    break; // One bad ref per issue is enough to flag it
+                }
+            }
+        }
+    }
+
+    // Also check if attachment folders need renaming (full-id → short-id)
+    let mut folder_work_count: u32 = 0;
+    let attachments_dir = beads_dir.join("attachments");
+    if attachments_dir.exists() {
+        if let Ok(entries) = std::fs::read_dir(&attachments_dir) {
+            for entry in entries.flatten() {
+                if !entry.path().is_dir() { continue; }
+                let name = entry.file_name().to_string_lossy().to_string();
+                if issue_short_id(&name) != name {
+                    folder_work_count += 1;
+                }
+            }
+        }
+    }
+
+    let total = ref_count + folder_work_count;
+    if total == 0 {
+        let _ = std::fs::write(beads_dir.join(".migrated-attachments"), "");
+        return Ok(RefsMigrationStatus { needs_migration: false, ref_count: 0, just_migrated: false });
+    }
+
+    log_info!("[refs_migration_v3] Project needs migration: {} ref(s) to clean, {} folder(s) to update", ref_count, folder_work_count);
+    Ok(RefsMigrationStatus { needs_migration: true, ref_count: total, just_migrated: false })
+}
+
+/// Perform the attachment refs migration v3 (filesystem-only).
+/// Delegates to ensure_refs_migrated_v3 which handles backup, cleanup, dedup, and marker.
+/// The br sync is NOT called here — it will happen naturally after via sync_bd_database.
+#[tauri::command]
+async fn migrate_attachment_refs(cwd: Option<String>) -> Result<MigrateRefsResult, String> {
+    let working_dir = cwd
+        .or_else(|| env::var("BEADS_PATH").ok())
+        .unwrap_or_else(|| {
+            env::current_dir()
+                .map(|p| p.to_string_lossy().to_string())
+                .unwrap_or_else(|_| ".".to_string())
+        });
+
+    let beads_dir = PathBuf::from(&working_dir).join(".beads");
+    ensure_refs_migrated_v3(&beads_dir, &working_dir);
+    Ok(MigrateRefsResult { success: true, refs_updated: 0 })
+}
+
 #[tauri::command]
 async fn copy_file_to_attachments(
     project_path: String,
@@ -3834,10 +4284,8 @@ async fn copy_file_to_attachments(
     );
 
     // Validate file extension (images + markdown)
-    let allowed_extensions = ["png", "jpg", "jpeg", "gif", "webp", "bmp", "svg", "ico", "tiff", "tif", "md", "markdown"];
     let source_lower = source_path.to_lowercase();
-    let is_allowed = allowed_extensions
-        .iter()
+    let is_allowed = IMAGE_EXTENSIONS.iter().chain(MARKDOWN_EXTENSIONS.iter())
         .any(|ext| source_lower.ends_with(&format!(".{}", ext)));
 
     if !is_allowed {
@@ -3864,56 +4312,178 @@ async fn copy_file_to_attachments(
         }
     };
 
-    // Canonicalize to resolve symlinks and get absolute path
     let abs_project_path = abs_project_path
         .canonicalize()
         .map_err(|e| format!("Failed to resolve project path: {}", e))?;
 
-    // Build destination directory: {project}/.beads/attachments/{issue_id}/
-    let dest_dir = abs_project_path
-        .join(".beads")
-        .join("attachments")
-        .join(&issue_id);
+    // Build destination directory: {project}/.beads/attachments/{short_id}/
+    let attachments_dir = abs_project_path.join(".beads").join("attachments");
+    let dest_dir = resolve_attachment_dir(&attachments_dir, &issue_id);
 
     // Create directory if needed
     fs::create_dir_all(&dest_dir)
         .map_err(|e| format!("Failed to create attachments directory: {}", e))?;
 
-    // Extract source filename
-    let source_filename = source
+    // Sanitize the original filename and handle duplicates
+    let raw_filename = source
         .file_name()
         .ok_or_else(|| "Invalid source filename".to_string())?
         .to_string_lossy()
         .to_string();
-
-    // Handle duplicates: if image.png exists, try image-1.png, image-2.png, etc.
-    let (stem, ext) = match source_filename.rfind('.') {
-        Some(pos) => (&source_filename[..pos], &source_filename[pos..]),
-        None => (source_filename.as_str(), ""),
-    };
-
-    let mut dest_filename = source_filename.clone();
-    let mut dest_path = dest_dir.join(&dest_filename);
-    let mut counter = 1;
-
-    while dest_path.exists() {
-        dest_filename = format!("{}-{}{}", stem, counter, ext);
-        dest_path = dest_dir.join(&dest_filename);
-        counter += 1;
-
-        // Safety limit
-        if counter > 1000 {
-            return Err("Too many duplicate files".to_string());
-        }
-    }
+    let sanitized = sanitize_filename(&raw_filename);
+    let dest_filename = resolve_duplicate_filename(&dest_dir, &sanitized);
+    let dest_path = dest_dir.join(&dest_filename);
 
     // Copy the file
     fs::copy(&source, &dest_path).map_err(|e| format!("Failed to copy file: {}", e))?;
 
-    let result_path = dest_path.to_string_lossy().to_string();
-    log::info!("[copy_file_to_attachments] Copied to: {}", result_path);
+    log::info!("[copy_file_to_attachments] Copied to: {}", dest_path.display());
 
-    Ok(result_path)
+    // Return just the filename (frontend doesn't need to store it in external_ref)
+    Ok(dest_filename)
+}
+
+// ============================================================================
+// Filesystem-based Attachment Commands
+// ============================================================================
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AttachmentFile {
+    pub filename: String,
+    pub file_type: String,   // "image" or "markdown"
+    pub path: String,        // absolute path
+    pub modified: u64,       // mtime in epoch seconds (for sorting)
+}
+
+/// List all attachments for an issue by reading the filesystem directly.
+/// Returns images and markdown files sorted by modification time (newest first).
+#[tauri::command]
+async fn list_attachments(project_path: String, issue_id: String) -> Result<Vec<AttachmentFile>, String> {
+    let abs_project_path = if project_path == "." || project_path.is_empty() {
+        env::current_dir().map_err(|e| format!("Failed to get current directory: {}", e))?
+    } else {
+        let p = PathBuf::from(&project_path);
+        if p.is_relative() {
+            let cwd = env::current_dir()
+                .map_err(|e| format!("Failed to get current directory: {}", e))?;
+            cwd.join(&p)
+        } else {
+            p
+        }
+    };
+
+    let attachments_dir = abs_project_path.join(".beads").join("attachments");
+    let issue_dir = resolve_attachment_dir(&attachments_dir, &issue_id);
+
+    if !issue_dir.exists() || !issue_dir.is_dir() {
+        return Ok(vec![]);
+    }
+
+    let mut files: Vec<AttachmentFile> = Vec::new();
+
+    let entries = fs::read_dir(&issue_dir)
+        .map_err(|e| format!("Failed to read attachment directory: {}", e))?;
+
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if !path.is_file() { continue; }
+
+        let name = entry.file_name().to_string_lossy().to_string();
+        // Skip legacy index.json files
+        if name == "index.json" { continue; }
+
+        let file_type = classify_attachment(&name);
+        // Only return images and markdown
+        if file_type == "other" { continue; }
+
+        let modified = entry.metadata()
+            .and_then(|m| m.modified())
+            .ok()
+            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+
+        files.push(AttachmentFile {
+            filename: name,
+            file_type: file_type.to_string(),
+            path: path.to_string_lossy().to_string(),
+            modified,
+        });
+    }
+
+    // Sort by mtime descending (newest first)
+    files.sort_by(|a, b| b.modified.cmp(&a.modified));
+
+    Ok(files)
+}
+
+/// Delete an attachment file by filename within an issue's attachment directory.
+#[tauri::command]
+async fn delete_attachment(project_path: String, issue_id: String, filename: String) -> Result<(), String> {
+    log::info!("[delete_attachment] project: {}, issue: {}, file: {}", project_path, issue_id, filename);
+
+    // Security: reject path traversal
+    if filename.contains('/') || filename.contains('\\') || filename.contains("..") {
+        return Err("Invalid filename".to_string());
+    }
+
+    let abs_project_path = if project_path == "." || project_path.is_empty() {
+        env::current_dir().map_err(|e| format!("Failed to get current directory: {}", e))?
+    } else {
+        let p = PathBuf::from(&project_path);
+        if p.is_relative() {
+            let cwd = env::current_dir()
+                .map_err(|e| format!("Failed to get current directory: {}", e))?;
+            cwd.join(&p)
+        } else {
+            p
+        }
+    };
+
+    let abs_project_path = abs_project_path
+        .canonicalize()
+        .map_err(|e| format!("Failed to resolve project path: {}", e))?;
+
+    let attachments_dir = abs_project_path.join(".beads").join("attachments");
+    let issue_dir = resolve_attachment_dir(&attachments_dir, &issue_id);
+    let file_path = issue_dir.join(&filename);
+
+    if !file_path.exists() {
+        log::info!("[delete_attachment] File does not exist: {:?}", file_path);
+        return Ok(());
+    }
+
+    // Security: verify file is inside .beads/attachments/
+    let canonical = file_path.canonicalize()
+        .map_err(|e| format!("Failed to resolve path: {}", e))?;
+    let canonical_str = canonical.to_string_lossy();
+    if !canonical_str.contains("/.beads/attachments/") {
+        return Err("Can only delete files inside .beads/attachments/".to_string());
+    }
+
+    fs::remove_file(&file_path)
+        .map_err(|e| format!("Failed to delete file: {}", e))?;
+
+    log::info!("[delete_attachment] Deleted: {:?}", file_path);
+
+    // Cleanup empty folder (issue_dir already resolved above via resolve_attachment_dir)
+    if issue_dir.exists() {
+        if let Ok(entries) = fs::read_dir(&issue_dir) {
+            // Count non-index.json entries
+            let count = entries.flatten()
+                .filter(|e| e.file_name().to_string_lossy() != "index.json")
+                .count();
+            if count == 0 {
+                // Remove index.json if present, then the directory
+                let _ = fs::remove_file(issue_dir.join("index.json"));
+                let _ = fs::remove_dir(&issue_dir);
+                log::info!("[delete_attachment] Cleaned up empty folder: {:?}", issue_dir);
+            }
+        }
+    }
+
+    Ok(())
 }
 
 #[derive(Debug, Serialize)]
@@ -4373,11 +4943,15 @@ pub fn run() {
             open_image_file,
             read_image_file,
             copy_file_to_attachments,
+            list_attachments,
+            delete_attachment,
             read_text_file,
             write_text_file,
             delete_attachment_file,
             cleanup_empty_attachment_folder,
             purge_orphan_attachments,
+            check_refs_migration,
+            migrate_attachment_refs,
             start_watching,
             stop_watching,
             get_watcher_status,

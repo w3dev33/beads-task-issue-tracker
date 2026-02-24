@@ -82,6 +82,7 @@ const { check: checkForUpdates, startPeriodicCheck, stopPeriodicCheck } = useUpd
 const { showDebugPanel, showSettingsDialog } = useAppMenu()
 const { needsRepair, affectedProject, isRepairing, repairError, repairProgress, repair: repairDatabase, repairAll, dismiss: dismissRepair } = useRepairDatabase()
 const { needsMigration, affectedProject: migrateAffectedProject, isMigrating, migrateError, migrate: migrateToDolt, checkProject: checkMigrationNeeded, dismiss: dismissMigration } = useMigrateToDolt()
+const { needsMigration: needsRefsMigration, refCount: refsRefCount, isMigrating: isRefsMigrating, migrateError: refsMigrateError, checkProject: checkRefsMigration, migrate: migrateRefs, dismiss: dismissRefsMigration } = useMigrateRefs()
 
 // Sidebar resize
 const { isLeftSidebarOpen, isRightSidebarOpen, leftSidebarWidth, rightSidebarWidth, isResizing, startResizeLeft, startResizeRight } = useSidebarResize()
@@ -291,6 +292,15 @@ onMounted(async () => {
       // Auto-register with probe if enabled (fire-and-forget, never blocks UI)
       ensureProbeRegistration(beadsPath.value)
 
+      // Check attachment refs migration (may have been auto-migrated before sync)
+      const migrationResult = await checkRefsMigration()
+      if (migrationResult === 'just_migrated') {
+        notifySuccess('Attachments migrated', 'Attachment references and folders have been updated to the new format.')
+      } else if (migrationResult) {
+        await migrateRefs()
+        notifySuccess('Attachments migrated', 'Attachment references and folders have been updated to the new format.')
+      }
+
       // Sequential: bd commands can't run concurrently (Dolt SIGSEGV on parallel access)
       fetchIssues().then(() => fetchStats(issues.value))
     }
@@ -400,9 +410,23 @@ const handleMigrateToDolt = async () => {
   }
 }
 
+const handleMigrateRefs = async () => {
+  const success = await migrateRefs()
+  if (success) {
+    notifySuccess('Attachments updated', 'File references have been updated for br CLI compatibility.')
+    // Reload data after migration
+    await fetchIssues()
+    await fetchStats(issues.value)
+  }
+}
+
 let previousBeadsPath: string | undefined
+let pathChangeGeneration = 0  // Guard against concurrent handlePathChange calls
 
 const handlePathChange = async () => {
+  // Increment generation — any in-flight handlePathChange with an older generation will bail out
+  const thisGeneration = ++pathChangeGeneration
+
   // Show loading indicator immediately
   isLoading.value = true
 
@@ -417,26 +441,63 @@ const handlePathChange = async () => {
   isEditMode.value = false
   isCreatingNew.value = false
   clearIssues()  // Reset issue list so new-issue detection doesn't flash all rows
+  clearStats()   // Reset stats so previous project's ready work doesn't persist
+
   // Stop polling + change detection during project switch to prevent:
   // 1. Concurrent bd calls from old project's poll cycle
   // 2. Change detection events triggering stale refreshes
   stopPolling()
   await stopListening()
-  // Pre-flight checks in parallel: cleanup stale locks + migration check + mtime reset
-  const [, , migrationNeeded] = await Promise.all([
-    bdCleanupStaleLocks(beadsPath.value),
-    bdResetMtime(),
-    checkMigrationNeeded(),
-  ])
-  if (!migrationNeeded) {
-    // Register new project with probe before fetching (probe needs to know the project)
-    await ensureProbeRegistration(beadsPath.value)
-    // IMPORTANT: bd commands must run sequentially — concurrent Dolt embedded access
-    // causes SIGSEGV crashes (nil pointer dereference in dolthub/driver).
-    await fetchIssues()
-    // Fire-and-forget: stats update doesn't block issue list display
-    fetchStats(issues.value)
+
+  // Bail out if another handlePathChange was triggered while we awaited
+  if (thisGeneration !== pathChangeGeneration) {
+return
   }
+
+  try {
+    // Pre-flight checks in parallel: cleanup stale locks + migration check + mtime reset
+const [, , migrationNeeded] = await Promise.all([
+      bdCleanupStaleLocks(beadsPath.value),
+      bdResetMtime(),
+      checkMigrationNeeded(),
+    ])
+
+    if (thisGeneration !== pathChangeGeneration) {
+return
+    }
+
+if (!migrationNeeded) {
+      // Register new project with probe before fetching (probe needs to know the project)
+      await ensureProbeRegistration(beadsPath.value)
+
+      if (thisGeneration !== pathChangeGeneration) {
+return
+      }
+
+      // Check attachment refs migration (may have been auto-migrated before sync)
+      const migrationResult2 = await checkRefsMigration()
+      if (migrationResult2 === 'just_migrated') {
+        notifySuccess('Attachments migrated', 'Attachment references and folders have been updated to the new format.')
+      } else if (migrationResult2) {
+        await migrateRefs()
+        notifySuccess('Attachments migrated', 'Attachment references and folders have been updated to the new format.')
+      }
+
+      // IMPORTANT: bd commands must run sequentially — concurrent Dolt embedded access
+      // causes SIGSEGV crashes (nil pointer dereference in dolthub/driver).
+      await fetchIssues()
+      // Fire-and-forget: stats update doesn't block issue list display
+      fetchStats(issues.value)
+    }
+  } catch (e) {
+    // Don't let pre-flight errors block the app — log and continue
+    console.error('[handlePathChange] Error during project switch:', e)
+  }
+
+  if (thisGeneration !== pathChangeGeneration) {
+return
+  }
+
   // Resume change detection + polling AFTER data is loaded (avoids self-triggered cascade)
   if (beadsPath.value) {
     await startListening(beadsPath.value)
@@ -1312,6 +1373,47 @@ watch(
               <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
             </svg>
             {{ isMigrating ? 'Migrating...' : 'Migrate Now' }}
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+
+    <!-- Attachment Refs Migration Dialog -->
+    <Dialog :open="needsRefsMigration" @update:open="(v: boolean) => { if (!v) dismissRefsMigration() }">
+      <DialogContent class="sm:max-w-[480px]">
+        <DialogHeader>
+          <DialogTitle class="flex items-center gap-2">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-blue-500" viewBox="0 0 20 20" fill="currentColor">
+              <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd" />
+            </svg>
+            Attachment Update Required
+          </DialogTitle>
+          <DialogDescription as="div" class="space-y-3 text-sm">
+            <p>
+              Attachments now use the filesystem directly.
+              This cleanup removes old attachment paths from external references. One-time operation.
+            </p>
+            <p class="text-muted-foreground">
+              A backup of your data will be created before any changes are made.
+            </p>
+            <p class="bg-muted p-2 rounded text-xs font-mono">
+              {{ refsRefCount }} issue(s) with references to clean up
+            </p>
+            <p v-if="refsMigrateError" class="text-destructive text-sm">
+              Error: {{ refsMigrateError }}
+            </p>
+          </DialogDescription>
+        </DialogHeader>
+        <div class="flex justify-end gap-2 mt-4">
+          <Button variant="outline" :disabled="isRefsMigrating" @click="dismissRefsMigration">
+            Later
+          </Button>
+          <Button :disabled="isRefsMigrating" class="bg-[#29E3C1] hover:bg-[#22c9aa] text-black" @click="handleMigrateRefs">
+            <svg v-if="isRefsMigrating" class="animate-spin -ml-1 mr-2 h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            {{ isRefsMigrating ? 'Updating...' : 'Update Now' }}
           </Button>
         </div>
       </DialogContent>

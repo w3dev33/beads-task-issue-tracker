@@ -3,6 +3,7 @@
  */
 import MarkdownIt from 'markdown-it'
 import DOMPurify from 'dompurify'
+import { splitRefs } from './attachment-encoding'
 
 // Configure markdown-it
 const md = new MarkdownIt({
@@ -92,53 +93,14 @@ export function isUrl(path: string): boolean {
 }
 
 /**
- * Extract image paths from externalRef field
- * externalRef can contain multiple values separated by newlines
- * Returns array of { src, alt } objects for image paths only
- */
-export function extractImagesFromExternalRef(externalRef: string | undefined): { src: string; alt: string }[] {
-  if (!externalRef) return []
-
-  return externalRef
-    .split('\n')
-    .map(line => line.trim())
-    // Filter out cleared placeholders and non-image lines
-    .filter(line => line && !line.startsWith('cleared:') && isImagePath(line))
-    .map(path => ({
-      src: path,
-      alt: path.split('/').pop() || 'Image',
-    }))
-}
-
-/**
- * Extract markdown file paths from externalRef field
- * Returns array of { src, alt } objects for markdown paths only
- */
-export function extractMarkdownFromExternalRef(externalRef: string | undefined): { src: string; alt: string }[] {
-  if (!externalRef) return []
-
-  return externalRef
-    .split('\n')
-    .map(line => line.trim())
-    .filter(line => line && !line.startsWith('cleared:') && isMarkdownPath(line))
-    .map(path => ({
-      src: path,
-      alt: path.split('/').pop() || 'Markdown',
-    }))
-}
-
-/**
  * Extract non-image, non-markdown references from externalRef field
- * Returns array of URLs/IDs that are not image or markdown paths
+ * Returns array of URLs/IDs that are not cleared: sentinels
  */
 export function extractNonImageRefs(externalRef: string | undefined): string[] {
   if (!externalRef) return []
 
-  return externalRef
-    .split('\n')
-    .map(line => line.trim())
-    // Filter out cleared placeholders, image paths, and markdown paths
-    .filter(line => line && !line.startsWith('cleared:') && !isImagePath(line) && !isMarkdownPath(line))
+  return splitRefs(externalRef)
+    .filter(ref => !ref.startsWith('cleared:'))
 }
 
 // Configure DOMPurify to allow our custom attributes

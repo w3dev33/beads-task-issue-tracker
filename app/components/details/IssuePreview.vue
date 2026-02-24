@@ -8,7 +8,8 @@ import LabelBadge from '~/components/issues/LabelBadge.vue'
 import StatusBadge from '~/components/issues/StatusBadge.vue'
 import PriorityBadge from '~/components/issues/PriorityBadge.vue'
 import ImageThumbnail from '~/components/ui/image-preview/ImageThumbnail.vue'
-import { extractImagesFromExternalRef, extractMarkdownFromExternalRef, extractNonImageRefs, isUrl } from '~/utils/markdown'
+import { extractNonImageRefs, isUrl } from '~/utils/markdown'
+import type { AttachmentFile } from '~/composables/useAttachments'
 
 const { currentTheme } = useTheme()
 const isNeon = computed(() => currentTheme.value.id === 'neon')
@@ -19,56 +20,53 @@ const props = defineProps<{
   availableIssues?: Array<{ id: string; title: string; priority?: string; status?: string }>
 }>()
 
-const { beadsPath } = useBeadsPath()
 const { openGallery } = useImagePreview()
 const { openMarkdownGallery } = useMarkdownPreview()
+const { listAttachments } = useAttachments()
 
-// Extract images from externalRef
-const attachedImages = computed(() => extractImagesFromExternalRef(props.issue.externalRef))
+// Filesystem-based attachments (async, loaded per issue)
+const attachedImages = ref<AttachmentFile[]>([])
+const attachedMarkdown = ref<AttachmentFile[]>([])
 
-// Extract markdown files from externalRef
-const attachedMarkdown = computed(() => extractMarkdownFromExternalRef(props.issue.externalRef))
+const loadAttachments = async () => {
+  if (!props.issue?.id) return
+  const result = await listAttachments(props.issue.id)
+  attachedImages.value = result.images
+  attachedMarkdown.value = result.markdown
+}
+
+// Reload when issue changes
+watch(() => props.issue?.id, () => loadAttachments(), { immediate: true })
 
 // Total attachment count (images + markdown)
 const totalAttachments = computed(() => attachedImages.value.length + attachedMarkdown.value.length)
 
-// Extract non-image external references (URLs, IDs)
+// Extract non-image external references (URLs, IDs) — only real refs now
 const nonImageRefs = computed(() => extractNonImageRefs(props.issue.externalRef))
 
-// Prepare images with full paths for gallery (exclude URLs)
+// Prepare images with full paths for gallery
 const preparedImages = computed(() =>
-  attachedImages.value
-    .filter(img => !isUrl(img.src))
-    .map(img => ({
-      path: img.src.startsWith('/') ? img.src : `${beadsPath.value}/.beads/${img.src}`,
-      alt: img.alt,
-    })),
+  attachedImages.value.map(img => ({
+    path: img.path,
+    alt: img.filename,
+  })),
 )
 
-const handleImageClick = async (src: string, alt: string) => {
-  // For URLs, open in browser
-  if (isUrl(src)) {
-    const { open } = await import('@tauri-apps/plugin-shell')
-    await open(src)
-    return
-  }
-  // For local paths, open in gallery
-  const fullPath = src.startsWith('/') ? src : `${beadsPath.value}/.beads/${src}`
-  const clickedIndex = preparedImages.value.findIndex(img => img.path === fullPath)
+const handleImageClick = async (file: AttachmentFile) => {
+  const clickedIndex = preparedImages.value.findIndex(img => img.path === file.path)
   openGallery(preparedImages.value, clickedIndex >= 0 ? clickedIndex : 0)
 }
 
 // Prepare markdown files with full paths for gallery
 const preparedMarkdown = computed(() =>
   attachedMarkdown.value.map(md => ({
-    path: md.src.startsWith('/') ? md.src : `${beadsPath.value}/.beads/${md.src}`,
-    alt: md.alt,
+    path: md.path,
+    alt: md.filename,
   })),
 )
 
-const handleMarkdownClick = (src: string) => {
-  const fullPath = src.startsWith('/') ? src : `${beadsPath.value}/.beads/${src}`
-  const clickedIndex = preparedMarkdown.value.findIndex(md => md.path === fullPath)
+const handleMarkdownClick = (file: AttachmentFile) => {
+  const clickedIndex = preparedMarkdown.value.findIndex(md => md.path === file.path)
   openMarkdownGallery(preparedMarkdown.value, clickedIndex >= 0 ? clickedIndex : 0)
 }
 
@@ -404,33 +402,33 @@ const formatEstimate = (minutes: number) => {
           <div v-if="attachedImages.length > 0" class="flex flex-wrap gap-4">
             <ImageThumbnail
               v-for="img in attachedImages"
-              :key="img.src"
-              :src="img.src"
-              :alt="img.alt"
+              :key="img.filename"
+              :src="img.path"
+              :alt="img.filename"
               :show-remove="!readonly"
-              @click="handleImageClick(img.src, img.alt)"
-              @remove="emit('detach-image', img.src)"
+              @click="handleImageClick(img)"
+              @remove="emit('detach-image', img.filename)"
             />
           </div>
           <!-- Markdown file list -->
           <div v-if="attachedMarkdown.length > 0" class="space-y-1">
             <div
               v-for="md in attachedMarkdown"
-              :key="md.src"
+              :key="md.filename"
               class="flex items-center gap-2 group/md"
             >
               <button
                 class="flex items-center gap-1.5 text-xs text-sky-400 hover:text-sky-300 hover:underline transition-colors min-w-0"
-                @click="handleMarkdownClick(md.src)"
+                @click="handleMarkdownClick(md)"
               >
                 <FileText class="w-3.5 h-3.5 shrink-0" />
-                <span class="truncate">{{ md.alt }}</span>
+                <span class="truncate">{{ md.filename }}</span>
               </button>
               <button
                 v-if="!readonly"
                 type="button"
                 class="opacity-0 group-hover/md:opacity-100 text-destructive hover:text-destructive/80 transition-all shrink-0"
-                @click="emit('detach-image', md.src)"
+                @click="emit('detach-image', md.filename)"
               >
                 <X class="w-3.5 h-3.5" />
               </button>

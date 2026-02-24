@@ -15,6 +15,8 @@ import {
   SelectValue,
 } from '~/components/ui/select'
 import { LabelMultiSelect } from '~/components/ui/label-multiselect'
+import { splitRefs, joinRefs } from '~/utils/attachment-encoding'
+import { invoke } from '@tauri-apps/api/core'
 
 interface EpicOption {
   id: string
@@ -43,10 +45,7 @@ const emit = defineEmits<{
 // Filter out "cleared:" placeholder from externalRef for display
 const cleanExternalRef = (ref: string | undefined): string => {
   if (!ref) return ''
-  return ref
-    .split('\n')
-    .filter(line => !line.trim().startsWith('cleared:'))
-    .join('\n')
+  return joinRefs(splitRefs(ref).filter(r => !r.startsWith('cleared:')))
 }
 
 const form = reactive({
@@ -182,7 +181,6 @@ const handleSubmit = () => {
 
 const attachFile = async () => {
   const { open } = await import('@tauri-apps/plugin-dialog')
-  const { invoke } = await import('@tauri-apps/api/core')
 
   const selected = await open({
     multiple: false,
@@ -194,42 +192,16 @@ const attachFile = async () => {
   })
 
   if (selected) {
-    // Check for duplicates: extract filename and compare with existing refs
-    const selectedFilename = selected.split('/').pop() || selected
-    const existingRefs = form.externalRef ? form.externalRef.split('\n').filter(Boolean) : []
-    const isDuplicate = existingRefs.some((ref) => {
-      const refFilename = ref.split('/').pop() || ref
-      return refFilename === selectedFilename
-    })
-
-    if (isDuplicate) {
-      notify('File already attached', selectedFilename)
-      return
-    }
-
     try {
-      // Copy the file to .beads/attachments/{issue-id}/
+      // Copy the file to .beads/attachments/{issue-id}/ — no external_ref modification
       const issueId = props.issue?.id || `new-${Date.now()}`
-      const copiedPath = await invoke<string>('copy_file_to_attachments', {
+      await invoke<string>('copy_file_to_attachments', {
         projectPath: beadsPath.value,
         sourcePath: selected,
         issueId,
       })
-
-      // Add the absolute path of the copy to externalRef
-      if (form.externalRef) {
-        form.externalRef += `\n${copiedPath}`
-      } else {
-        form.externalRef = copiedPath
-      }
     } catch (error) {
       console.error('Failed to copy file:', error)
-      // Fallback: use original path if copy fails
-      if (form.externalRef) {
-        form.externalRef += `\n${selected}`
-      } else {
-        form.externalRef = selected
-      }
     }
   }
 }
@@ -381,7 +353,7 @@ const attachFile = async () => {
           <Textarea
             id="externalRef"
             v-model="form.externalRef"
-            placeholder="URLs, IDs, or image paths (one per line)"
+            placeholder="URLs, IDs, or image paths (pipe-separated)"
             rows="2"
             class="text-xs"
           />

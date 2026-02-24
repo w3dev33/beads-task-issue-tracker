@@ -308,6 +308,32 @@ export async function bdMigrateToDolt(path?: string): Promise<MigrateResult> {
   return invoke<MigrateResult>('bd_migrate_to_dolt', { cwd: path })
 }
 
+// Attachment refs migration v3 (filesystem-only)
+export interface RefsMigrationStatus {
+  needsMigration: boolean
+  refCount: number
+  justMigrated: boolean
+}
+
+export interface MigrateRefsResult {
+  success: boolean
+  refsUpdated: number
+}
+
+export async function bdCheckRefsMigration(path?: string): Promise<RefsMigrationStatus> {
+  if (!isTauri()) {
+    return { needsMigration: false, refCount: 0, justMigrated: false }
+  }
+  return invoke<RefsMigrationStatus>('check_refs_migration', { cwd: path })
+}
+
+export async function bdMigrateRefs(path?: string): Promise<MigrateRefsResult> {
+  if (!isTauri()) {
+    throw new Error('Attachment migration is only available in the desktop app')
+  }
+  return invoke<MigrateRefsResult>('migrate_attachment_refs', { cwd: path })
+}
+
 // Remove stale Dolt lock files that block database access (left by crashed processes)
 export async function bdCleanupStaleLocks(path?: string): Promise<{ removed: string[] }> {
   if (!isTauri()) {
