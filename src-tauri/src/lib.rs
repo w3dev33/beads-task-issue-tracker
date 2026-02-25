@@ -1,3 +1,5 @@
+mod tracker;
+
 use notify_debouncer_mini::{new_debouncer, DebouncedEventKind};
 use serde::{Deserialize, Serialize};
 use tauri::Emitter;
