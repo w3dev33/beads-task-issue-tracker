@@ -29,6 +29,7 @@ pub struct TrackerIssue {
     pub comments: Vec<TrackerComment>,
     pub blocked_by: Vec<String>,
     pub blocks: Vec<String>,
+    pub relations: Vec<TrackerRelation>,
     pub comment_count: i32,
     pub dependency_count: i32,
     pub dependent_count: i32,
@@ -41,6 +42,14 @@ pub struct TrackerComment {
     pub body: String,
     pub author: String,
     pub created_at: String,
+}
+
+/// A relation between two issues (non-"blocks" dependency types).
+#[derive(Debug, Clone)]
+pub struct TrackerRelation {
+    pub id: String,
+    pub dep_type: String,
+    pub direction: String,
 }
 
 /// Parameters for creating a new issue.
@@ -143,8 +152,7 @@ pub fn get_issue(conn: &Connection, id: &str) -> Result<TrackerIssue> {
     // Fetch related data
     issue.labels = fetch_labels(conn, id)?;
     issue.comments = fetch_comments(conn, id)?;
-    issue.blocked_by = fetch_blocked_by(conn, id)?;
-    issue.blocks = fetch_blocks(conn, id)?;
+    fetch_relations(conn, id, &mut issue)?;
 
     Ok(issue)
 }
@@ -317,6 +325,7 @@ fn row_to_issue(row: &rusqlite::Row, _full: bool) -> rusqlite::Result<TrackerIss
         comments: Vec::new(),
         blocked_by: Vec::new(),
         blocks: Vec::new(),
+        relations: Vec::new(),
     })
 }
 
@@ -341,20 +350,155 @@ fn fetch_comments(conn: &Connection, issue_id: &str) -> Result<Vec<TrackerCommen
     rows.collect()
 }
 
-fn fetch_blocked_by(conn: &Connection, issue_id: &str) -> Result<Vec<String>> {
+/// Fetch all dependencies for an issue and populate blocked_by, blocks, and relations.
+fn fetch_relations(conn: &Connection, issue_id: &str, issue: &mut TrackerIssue) -> Result<()> {
     let mut stmt = conn.prepare(
-        "SELECT from_id FROM dependencies WHERE to_id = ?1 AND dep_type = 'blocks'",
+        "SELECT from_id, to_id, dep_type FROM dependencies
+         WHERE from_id = ?1 OR to_id = ?1",
     )?;
-    let rows = stmt.query_map([issue_id], |row| row.get(0))?;
-    rows.collect()
+    let rows = stmt.query_map([issue_id], |row| {
+        Ok((
+            row.get::<_, String>(0)?,
+            row.get::<_, String>(1)?,
+            row.get::<_, String>(2)?,
+        ))
+    })?;
+
+    for row in rows {
+        let (from_id, to_id, dep_type) = row?;
+        if dep_type == "blocks" {
+            if from_id == issue_id {
+                // We block to_id
+                issue.blocks.push(to_id);
+            } else {
+                // from_id blocks us
+                issue.blocked_by.push(from_id);
+            }
+        } else {
+            // Non-blocks relation
+            let (related_id, direction) = if from_id == issue_id {
+                (to_id, "dependent".to_string())
+            } else {
+                (from_id, "dependency".to_string())
+            };
+            issue.relations.push(TrackerRelation {
+                id: related_id,
+                dep_type,
+                direction,
+            });
+        }
+    }
+    Ok(())
 }
 
-fn fetch_blocks(conn: &Connection, issue_id: &str) -> Result<Vec<String>> {
-    let mut stmt = conn.prepare(
-        "SELECT to_id FROM dependencies WHERE from_id = ?1 AND dep_type = 'blocks'",
+/// Update the `updated_at` timestamp on an issue.
+fn touch_updated_at(conn: &Connection, issue_id: &str) -> Result<()> {
+    conn.execute(
+        "UPDATE issues SET updated_at = datetime('now') WHERE id = ?1",
+        [issue_id],
     )?;
-    let rows = stmt.query_map([issue_id], |row| row.get(0))?;
-    rows.collect()
+    Ok(())
+}
+
+// --- Public mutation operations for comments, labels, dependencies ---
+
+/// Add a comment to an issue. Returns the created comment.
+pub fn add_comment(
+    conn: &Connection,
+    issue_id: &str,
+    author: &str,
+    body: &str,
+) -> Result<TrackerComment> {
+    let id = generate_comment_id();
+    conn.execute(
+        "INSERT INTO comments (id, issue_id, body, author) VALUES (?1, ?2, ?3, ?4)",
+        params![&id, issue_id, body, author],
+    )?;
+    touch_updated_at(conn, issue_id)?;
+
+    let created_at: String = conn.query_row(
+        "SELECT created_at FROM comments WHERE id = ?1",
+        [&id],
+        |row| row.get(0),
+    )?;
+
+    Ok(TrackerComment {
+        id,
+        body: body.to_string(),
+        author: author.to_string(),
+        created_at,
+    })
+}
+
+/// Delete a comment by ID. Updates the parent issue's `updated_at`.
+pub fn delete_comment(conn: &Connection, comment_id: &str) -> Result<()> {
+    // Find parent issue before deleting
+    let issue_id: String = conn.query_row(
+        "SELECT issue_id FROM comments WHERE id = ?1",
+        [comment_id],
+        |row| row.get(0),
+    )?;
+    conn.execute("DELETE FROM comments WHERE id = ?1", [comment_id])?;
+    touch_updated_at(conn, &issue_id)?;
+    Ok(())
+}
+
+/// Add a label to an issue (idempotent).
+pub fn add_label(conn: &Connection, issue_id: &str, label: &str) -> Result<()> {
+    conn.execute(
+        "INSERT OR IGNORE INTO labels (issue_id, label) VALUES (?1, ?2)",
+        params![issue_id, label],
+    )?;
+    touch_updated_at(conn, issue_id)?;
+    Ok(())
+}
+
+/// Remove a label from an issue.
+pub fn remove_label(conn: &Connection, issue_id: &str, label: &str) -> Result<()> {
+    conn.execute(
+        "DELETE FROM labels WHERE issue_id = ?1 AND label = ?2",
+        params![issue_id, label],
+    )?;
+    touch_updated_at(conn, issue_id)?;
+    Ok(())
+}
+
+/// Add a dependency/relation between two issues.
+pub fn add_dependency(
+    conn: &Connection,
+    from_id: &str,
+    to_id: &str,
+    dep_type: &str,
+) -> Result<()> {
+    conn.execute(
+        "INSERT OR REPLACE INTO dependencies (from_id, to_id, dep_type) VALUES (?1, ?2, ?3)",
+        params![from_id, to_id, dep_type],
+    )?;
+    touch_updated_at(conn, from_id)?;
+    touch_updated_at(conn, to_id)?;
+    Ok(())
+}
+
+/// Remove a dependency between two issues.
+pub fn remove_dependency(conn: &Connection, from_id: &str, to_id: &str) -> Result<()> {
+    conn.execute(
+        "DELETE FROM dependencies WHERE from_id = ?1 AND to_id = ?2",
+        params![from_id, to_id],
+    )?;
+    touch_updated_at(conn, from_id)?;
+    touch_updated_at(conn, to_id)?;
+    Ok(())
+}
+
+/// Generate a comment ID: c-{8 base36 chars}.
+fn generate_comment_id() -> String {
+    use rand::Rng;
+    const BASE36: &[u8] = b"0123456789abcdefghijklmnopqrstuvwxyz";
+    let mut rng = rand::thread_rng();
+    let suffix: String = (0..8)
+        .map(|_| BASE36[rng.gen_range(0..36)] as char)
+        .collect();
+    format!("c-{}", suffix)
 }
 
 fn insert_labels(conn: &Connection, issue_id: &str, labels: &[String]) -> Result<()> {
@@ -724,6 +868,159 @@ mod tests {
         // Round-trip via get_issue
         let fetched = get_issue(&conn, &issue.id).unwrap();
         assert_eq!(fetched.labels.len(), 2);
+    }
+
+    fn make_issue(conn: &Connection, title: &str) -> TrackerIssue {
+        create_issue(
+            conn,
+            "test",
+            CreateIssueParams {
+                title: title.to_string(),
+                body: None,
+                issue_type: None,
+                status: None,
+                priority: None,
+                assignee: None,
+                author: None,
+                labels: None,
+                external_ref: None,
+                estimate_minutes: None,
+                design: None,
+                acceptance_criteria: None,
+                notes: None,
+                parent: None,
+                metadata: None,
+                spec_id: None,
+            },
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn test_add_and_delete_comment() {
+        let conn = setup_db();
+        let issue = make_issue(&conn, "Comment test");
+
+        let comment = add_comment(&conn, &issue.id, "alice", "Hello world").unwrap();
+        assert!(comment.id.starts_with("c-"));
+        assert_eq!(comment.body, "Hello world");
+        assert_eq!(comment.author, "alice");
+
+        // Verify via get_issue
+        let fetched = get_issue(&conn, &issue.id).unwrap();
+        assert_eq!(fetched.comments.len(), 1);
+        assert_eq!(fetched.comments[0].body, "Hello world");
+
+        // Delete it
+        delete_comment(&conn, &comment.id).unwrap();
+        let fetched = get_issue(&conn, &issue.id).unwrap();
+        assert!(fetched.comments.is_empty());
+    }
+
+    #[test]
+    fn test_add_and_remove_label() {
+        let conn = setup_db();
+        let issue = make_issue(&conn, "Label test");
+
+        add_label(&conn, &issue.id, "bug").unwrap();
+        add_label(&conn, &issue.id, "urgent").unwrap();
+
+        let fetched = get_issue(&conn, &issue.id).unwrap();
+        assert_eq!(fetched.labels.len(), 2);
+        assert!(fetched.labels.contains(&"bug".to_string()));
+
+        // Idempotent
+        add_label(&conn, &issue.id, "bug").unwrap();
+        let fetched = get_issue(&conn, &issue.id).unwrap();
+        assert_eq!(fetched.labels.len(), 2);
+
+        // Remove
+        remove_label(&conn, &issue.id, "bug").unwrap();
+        let fetched = get_issue(&conn, &issue.id).unwrap();
+        assert_eq!(fetched.labels.len(), 1);
+        assert_eq!(fetched.labels[0], "urgent");
+    }
+
+    #[test]
+    fn test_add_and_remove_dependency() {
+        let conn = setup_db();
+        let a = make_issue(&conn, "Issue A");
+        let b = make_issue(&conn, "Issue B");
+
+        add_dependency(&conn, &a.id, &b.id, "blocks").unwrap();
+
+        let fa = get_issue(&conn, &a.id).unwrap();
+        assert_eq!(fa.blocks, vec![b.id.clone()]);
+        assert!(fa.blocked_by.is_empty());
+
+        let fb = get_issue(&conn, &b.id).unwrap();
+        assert_eq!(fb.blocked_by, vec![a.id.clone()]);
+        assert!(fb.blocks.is_empty());
+
+        // Remove
+        remove_dependency(&conn, &a.id, &b.id).unwrap();
+        let fa = get_issue(&conn, &a.id).unwrap();
+        assert!(fa.blocks.is_empty());
+        let fb = get_issue(&conn, &b.id).unwrap();
+        assert!(fb.blocked_by.is_empty());
+    }
+
+    #[test]
+    fn test_add_relation() {
+        let conn = setup_db();
+        let a = make_issue(&conn, "Issue A");
+        let b = make_issue(&conn, "Issue B");
+
+        add_dependency(&conn, &a.id, &b.id, "relates-to").unwrap();
+
+        let fa = get_issue(&conn, &a.id).unwrap();
+        assert!(fa.blocks.is_empty());
+        assert!(fa.blocked_by.is_empty());
+        assert_eq!(fa.relations.len(), 1);
+        assert_eq!(fa.relations[0].id, b.id);
+        assert_eq!(fa.relations[0].dep_type, "relates-to");
+        assert_eq!(fa.relations[0].direction, "dependent");
+
+        let fb = get_issue(&conn, &b.id).unwrap();
+        assert_eq!(fb.relations.len(), 1);
+        assert_eq!(fb.relations[0].id, a.id);
+        assert_eq!(fb.relations[0].dep_type, "relates-to");
+        assert_eq!(fb.relations[0].direction, "dependency");
+    }
+
+    #[test]
+    fn test_dependency_updates_both_issues() {
+        let conn = setup_db();
+        let a = make_issue(&conn, "Issue A");
+        let b = make_issue(&conn, "Issue B");
+
+        let a_before = get_issue(&conn, &a.id).unwrap().updated_at;
+        let b_before = get_issue(&conn, &b.id).unwrap().updated_at;
+
+        // SQLite datetime has second precision — need a small delay
+        std::thread::sleep(std::time::Duration::from_millis(1100));
+
+        add_dependency(&conn, &a.id, &b.id, "blocks").unwrap();
+
+        let a_after = get_issue(&conn, &a.id).unwrap().updated_at;
+        let b_after = get_issue(&conn, &b.id).unwrap().updated_at;
+
+        assert!(a_after > a_before, "A's updated_at should change");
+        assert!(b_after > b_before, "B's updated_at should change");
+    }
+
+    #[test]
+    fn test_comment_updates_issue() {
+        let conn = setup_db();
+        let issue = make_issue(&conn, "Comment update test");
+        let before = get_issue(&conn, &issue.id).unwrap().updated_at;
+
+        std::thread::sleep(std::time::Duration::from_millis(1100));
+
+        add_comment(&conn, &issue.id, "bob", "New comment").unwrap();
+        let after = get_issue(&conn, &issue.id).unwrap().updated_at;
+
+        assert!(after > before, "updated_at should change after add_comment");
     }
 
     #[test]

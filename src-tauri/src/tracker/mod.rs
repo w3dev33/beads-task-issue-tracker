@@ -6,7 +6,9 @@ mod issues;
 pub use ids::generate_id;
 
 pub use config::ProjectConfig;
-pub use issues::{CreateIssueParams, TrackerIssue, UpdateIssueParams};
+pub use issues::{
+    CreateIssueParams, TrackerComment, TrackerIssue, TrackerRelation, UpdateIssueParams,
+};
 
 use rusqlite::Connection;
 use std::fs;
@@ -94,6 +96,46 @@ impl Engine {
     /// Delete an issue. Hard delete removes the row; soft delete sets status=tombstone.
     pub fn delete_issue(&self, id: &str, hard: bool) -> rusqlite::Result<()> {
         issues::delete_issue(&self.conn, id, hard)
+    }
+
+    /// Add a comment to an issue.
+    pub fn add_comment(
+        &self,
+        issue_id: &str,
+        author: &str,
+        body: &str,
+    ) -> rusqlite::Result<TrackerComment> {
+        issues::add_comment(&self.conn, issue_id, author, body)
+    }
+
+    /// Delete a comment by ID.
+    pub fn delete_comment(&self, comment_id: &str) -> rusqlite::Result<()> {
+        issues::delete_comment(&self.conn, comment_id)
+    }
+
+    /// Add a label to an issue (idempotent).
+    pub fn add_label(&self, issue_id: &str, label: &str) -> rusqlite::Result<()> {
+        issues::add_label(&self.conn, issue_id, label)
+    }
+
+    /// Remove a label from an issue.
+    pub fn remove_label(&self, issue_id: &str, label: &str) -> rusqlite::Result<()> {
+        issues::remove_label(&self.conn, issue_id, label)
+    }
+
+    /// Add a dependency/relation between two issues.
+    pub fn add_dependency(
+        &self,
+        from_id: &str,
+        to_id: &str,
+        dep_type: &str,
+    ) -> rusqlite::Result<()> {
+        issues::add_dependency(&self.conn, from_id, to_id, dep_type)
+    }
+
+    /// Remove a dependency between two issues.
+    pub fn remove_dependency(&self, from_id: &str, to_id: &str) -> rusqlite::Result<()> {
+        issues::remove_dependency(&self.conn, from_id, to_id)
     }
 
     fn db_path(project_path: &Path, config: &ProjectConfig) -> PathBuf {
