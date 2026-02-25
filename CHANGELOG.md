@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.24.0] - 2026-02-25
+
+> Requires **bd 0.49.x**. Recommended CLI: **br** (beads_rust) — stay on **br 0.1.14** until the bug in 0.1.19 is fixed.
+
+### New Features
+- **Pin/favorite issues**: Pin issues to the dashboard with a dedicated "Check This Out" section and a pin column in the issues table
+- **Keyboard navigation**: Full keyboard navigation for tables and lists — arrow keys, Enter to select, Escape to deselect
+- **Pinned sort modes**: Sort pinned issues by date added, last updated, or manual drag-and-drop order
+
+### Fixes
+- **Pinned column sort**: Sorting by the pinned column now works correctly in the issues table
+
+### Docs
+- **CLI usage note**: Added side-by-side CLI usage note in README
+
 ## [1.23.0] - 2026-02-24
 
 > **Recommended CLI: [`br`](https://github.com/Dicklesworthstone/beads_rust) (beads_rust)** — faster, more optimized, and our primary choice going forward. `bd 0.49.x` remains supported as a fallback. If `bd` with Dolt regains comparable reactivity and performance in future versions, we'll reconsider.

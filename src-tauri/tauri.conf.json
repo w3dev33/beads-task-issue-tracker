@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Beads Task-Issue Tracker",
-  "version": "1.23.0",
+  "version": "1.24.0",
   "identifier": "com.beads.manager",
   "build": {
     "frontendDist": "../.output/public",
@@ -41,6 +41,6 @@
       "minimumSystemVersion": "10.13",
       "bundleVersion": "1"
     },
-    "copyright": "© 2026 Laurent Chapin\nPowered by beads (Steve Yegge)\nVibe coded with Claude Code"
+    "copyright": "\u00a9 2026 Laurent Chapin\nPowered by beads (Steve Yegge)\nVibe coded with Claude Code"
   }
 }
