@@ -125,7 +125,7 @@ const isReadyCollapsed = useProjectStorage('readyCollapsed', true)
           >
             <polyline points="6 9 12 15 18 9" />
           </svg>
-          <span class="uppercase tracking-wide">Pinned</span>
+          <span class="uppercase tracking-wide">Check This Out</span>
         </button>
         <span class="text-[10px] ml-auto">({{ pinnedIssues.length }})</span>
         <!-- Sort mode toggle -->
