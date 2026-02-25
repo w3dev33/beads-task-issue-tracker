@@ -707,6 +707,10 @@ const inProgressIssues = computed(() => {
   return issues.value.filter(issue => issue.status === 'in_progress')
 })
 
+// Pinned issues
+const { pinnedIssueIds, pinnedSortMode, isPinned, togglePin, reorderPinned, toggleSortMode: togglePinnedSort, getPinnedIssues } = usePinnedIssues()
+const pinnedIssuesList = computed(() => getPinnedIssues(issues.value))
+
 // Default parent for new issues (set when creating child from epic)
 const defaultParent = ref<string | undefined>(undefined)
 
@@ -846,10 +850,15 @@ watch(
               :stats="stats"
               :ready-issues="readyIssues"
               :in-progress-issues="inProgressIssues"
+              :pinned-issues="pinnedIssuesList"
+              :pinned-sort-mode="pinnedSortMode"
               :active-kpi-filter="activeKpiFilter"
               :status-filters="filters.status"
               @select-issue="handleSelectIssue"
               @kpi-click="handleKpiClick"
+              @reorder-pinned="reorderPinned"
+              @unpin="togglePin"
+              @toggle-pinned-sort="togglePinnedSort"
             />
           </div>
         </div>
@@ -894,6 +903,7 @@ watch(
             :sort-field="sortField"
             :sort-direction="sortDirection"
             :newly-added-ids="newlyAddedIds"
+            :pinned-ids="pinnedIssueIds"
             @add="handleAddIssue"
             @delete="handleDeleteIssue"
             @toggle-multi-select="toggleMultiSelect"
@@ -911,6 +921,7 @@ watch(
             @deselect="handleDeselectIssue"
             @load-more="loadMore"
             @sort="setSort"
+            @toggle-pin="togglePin"
           />
 
           <div v-if="isLoading" class="text-center text-muted-foreground py-4">
@@ -968,10 +979,12 @@ watch(
           <IssueDetailHeader
             v-if="selectedIssue && !isEditMode && !isCreatingNew"
             :selected-issue="selectedIssue"
+            :is-pinned="isPinned(selectedIssue.id)"
             @edit="handleEditIssue"
             @reopen="handleReopenIssue"
             @close="handleCloseIssue"
             @delete="handleDeleteIssue"
+            @toggle-pin="togglePin(selectedIssue.id)"
           />
 
           <!-- Form mode: form gère son propre scroll -->
@@ -1071,12 +1084,17 @@ watch(
             :stats="stats"
             :ready-issues="readyIssues"
             :in-progress-issues="inProgressIssues"
+            :pinned-issues="pinnedIssuesList"
+            :pinned-sort-mode="pinnedSortMode"
             :kpi-grid-cols="2"
             :active-kpi-filter="activeKpiFilter"
             :status-filters="filters.status"
             :show-onboarding="showOnboarding"
             @select-issue="handleSelectIssue"
             @kpi-click="handleKpiClick"
+            @reorder-pinned="reorderPinned"
+            @unpin="togglePin"
+            @toggle-pinned-sort="togglePinnedSort"
             @browse="openFolderPicker"
           />
         </div>
@@ -1108,6 +1126,7 @@ watch(
           :sort-field="sortField"
           :sort-direction="sortDirection"
           :newly-added-ids="newlyAddedIds"
+          :pinned-ids="pinnedIssueIds"
           @add="handleAddIssue"
           @delete="handleDeleteIssue"
           @toggle-multi-select="toggleMultiSelect"
@@ -1125,6 +1144,7 @@ watch(
           @deselect="handleDeselectIssue"
           @load-more="loadMore"
           @sort="setSort"
+          @toggle-pin="togglePin"
         />
       </div>
 
@@ -1134,10 +1154,12 @@ watch(
         <IssueDetailHeader
           v-if="selectedIssue && !isEditMode && !isCreatingNew"
           :selected-issue="selectedIssue"
+          :is-pinned="isPinned(selectedIssue.id)"
           @edit="handleEditIssue"
           @reopen="handleReopenIssue"
           @close="handleCloseIssue"
           @delete="handleDeleteIssue"
+          @toggle-pin="togglePin(selectedIssue.id)"
         />
 
         <!-- Form mode: form gère son propre scroll -->

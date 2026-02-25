@@ -7,6 +7,7 @@ import { Button } from '~/components/ui/button'
 
 defineProps<{
   selectedIssue: Issue
+  isPinned?: boolean
 }>()
 
 defineEmits<{
@@ -14,6 +15,7 @@ defineEmits<{
   reopen: []
   close: []
   delete: []
+  'toggle-pin': []
 }>()
 </script>
 
@@ -33,6 +35,19 @@ defineEmits<{
     <!-- Action buttons -->
     <div class="flex items-center justify-between pb-3">
       <div class="flex items-center gap-1">
+        <!-- Pin/unpin toggle -->
+        <Button
+          variant="outline"
+          size="sm"
+          class="h-7 text-xs px-2"
+          :class="isPinned ? 'text-amber-500 border-amber-500/50 hover:text-amber-600' : ''"
+          @click="$emit('toggle-pin')"
+        >
+          <svg class="w-3 h-3 mr-1" viewBox="0 0 24 24" :fill="isPinned ? 'currentColor' : 'none'" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M9 4v6l-2 4h10l-2-4V4" /><line x1="12" y1="16" x2="12" y2="21" /><line x1="8" y1="4" x2="16" y2="4" />
+          </svg>
+          {{ isPinned ? 'Unpin' : 'Pin' }}
+        </Button>
         <!-- Edit button: only when not closed -->
         <Button v-if="selectedIssue.status !== 'closed'" size="sm" class="h-7 text-xs px-2" @click="$emit('edit')">
           <svg class="w-3 h-3 mr-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">

@@ -34,6 +34,7 @@ const props = defineProps<{
   externalSortColumn?: string | null
   externalSortDirection?: 'asc' | 'desc'
   newlyAddedIds?: Set<string>
+  pinnedIds?: string[]
 }>()
 
 const emit = defineEmits<{
@@ -43,7 +44,10 @@ const emit = defineEmits<{
   'update:selectedIds': [ids: string[]]
   loadMore: []
   sort: [field: string | null, direction: 'asc' | 'desc']
+  'toggle-pin': [issueId: string]
 }>()
+
+const pinnedSet = computed(() => new Set(props.pinnedIds ?? []))
 
 // Sorting state - sync with external (composable) state if provided
 type SortDirection = 'asc' | 'desc'
@@ -148,6 +152,10 @@ const sortedIssues = computed(() => {
     let bVal: string | number | null = null
 
     switch (col) {
+      case 'pinned':
+        aVal = pinnedSet.value.has(a.id) ? 0 : 1
+        bVal = pinnedSet.value.has(b.id) ? 0 : 1
+        break
       case 'id':
         // Use natural sort for IDs
         return naturalCompare(a.id.toLowerCase(), b.id.toLowerCase()) * dir
@@ -325,12 +333,18 @@ watch(() => props.selectedId, (id) => {
             class="font-medium"
             :class="[
               { 'cursor-pointer select-none hover:bg-secondary/50': col.sortable },
-              col.id === 'id' ? 'pl-7' : ''
+              col.id === 'id' ? 'pl-7' : '',
+              col.id === 'pinned' ? 'w-8 !px-1 text-center' : ''
             ]"
             @click="col.sortable && toggleSort(col.id)"
           >
             <div class="flex items-center gap-1">
-              <span>{{ col.label }}</span>
+              <template v-if="col.id === 'pinned'">
+                <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M9 4v6l-2 4h10l-2-4V4" /><line x1="12" y1="16" x2="12" y2="21" /><line x1="8" y1="4" x2="16" y2="4" />
+                </svg>
+              </template>
+              <span v-else>{{ col.label }}</span>
               <template v-if="col.sortable">
                 <svg
                   v-if="sortColumn === col.id"
@@ -405,8 +419,20 @@ watch(() => props.selectedId, (id) => {
                     </svg>
                   </button>
                 </TableCell>
-                <TableCell v-for="col in visibleColumns" :key="col.id" class="!py-1.5" :class="col.id === 'title' ? 'whitespace-normal max-w-md' : ''">
-                  <template v-if="col.id === 'id'">
+                <TableCell v-for="col in visibleColumns" :key="col.id" class="!py-1.5" :class="[col.id === 'title' ? 'whitespace-normal max-w-md' : '', col.id === 'pinned' ? 'w-8 !px-1 text-center' : '']">
+                  <template v-if="col.id === 'pinned'">
+                    <button
+                      class="flex items-center justify-center w-full transition-colors"
+                      :class="pinnedSet.has(group.epic!.id) ? 'text-amber-500' : 'text-muted-foreground/30 hover:text-amber-400'"
+                      @click.stop="emit('toggle-pin', group.epic!.id)"
+                    >
+                      <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" :fill="pinnedSet.has(group.epic!.id) ? 'currentColor' : 'none'" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M9 4v6l-2 4h10l-2-4V4" /><line x1="12" y1="16" x2="12" y2="21" /><line x1="8" y1="4" x2="16" y2="4" />
+                      </svg>
+                    </button>
+                  </template>
+
+                  <template v-else-if="col.id === 'id'">
                     <div class="flex items-center gap-2">
                       <!-- Expand/collapse chevron button -->
                       <button
@@ -571,8 +597,20 @@ watch(() => props.selectedId, (id) => {
                       </svg>
                     </button>
                   </TableCell>
-                  <TableCell v-for="col in visibleColumns" :key="col.id" class="!py-1.5" :class="col.id === 'title' ? 'whitespace-normal max-w-md' : ''">
-                    <template v-if="col.id === 'id'">
+                  <TableCell v-for="col in visibleColumns" :key="col.id" class="!py-1.5" :class="[col.id === 'title' ? 'whitespace-normal max-w-md' : '', col.id === 'pinned' ? 'w-8 !px-1 text-center' : '']">
+                    <template v-if="col.id === 'pinned'">
+                      <button
+                        class="flex items-center justify-center w-full transition-colors"
+                        :class="pinnedSet.has(child.id) ? 'text-amber-500' : 'text-muted-foreground/30 hover:text-amber-400'"
+                        @click.stop="emit('toggle-pin', child.id)"
+                      >
+                        <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" :fill="pinnedSet.has(child.id) ? 'currentColor' : 'none'" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                          <path d="M9 4v6l-2 4h10l-2-4V4" /><line x1="12" y1="16" x2="12" y2="21" /><line x1="8" y1="4" x2="16" y2="4" />
+                        </svg>
+                      </button>
+                    </template>
+
+                    <template v-else-if="col.id === 'id'">
                       <div class="pl-10">
                         <CopyableId :value="child.id" :display-value="getShortId(child.id)" />
                       </div>
@@ -676,8 +714,20 @@ watch(() => props.selectedId, (id) => {
                     </svg>
                   </button>
                 </TableCell>
-                <TableCell v-for="col in visibleColumns" :key="col.id" class="!py-1.5" :class="col.id === 'title' ? 'whitespace-normal max-w-md' : ''">
-                  <template v-if="col.id === 'id'">
+                <TableCell v-for="col in visibleColumns" :key="col.id" class="!py-1.5" :class="[col.id === 'title' ? 'whitespace-normal max-w-md' : '', col.id === 'pinned' ? 'w-8 !px-1 text-center' : '']">
+                  <template v-if="col.id === 'pinned'">
+                    <button
+                      class="flex items-center justify-center w-full transition-colors"
+                      :class="pinnedSet.has(issue.id) ? 'text-amber-500' : 'text-muted-foreground/30 hover:text-amber-400'"
+                      @click.stop="emit('toggle-pin', issue.id)"
+                    >
+                      <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" :fill="pinnedSet.has(issue.id) ? 'currentColor' : 'none'" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M9 4v6l-2 4h10l-2-4V4" /><line x1="12" y1="16" x2="12" y2="21" /><line x1="8" y1="4" x2="16" y2="4" />
+                      </svg>
+                    </button>
+                  </template>
+
+                  <template v-else-if="col.id === 'id'">
                     <div class="pl-7">
                       <CopyableId :value="issue.id" :display-value="getShortId(issue.id)" />
                     </div>
@@ -782,8 +832,20 @@ watch(() => props.selectedId, (id) => {
                 </svg>
               </button>
             </TableCell>
-            <TableCell v-for="col in visibleColumns" :key="col.id" class="!py-1.5" :class="col.id === 'title' ? 'whitespace-normal max-w-md' : ''">
-              <template v-if="col.id === 'id'">
+            <TableCell v-for="col in visibleColumns" :key="col.id" class="!py-1.5" :class="[col.id === 'title' ? 'whitespace-normal max-w-md' : '', col.id === 'pinned' ? 'w-8 !px-1 text-center' : '']">
+              <template v-if="col.id === 'pinned'">
+                <button
+                  class="flex items-center justify-center w-full transition-colors"
+                  :class="pinnedSet.has(issue.id) ? 'text-amber-500' : 'text-muted-foreground/30 hover:text-amber-400'"
+                  @click.stop="emit('toggle-pin', issue.id)"
+                >
+                  <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" :fill="pinnedSet.has(issue.id) ? 'currentColor' : 'none'" stroke="currentColor" stroke-width="2">
+                    <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+                  </svg>
+                </button>
+              </template>
+
+              <template v-else-if="col.id === 'id'">
                 <div class="pl-7">
                   <CopyableId :value="issue.id" :display-value="getShortId(issue.id)" />
                 </div>

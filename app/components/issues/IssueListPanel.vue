@@ -25,6 +25,7 @@ defineProps<{
   sortField: string | null
   sortDirection: 'asc' | 'desc'
   newlyAddedIds: Set<string>
+  pinnedIds?: string[]
 }>()
 
 const emit = defineEmits<{
@@ -45,6 +46,7 @@ const emit = defineEmits<{
   deselect: []
   'load-more': []
   sort: [field: string | null, direction: 'asc' | 'desc']
+  'toggle-pin': [issueId: string]
 }>()
 
 const handleSort = (field: string | null, direction: 'asc' | 'desc') => {
@@ -108,11 +110,13 @@ const handleSort = (field: string | null, direction: 'asc' | 'desc') => {
       :external-sort-column="sortField"
       :external-sort-direction="sortDirection"
       :newly-added-ids="newlyAddedIds"
+      :pinned-ids="pinnedIds"
       @select="emit('select', $event)"
       @edit="emit('edit', $event)"
       @deselect="emit('deselect')"
       @load-more="emit('load-more')"
       @sort="handleSort"
+      @toggle-pin="emit('toggle-pin', $event)"
     />
   </div>
 </template>
