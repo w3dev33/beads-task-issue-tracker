@@ -1,7 +1,8 @@
 use rusqlite::{params, Connection, Result};
+use serde::Serialize;
 
 /// A search result from the FTS5 full-text index.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct SearchResult {
     pub issue_id: String,
     pub title: String,

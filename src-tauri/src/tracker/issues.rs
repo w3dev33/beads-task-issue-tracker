@@ -1,9 +1,10 @@
 use rusqlite::{params, Connection, Result};
+use serde::Serialize;
 
 use super::ids::generate_id;
 
 /// A tracker issue with all fields, matching the frontend Issue struct.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct TrackerIssue {
     pub id: String,
     pub title: String,
@@ -11,24 +12,39 @@ pub struct TrackerIssue {
     pub issue_type: String,
     pub status: String,
     pub priority: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub assignee: Option<String>,
     pub author: String,
     pub created_at: String,
     pub updated_at: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub closed_at: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub external_ref: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub estimate_minutes: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub design: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub acceptance_criteria: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub notes: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub parent: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub metadata: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub spec_id: Option<String>,
     // Populated by get_issue (full) or counts by list_issues
+    #[serde(skip_serializing_if = "Vec::is_empty")]
     pub labels: Vec<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
     pub comments: Vec<TrackerComment>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
     pub blocked_by: Vec<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
     pub blocks: Vec<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
     pub relations: Vec<TrackerRelation>,
     pub comment_count: i32,
     pub dependency_count: i32,
@@ -36,7 +52,7 @@ pub struct TrackerIssue {
 }
 
 /// A comment on an issue.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct TrackerComment {
     pub id: String,
     pub body: String,
@@ -45,7 +61,7 @@ pub struct TrackerComment {
 }
 
 /// A relation between two issues (non-"blocks" dependency types).
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct TrackerRelation {
     pub id: String,
     pub dep_type: String,
