@@ -1,5 +1,8 @@
 mod config;
 mod db;
+mod ids;
+
+pub use ids::generate_id;
 
 pub use config::ProjectConfig;
 
