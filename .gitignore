@@ -23,6 +23,7 @@ node_modules
 .idea
 .vscode
 .claude
+!.claude/commands/
 .claude_root
 .beads
 *.swp
