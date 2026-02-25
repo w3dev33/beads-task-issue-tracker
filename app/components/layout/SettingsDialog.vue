@@ -9,6 +9,7 @@ import {
 import { Label } from '~/components/ui/label'
 import { Button } from '~/components/ui/button'
 import { getCliBinaryPath, setCliBinaryPath, checkExternalHealth } from '~/utils/bd-api'
+import { useBackendMode } from '~/composables/useBackendMode'
 import type { ThemeDefinition } from '~/composables/useTheme'
 
 const open = defineModel<boolean>('open', { default: false })
@@ -28,6 +29,30 @@ const sunCircle = { cx: 12, cy: 12, r: 5 }
 const selectedClient = ref<'bd' | 'br'>('bd')
 const isSwitching = ref(false)
 const switchResult = ref<{ success: boolean; message: string } | null>(null)
+
+// Backend mode
+const { backendMode, setMode: setBackendModeValue, ensureTrackerInit } = useBackendMode()
+const isSwitchingBackend = ref(false)
+const backendWarning = ref<string | null>(null)
+
+async function selectBackend(mode: string) {
+  if (mode === backendMode.value) return
+
+  isSwitchingBackend.value = true
+  backendWarning.value = null
+  try {
+    if (mode === 'built-in') {
+      await ensureTrackerInit()
+    } else if (backendMode.value === 'built-in') {
+      backendWarning.value = 'Issues in .tracker/ won\'t be visible with this backend'
+    }
+    await setBackendModeValue(mode)
+  } catch (error) {
+    backendWarning.value = error instanceof Error ? error.message : String(error)
+  } finally {
+    isSwitchingBackend.value = false
+  }
+}
 
 // Probe settings (dev-only — hidden in production until probe is a public feature)
 const isDev = import.meta.dev
@@ -180,6 +205,109 @@ async function testConnection() {
                 Original Beads CLI (Go)
               </p>
             </button>
+          </div>
+        </div>
+
+        <!-- Backend Selector -->
+        <div class="space-y-3">
+          <Label>Backend Engine</Label>
+          <div class="grid grid-cols-3 gap-3">
+            <!-- Built-in option -->
+            <button
+              class="relative flex flex-col items-start gap-1.5 rounded-lg border-2 p-3 text-left transition-colors"
+              :class="backendMode === 'built-in'
+                ? 'border-primary bg-primary/5'
+                : 'border-muted hover:border-muted-foreground/25 hover:bg-muted/50'"
+              :disabled="isSwitchingBackend"
+              @click="selectBackend('built-in')"
+            >
+              <div class="flex items-center gap-2">
+                <div
+                  class="flex h-5 w-5 items-center justify-center rounded-full border-2 transition-colors"
+                  :class="backendMode === 'built-in' ? 'border-primary' : 'border-muted-foreground/40'"
+                >
+                  <div
+                    v-if="backendMode === 'built-in'"
+                    class="h-2.5 w-2.5 rounded-full bg-primary"
+                  />
+                </div>
+                <span class="font-semibold text-sm">Built-in</span>
+              </div>
+              <p class="text-xs text-muted-foreground pl-7">
+                SQLite engine (no CLI needed)
+              </p>
+            </button>
+
+            <!-- br option -->
+            <button
+              class="relative flex flex-col items-start gap-1.5 rounded-lg border-2 p-3 text-left transition-colors"
+              :class="backendMode === 'br'
+                ? 'border-primary bg-primary/5'
+                : 'border-muted hover:border-muted-foreground/25 hover:bg-muted/50'"
+              :disabled="isSwitchingBackend"
+              @click="selectBackend('br')"
+            >
+              <div class="flex items-center gap-2">
+                <div
+                  class="flex h-5 w-5 items-center justify-center rounded-full border-2 transition-colors"
+                  :class="backendMode === 'br' ? 'border-primary' : 'border-muted-foreground/40'"
+                >
+                  <div
+                    v-if="backendMode === 'br'"
+                    class="h-2.5 w-2.5 rounded-full bg-primary"
+                  />
+                </div>
+                <span class="font-mono font-semibold text-sm">br</span>
+              </div>
+              <p class="text-xs text-muted-foreground pl-7">
+                Beads Rust CLI
+              </p>
+            </button>
+
+            <!-- bd option (legacy) -->
+            <button
+              class="relative flex flex-col items-start gap-1.5 rounded-lg border-2 p-3 text-left transition-colors"
+              :class="backendMode === 'bd'
+                ? 'border-primary bg-primary/5'
+                : 'border-muted hover:border-muted-foreground/25 hover:bg-muted/50'"
+              :disabled="isSwitchingBackend"
+              @click="selectBackend('bd')"
+            >
+              <div class="flex items-center gap-2">
+                <div
+                  class="flex h-5 w-5 items-center justify-center rounded-full border-2 transition-colors"
+                  :class="backendMode === 'bd' ? 'border-primary' : 'border-muted-foreground/40'"
+                >
+                  <div
+                    v-if="backendMode === 'bd'"
+                    class="h-2.5 w-2.5 rounded-full bg-primary"
+                  />
+                </div>
+                <span class="font-mono font-semibold text-sm">bd</span>
+              </div>
+              <p class="text-xs text-muted-foreground pl-7">
+                Legacy Go CLI (0.49.x)
+              </p>
+            </button>
+          </div>
+
+          <!-- Backend switching spinner -->
+          <div v-if="isSwitchingBackend" class="flex items-center gap-2 text-sm text-muted-foreground">
+            <svg class="animate-spin h-3 w-3" viewBox="0 0 24 24" fill="none">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+            </svg>
+            Switching backend...
+          </div>
+
+          <!-- Backend warning -->
+          <div v-if="backendWarning" class="flex items-start gap-2 p-2 rounded-md text-sm bg-amber-500/10 text-amber-600 dark:text-amber-400">
+            <svg class="w-4 h-4 shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+              <line x1="12" y1="9" x2="12" y2="13" />
+              <line x1="12" y1="17" x2="12.01" y2="17" />
+            </svg>
+            <span class="text-xs">{{ backendWarning }}</span>
           </div>
         </div>
 

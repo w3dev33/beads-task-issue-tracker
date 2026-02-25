@@ -757,6 +757,31 @@ export async function setCliBinaryPath(path: string): Promise<string> {
 
 
 // ============================================================================
+// Backend Mode API
+// ============================================================================
+
+export async function getBackendMode(): Promise<string> {
+  if (isTauri()) return invoke<string>('get_backend_mode')
+  return 'br'
+}
+
+export async function setBackendMode(mode: string): Promise<void> {
+  if (!isTauri()) throw new Error('Backend mode is only available in the desktop app')
+  return invoke<void>('set_backend_mode', { mode })
+}
+
+export async function trackerDetect(cwd?: string): Promise<boolean> {
+  if (isTauri()) return invoke<boolean>('tracker_detect', { cwd: cwd || null })
+  return false
+}
+
+export async function trackerInit(cwd?: string): Promise<void> {
+  if (!isTauri()) throw new Error('Tracker init is only available in the desktop app')
+  return invoke<void>('tracker_init', { cwd: cwd || null })
+}
+
+
+// ============================================================================
 // File System API - For folder picker
 // ============================================================================
 

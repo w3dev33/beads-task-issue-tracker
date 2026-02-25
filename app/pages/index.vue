@@ -49,6 +49,7 @@ const { columns, toggleColumn, setColumns, resetColumns } = useColumnConfig()
 const { beadsPath, hasStoredPath } = useBeadsPath()
 const { success: notifySuccess, error: notifyError } = useNotification()
 const { isBr, init: initCliClient } = useCliClient()
+const { syncFromStorage: syncBackendMode } = useBackendMode()
 const { projects } = useProjects()
 const {
   issues,
@@ -261,6 +262,9 @@ onMounted(async () => {
     // Detect CLI client (br vs bd) for feature gating
     await initCliClient()
 
+    // Sync backend mode from per-project storage to Tauri
+    await syncBackendMode()
+
     // Check for updates after initial load + start periodic check (hourly)
     // (these don't call bd CLI, safe to run before migration check)
     checkForUpdates()
@@ -455,6 +459,9 @@ return
   }
 
   try {
+    // Sync backend mode for the new project
+    await syncBackendMode()
+
     // Pre-flight checks in parallel: cleanup stale locks + migration check + mtime reset
 const [, , migrationNeeded] = await Promise.all([
       bdCleanupStaleLocks(beadsPath.value),
