@@ -219,6 +219,30 @@ describe('sortIssues', () => {
     expect(issues.map(i => i.id)).toEqual(copy.map(i => i.id))
   })
 
+  it('sorts pinned issues before unpinned (asc)', () => {
+    const a = makeIssue({ id: 'a' })
+    const b = makeIssue({ id: 'b' })
+    const c = makeIssue({ id: 'c' })
+    const result = sortIssues([a, b, c], 'pinned', 'asc', ['b', 'c'])
+    expect(result.map(i => i.id)).toEqual(['b', 'c', 'a'])
+  })
+
+  it('sorts pinned issues after unpinned (desc)', () => {
+    const a = makeIssue({ id: 'a' })
+    const b = makeIssue({ id: 'b' })
+    const c = makeIssue({ id: 'c' })
+    const result = sortIssues([a, b, c], 'pinned', 'desc', ['b'])
+    expect(result.map(i => i.id)).toEqual(['a', 'c', 'b'])
+  })
+
+  it('sorts pinned without pinnedIds as no-op (all equal)', () => {
+    const a = makeIssue({ id: 'a' })
+    const b = makeIssue({ id: 'b' })
+    const result = sortIssues([a, b], 'pinned', 'asc')
+    // All unpinned, falls back to natural ID sort
+    expect(result.map(i => i.id)).toEqual(['a', 'b'])
+  })
+
   it('sorts issues without labels last when sorting by labels', () => {
     const withLabel = makeIssue({ id: 'b', labels: ['frontend'] })
     const noLabel = makeIssue({ id: 'a', labels: [] })

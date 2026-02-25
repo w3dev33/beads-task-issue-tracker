@@ -122,7 +122,7 @@ export const typeOrder: Record<string, number> = {
  * Sort issues by a given field and direction.
  * Returns a new sorted array (does not mutate input).
  */
-export function sortIssues(issues: Issue[], field: string | null, direction: 'asc' | 'desc'): Issue[] {
+export function sortIssues(issues: Issue[], field: string | null, direction: 'asc' | 'desc', pinnedIds?: string[]): Issue[] {
   if (!field) return issues
 
   const sorted = [...issues]
@@ -147,6 +147,12 @@ export function sortIssues(issues: Issue[], field: string | null, direction: 'as
         aVal = typeOrder[a.type] ?? 99
         bVal = typeOrder[b.type] ?? 99
         break
+      case 'pinned': {
+        const pinnedSet = new Set(pinnedIds || [])
+        aVal = pinnedSet.has(a.id) ? 0 : 1
+        bVal = pinnedSet.has(b.id) ? 0 : 1
+        break
+      }
       case 'labels':
         aVal = a.labels?.length ? a.labels[0]!.toLowerCase() : '\uffff'
         bVal = b.labels?.length ? b.labels[0]!.toLowerCase() : '\uffff'

@@ -113,6 +113,7 @@ export function useIssues() {
   const { checkError: checkRepairError } = useRepairDatabase()
   const { checkError: checkMigrateError } = useMigrateToDolt()
   const { exclusions } = useExclusionFilters()
+  const { pinnedIssueIds } = usePinnedIssues()
 
   // Helper to get the current path (for IPC or web)
   const getPath = () => beadsPath.value && beadsPath.value !== '.' ? beadsPath.value : undefined
@@ -396,7 +397,7 @@ export function useIssues() {
 
   // Computed for sorted issues (default: updatedAt DESC, null = no sort)
   const sortedIssues = computed(() =>
-    sortIssuesPure(filteredIssues.value, sortField.value, sortDirection.value)
+    sortIssuesPure(filteredIssues.value, sortField.value, sortDirection.value, pinnedIssueIds.value)
   )
 
   // Computed for paginated issues
