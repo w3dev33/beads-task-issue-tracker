@@ -4,6 +4,7 @@ import { ScrollArea } from '~/components/ui/scroll-area'
 import TypeBadge from '~/components/issues/TypeBadge.vue'
 import PriorityBadge from '~/components/issues/PriorityBadge.vue'
 import Sortable from 'sortablejs'
+import { useKeyboardNavigation } from '~/composables/useKeyboardNavigation'
 
 const props = withDefaults(defineProps<{
   issues: Issue[]
@@ -17,6 +18,17 @@ const emit = defineEmits<{
   reorder: [newOrder: string[]]
   unpin: [issueId: string]
 }>()
+
+const pinnedItemIds = computed(() => props.issues.map(i => i.id))
+const issueMap = computed(() => new Map(props.issues.map(i => [i.id, i])))
+
+const { focusedId, setFocused, handleKeydown, isFocused } = useKeyboardNavigation({
+  itemIds: pinnedItemIds,
+  onSelect: (id) => {
+    const issue = issueMap.value.get(id)
+    if (issue) emit('select', issue)
+  },
+})
 
 const listRef = ref<HTMLElement | null>(null)
 let sortableInstance: Sortable | null = null
@@ -90,12 +102,14 @@ onBeforeUnmount(() => {
         No pinned issues
       </div>
 
-      <div v-else ref="listRef" class="space-y-1 pr-4">
+      <div v-else ref="listRef" class="space-y-1 pr-4 outline-none" tabindex="0" @keydown="handleKeydown">
         <div
           v-for="issue in issues"
           :key="issue.id"
           :data-issue-id="issue.id"
           class="group relative w-full text-left p-1.5 rounded hover:bg-secondary/50 transition-colors flex items-start gap-1.5"
+          :class="isFocused(issue.id) ? 'bg-primary/10 ring-1 ring-inset ring-primary/40' : ''"
+          @click="setFocused(issue.id)"
         >
           <!-- Drag handle (only in manual mode) -->
           <span v-if="dragEnabled" class="drag-handle cursor-grab active:cursor-grabbing opacity-0 group-hover:opacity-60 transition-opacity mt-0.5 shrink-0">

@@ -13,6 +13,7 @@ import Sortable from 'sortablejs'
 import { getFolderName } from '~/utils/path'
 import { listProbeProjects, registerOrExposeProject, patchProbeProject, probeUnregisterProject, getExternalUrl } from '~/utils/bd-api'
 import type { ProbeProject } from '~/utils/probe-adapter'
+import { useKeyboardNavigation } from '~/composables/useKeyboardNavigation'
 
 const props = defineProps<{
   isLoading?: boolean
@@ -86,6 +87,14 @@ const initSortable = () => {
     },
   })
 }
+
+// Keyboard navigation for project list
+const projectPaths = computed(() => sortedProjects.value.map(p => p.path))
+const { setFocused: setProjectFocused, handleKeydown: handleProjectKeydown, isFocused: isProjectFocused } = useKeyboardNavigation({
+  itemIds: projectPaths,
+  onSelect: (path) => handleSelectProject(path),
+  dataAttribute: 'data-path',
+})
 
 const isProjectsCollapsed = useLocalStorage('beads:favoritesCollapsed', false)
 
@@ -375,8 +384,15 @@ watch(() => projects.value.length, () => {
           </TooltipProvider>
         </template>
       </div>
-      <div v-show="!isProjectsCollapsed" ref="projectsListRef" class="flex flex-col gap-1">
-        <div v-for="proj in sortedProjects" :key="proj.path" :data-path="proj.path" class="relative group">
+      <div v-show="!isProjectsCollapsed" ref="projectsListRef" class="flex flex-col gap-1 outline-none" tabindex="0" @keydown="handleProjectKeydown">
+        <div
+          v-for="proj in sortedProjects"
+          :key="proj.path"
+          :data-path="proj.path"
+          class="relative group rounded"
+          :class="isProjectFocused(proj.path) ? 'bg-primary/10 ring-1 ring-inset ring-primary/40' : ''"
+          @click="setProjectFocused(proj.path)"
+        >
           <Button
             :variant="beadsPath === proj.path ? 'default' : 'ghost'"
             size="sm"

@@ -4,13 +4,26 @@ import { ScrollArea } from '~/components/ui/scroll-area'
 import TypeBadge from '~/components/issues/TypeBadge.vue'
 import PriorityBadge from '~/components/issues/PriorityBadge.vue'
 
-defineProps<{
+import { useKeyboardNavigation } from '~/composables/useKeyboardNavigation'
+
+const props = defineProps<{
   issues: Issue[]
 }>()
 
-defineEmits<{
+const emit = defineEmits<{
   select: [issue: Issue]
 }>()
+
+const quickItemIds = computed(() => props.issues.map(i => i.id))
+const issueMap = computed(() => new Map(props.issues.map(i => [i.id, i])))
+
+const { focusedId, setFocused, handleKeydown, isFocused } = useKeyboardNavigation({
+  itemIds: quickItemIds,
+  onSelect: (id) => {
+    const issue = issueMap.value.get(id)
+    if (issue) emit('select', issue)
+  },
+})
 
 const getShortId = (id: string) => {
   const dotIndex = id.indexOf('.')
@@ -31,12 +44,13 @@ const getShortId = (id: string) => {
         No issues ready to work on
       </div>
 
-      <div v-else class="space-y-1 pr-4">
+      <div v-else class="space-y-1 pr-4 outline-none" tabindex="0" @keydown="handleKeydown">
         <button
           v-for="issue in issues"
           :key="issue.id"
           class="w-full text-left p-1.5 rounded hover:bg-secondary/50 transition-colors"
-          @click="$emit('select', issue)"
+          :class="isFocused(issue.id) ? 'bg-primary/10 ring-1 ring-inset ring-primary/40' : ''"
+          @click="setFocused(issue.id); $emit('select', issue)"
         >
           <div class="flex items-center gap-1.5 mb-0.5">
             <TypeBadge :type="issue.type" size="sm" />

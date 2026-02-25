@@ -21,6 +21,7 @@ import {
   TooltipTrigger,
 } from '~/components/ui/tooltip'
 import { Ban } from 'lucide-vue-next'
+import { useKeyboardNavigation } from '~/composables/useKeyboardNavigation'
 
 const props = defineProps<{
   issues: Issue[]
@@ -304,10 +305,56 @@ watch(() => props.selectedId, (id) => {
     row?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
   })
 })
+
+// Keyboard navigation
+const flatVisibleIds = computed(() => {
+  if (useHierarchicalDisplay.value && props.groupedIssues) {
+    const ids: string[] = []
+    for (const group of props.groupedIssues) {
+      if (group.epic) {
+        ids.push(group.epic.id)
+        if (isExpanded(group.epic.id)) {
+          for (const child of group.children) {
+            ids.push(child.id)
+          }
+        }
+      } else {
+        for (const child of group.children) {
+          ids.push(child.id)
+        }
+      }
+    }
+    return ids
+  }
+  return sortedIssues.value.map(i => i.id)
+})
+
+const issueMap = computed(() => {
+  const map = new Map<string, Issue>()
+  for (const issue of props.issues) map.set(issue.id, issue)
+  if (props.groupedIssues) {
+    for (const group of props.groupedIssues) {
+      if (group.epic) map.set(group.epic.id, group.epic)
+      for (const child of group.children) map.set(child.id, child)
+    }
+  }
+  return map
+})
+
+const { focusedId, setFocused, handleKeydown, isFocused } = useKeyboardNavigation({
+  itemIds: flatVisibleIds,
+  onSelect: (id) => {
+    const issue = issueMap.value.get(id)
+    if (issue) emit('select', issue)
+  },
+  onAction: (id) => {
+    emit('toggle-pin', id)
+  },
+})
 </script>
 
 <template>
-  <div class="h-full rounded border border-border overflow-auto" @click.self="$emit('deselect')">
+  <div class="h-full rounded border border-border overflow-auto outline-none" tabindex="0" @keydown="handleKeydown" @click.self="$emit('deselect')">
     <Table @click.self="$emit('deselect')">
       <TableHeader>
         <TableRow class="bg-secondary/30 hover:bg-secondary/30">
@@ -401,9 +448,10 @@ watch(() => props.selectedId, (id) => {
                     : (selectedId === group.epic.id ? 'bg-accent/50 hover:bg-accent/70' : 'hover:bg-muted/50'),
                   group.childCount > 0 ? ['border-l-4', 'border-r-4', getEpicBorderColors(groupIndex).left, getEpicBorderColors(groupIndex).right] : '',
                   !isExpanded(group.epic.id) && group.childCount > 0 && (group.epic.status === 'in_progress' || !!group.inProgressChild) ? 'border-b-0' : '',
-                  isNewlyAdded(group.epic.id) ? 'issue-highlight-new' : ''
+                  isNewlyAdded(group.epic.id) ? 'issue-highlight-new' : '',
+                  isFocused(group.epic.id) ? 'bg-primary/10 ring-1 ring-inset ring-primary/40' : ''
                 ]"
-                @click="multiSelectMode ? toggleSelect(group.epic.id) : $emit('select', group.epic)"
+                @click="setFocused(group.epic.id); multiSelectMode ? toggleSelect(group.epic.id) : $emit('select', group.epic)"
                 @dblclick="!multiSelectMode && $emit('edit', group.epic)"
               >
                 <TableCell v-if="multiSelectMode" class="w-10 px-2 !py-1.5">
@@ -579,9 +627,10 @@ watch(() => props.selectedId, (id) => {
                     multiSelectMode
                       ? (isSelected(child.id) ? 'bg-accent/50 hover:bg-accent/70' : 'hover:bg-muted/50')
                       : (selectedId === child.id ? 'bg-accent/50 hover:bg-accent/70' : 'hover:bg-muted/50'),
-                    isNewlyAdded(child.id) ? 'issue-highlight-new' : ''
+                    isNewlyAdded(child.id) ? 'issue-highlight-new' : '',
+                    isFocused(child.id) ? 'bg-primary/10 ring-1 ring-inset ring-primary/40' : ''
                   ]"
-                  @click="multiSelectMode ? toggleSelect(child.id) : $emit('select', child)"
+                  @click="setFocused(child.id); multiSelectMode ? toggleSelect(child.id) : $emit('select', child)"
                   @dblclick="!multiSelectMode && $emit('edit', child)"
                 >
                   <TableCell v-if="multiSelectMode" class="w-10 px-2 !py-1.5">
@@ -696,9 +745,10 @@ watch(() => props.selectedId, (id) => {
                   multiSelectMode
                     ? (isSelected(issue.id) ? 'bg-accent/50 hover:bg-accent/70' : 'hover:bg-muted/50')
                     : (selectedId === issue.id ? 'bg-accent/50 hover:bg-accent/70' : 'hover:bg-muted/50'),
-                  isNewlyAdded(issue.id) ? 'issue-highlight-new' : ''
+                  isNewlyAdded(issue.id) ? 'issue-highlight-new' : '',
+                  isFocused(issue.id) ? 'bg-primary/10 ring-1 ring-inset ring-primary/40' : ''
                 ]"
-                @click="multiSelectMode ? toggleSelect(issue.id) : $emit('select', issue)"
+                @click="setFocused(issue.id); multiSelectMode ? toggleSelect(issue.id) : $emit('select', issue)"
                 @dblclick="!multiSelectMode && $emit('edit', issue)"
               >
                 <TableCell v-if="multiSelectMode" class="w-10 px-2 !py-1.5">
@@ -814,9 +864,10 @@ watch(() => props.selectedId, (id) => {
               multiSelectMode
                 ? (isSelected(issue.id) ? 'bg-accent/50 hover:bg-accent/70' : 'hover:bg-muted/50')
                 : (selectedId === issue.id ? 'bg-accent/50 hover:bg-accent/70' : 'hover:bg-muted/50'),
-              isNewlyAdded(issue.id) ? 'issue-highlight-new' : ''
+              isNewlyAdded(issue.id) ? 'issue-highlight-new' : '',
+              isFocused(issue.id) ? 'bg-primary/10 ring-1 ring-inset ring-primary/40' : ''
             ]"
-            @click="multiSelectMode ? toggleSelect(issue.id) : $emit('select', issue)"
+            @click="setFocused(issue.id); multiSelectMode ? toggleSelect(issue.id) : $emit('select', issue)"
             @dblclick="!multiSelectMode && $emit('edit', issue)"
           >
             <TableCell v-if="multiSelectMode" class="w-10 px-2 !py-1.5">
