@@ -2,6 +2,7 @@ mod config;
 mod db;
 mod ids;
 mod issues;
+mod search;
 
 pub use ids::generate_id;
 
@@ -9,6 +10,7 @@ pub use config::ProjectConfig;
 pub use issues::{
     CreateIssueParams, TrackerComment, TrackerIssue, TrackerRelation, UpdateIssueParams,
 };
+pub use search::SearchResult;
 
 use rusqlite::Connection;
 use std::fs;
@@ -136,6 +138,11 @@ impl Engine {
     /// Remove a dependency between two issues.
     pub fn remove_dependency(&self, from_id: &str, to_id: &str) -> rusqlite::Result<()> {
         issues::remove_dependency(&self.conn, from_id, to_id)
+    }
+
+    /// Full-text search across issue titles, bodies, and notes.
+    pub fn search(&self, query: &str, limit: Option<usize>) -> rusqlite::Result<Vec<SearchResult>> {
+        search::search(&self.conn, query, limit.unwrap_or(50))
     }
 
     fn db_path(project_path: &Path, config: &ProjectConfig) -> PathBuf {

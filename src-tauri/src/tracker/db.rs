@@ -33,6 +33,9 @@ pub fn ensure_schema(conn: &Connection) -> Result<()> {
     if current_version < 2 {
         migrate_v2(conn)?;
     }
+    if current_version < 3 {
+        migrate_v3(conn)?;
+    }
 
     Ok(())
 }
@@ -115,6 +118,31 @@ fn migrate_v2(conn: &Connection) -> Result<()> {
     Ok(())
 }
 
+/// Schema version 3: rebuild FTS5 index to include `notes` column.
+fn migrate_v3(conn: &Connection) -> Result<()> {
+    conn.execute_batch(
+        "BEGIN;
+
+        DROP TABLE IF EXISTS issues_fts;
+
+        CREATE VIRTUAL TABLE issues_fts USING fts5(
+            issue_id,
+            title,
+            body,
+            notes
+        );
+
+        INSERT INTO issues_fts(issue_id, title, body, notes)
+          SELECT id, title, body, COALESCE(notes, '') FROM issues;
+
+        INSERT INTO schema_version (version) VALUES (3);
+
+        COMMIT;"
+    )?;
+
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -143,7 +171,7 @@ mod tests {
         let version: i64 = conn
             .query_row("SELECT MAX(version) FROM schema_version", [], |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 2);
+        assert_eq!(version, 3);
 
         // Verify issues table exists
         let count: i64 = conn
@@ -167,6 +195,6 @@ mod tests {
         let version: i64 = conn
             .query_row("SELECT MAX(version) FROM schema_version", [], |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 2);
+        assert_eq!(version, 3);
     }
 }
