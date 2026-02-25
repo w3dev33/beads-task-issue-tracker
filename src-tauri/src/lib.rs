@@ -27,6 +27,13 @@ static LAST_KNOWN_MTIME: LazyLock<Mutex<HashMap<String, std::time::SystemTime>>>
 // Configurable CLI binary name (default: "bd")
 static CLI_BINARY: LazyLock<Mutex<String>> = LazyLock::new(|| Mutex::new("bd".to_string()));
 
+// Backend mode: "bd", "br", or "built-in" (tracker engine)
+static BACKEND_MODE: LazyLock<Mutex<String>> = LazyLock::new(|| Mutex::new("bd".to_string()));
+
+// Per-project tracker engine pool (one open SQLite connection per project)
+static TRACKER_ENGINES: LazyLock<Mutex<HashMap<String, tracker::Engine>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
+
 // Global child process handle for beads-probe
 static PROBE_CHILD: LazyLock<Mutex<Option<std::process::Child>>> =
     LazyLock::new(|| Mutex::new(None));
@@ -441,7 +448,7 @@ fn priority_to_number(priority: &str) -> String {
     "3".to_string()
 }
 
-fn normalize_issue_type(issue_type: &str) -> String {
+pub fn normalize_issue_type(issue_type: &str) -> String {
     let valid_types = ["bug", "task", "feature", "epic", "chore"];
     if valid_types.contains(&issue_type) {
         issue_type.to_string()
@@ -450,13 +457,51 @@ fn normalize_issue_type(issue_type: &str) -> String {
     }
 }
 
-fn normalize_issue_status(status: &str) -> String {
+pub fn normalize_issue_status(status: &str) -> String {
     let valid_statuses = ["open", "in_progress", "blocked", "closed", "deferred", "tombstone", "pinned", "hooked"];
     if valid_statuses.contains(&status) {
         status.to_string()
     } else {
         "open".to_string()
     }
+}
+
+/// Check if the backend mode is set to "built-in" (tracker engine).
+fn is_builtin_backend() -> bool {
+    let mode = BACKEND_MODE.lock().unwrap();
+    *mode == "built-in"
+}
+
+/// Get or create a tracker::Engine for a given project path.
+/// Resolves the project path from cwd (or env/cwd fallback), then
+/// returns a result from the provided closure called with &Engine.
+fn with_engine<F, T>(cwd: Option<&str>, f: F) -> Result<T, String>
+where
+    F: FnOnce(&tracker::Engine) -> Result<T, String>,
+{
+    let project_path = cwd
+        .map(String::from)
+        .or_else(|| env::var("BEADS_PATH").ok())
+        .unwrap_or_else(|| {
+            env::current_dir()
+                .map(|p| p.to_string_lossy().to_string())
+                .unwrap_or_else(|_| ".".to_string())
+        });
+
+    let mut engines = TRACKER_ENGINES.lock().unwrap();
+    if !engines.contains_key(&project_path) {
+        let path = std::path::Path::new(&project_path);
+        let tracker_db = path.join(".tracker").join("tracker.db");
+        let engine = if tracker_db.exists() {
+            tracker::Engine::open(path)
+        } else {
+            tracker::Engine::init(path, tracker::ProjectConfig::load(path))
+        };
+        let engine = engine.map_err(|e| format!("Failed to open tracker engine: {}", e))?;
+        engines.insert(project_path.clone(), engine);
+    }
+    let engine = engines.get(&project_path).unwrap();
+    f(engine)
 }
 
 fn transform_issue(raw: BdRawIssue) -> Issue {
@@ -2193,6 +2238,24 @@ pub struct PollData {
 /// Replaces 3 separate IPC calls (bd_list + bd_list(closed) + bd_ready) with one.
 #[tauri::command]
 async fn bd_poll_data(cwd: Option<String>) -> Result<PollData, String> {
+    if is_builtin_backend() {
+        return with_engine(cwd.as_deref(), |engine| {
+            let all_issues = engine.list_issues(Some("all"))
+                .map_err(|e| format!("list_issues: {}", e))?;
+            let (open_raw, closed_raw): (Vec<_>, Vec<_>) = all_issues
+                .into_iter()
+                .partition(|i| i.status != "closed" && i.status != "tombstone");
+            let ready_raw = engine.list_ready_issues()
+                .map_err(|e| format!("list_ready_issues: {}", e))?;
+
+            Ok(PollData {
+                open_issues: open_raw.into_iter().map(tracker::convert::tracker_issue_to_issue).collect(),
+                closed_issues: closed_raw.into_iter().map(tracker::convert::tracker_issue_to_issue).collect(),
+                ready_issues: ready_raw.into_iter().map(tracker::convert::tracker_issue_to_issue).collect(),
+            })
+        });
+    }
+
     log_info!("[bd_poll_data] Batched poll starting");
 
     let cwd_ref = cwd.as_deref();
@@ -2320,6 +2383,61 @@ fn get_beads_mtime(beads_dir: &std::path::Path) -> Option<std::time::SystemTime>
     }
 }
 
+// ============================================================================
+// Built-in tracker backend commands
+// ============================================================================
+
+#[tauri::command]
+async fn get_backend_mode() -> String {
+    BACKEND_MODE.lock().unwrap().clone()
+}
+
+#[tauri::command]
+async fn set_backend_mode(mode: String) -> Result<(), String> {
+    match mode.as_str() {
+        "bd" | "br" | "built-in" => {
+            let mut m = BACKEND_MODE.lock().unwrap();
+            *m = mode;
+            Ok(())
+        }
+        _ => Err(format!("Invalid backend mode: {}. Must be 'bd', 'br', or 'built-in'.", mode)),
+    }
+}
+
+#[tauri::command]
+async fn tracker_init(cwd: Option<String>) -> Result<(), String> {
+    let project_path = cwd
+        .or_else(|| env::var("BEADS_PATH").ok())
+        .unwrap_or_else(|| {
+            env::current_dir()
+                .map(|p| p.to_string_lossy().to_string())
+                .unwrap_or_else(|_| ".".to_string())
+        });
+    let path = std::path::Path::new(&project_path);
+    let config = tracker::ProjectConfig::load(path);
+    let engine = tracker::Engine::init(path, config)
+        .map_err(|e| format!("Failed to initialize tracker: {}", e))?;
+
+    let mut engines = TRACKER_ENGINES.lock().unwrap();
+    engines.insert(project_path, engine);
+    Ok(())
+}
+
+#[tauri::command]
+async fn tracker_detect(cwd: Option<String>) -> Result<bool, String> {
+    let project_path = cwd
+        .or_else(|| env::var("BEADS_PATH").ok())
+        .unwrap_or_else(|| {
+            env::current_dir()
+                .map(|p| p.to_string_lossy().to_string())
+                .unwrap_or_else(|_| ".".to_string())
+        });
+    let tracker_db = std::path::Path::new(&project_path)
+        .join(".tracker")
+        .join("tracker.db");
+    Ok(tracker_db.exists())
+}
+
 /// Check if the beads database has changed since last check (via filesystem mtime).
 /// Returns true if changes detected or if this is the first check.
 /// This is extremely cheap — just a few stat() calls, no bd process spawns.
@@ -2332,6 +2450,35 @@ async fn bd_check_changed(cwd: Option<String>) -> Result<bool, String> {
                 .map(|p| p.to_string_lossy().to_string())
                 .unwrap_or_else(|_| ".".to_string())
         });
+
+    // Built-in backend: check .tracker/tracker.db mtime instead of .beads/
+    if is_builtin_backend() {
+        let tracker_db = std::path::Path::new(&working_dir)
+            .join(".tracker")
+            .join("tracker.db");
+        let current_mtime = fs::metadata(&tracker_db)
+            .and_then(|m| m.modified())
+            .ok();
+
+        let mut map = LAST_KNOWN_MTIME.lock().unwrap();
+        let previous = map.get(&working_dir).copied();
+
+        return match (current_mtime, previous) {
+            (Some(current), Some(prev)) => {
+                if current != prev {
+                    map.insert(working_dir, current);
+                    Ok(true)
+                } else {
+                    Ok(false)
+                }
+            }
+            (Some(current), None) => {
+                map.insert(working_dir, current);
+                Ok(true)
+            }
+            (None, _) => Ok(true),
+        };
+    }
 
     let beads_dir = std::path::Path::new(&working_dir).join(".beads");
     let current_mtime = get_beads_mtime(&beads_dir);
@@ -2380,6 +2527,49 @@ async fn bd_reset_mtime(cwd: Option<String>) -> Result<(), String> {
 
 #[tauri::command]
 async fn bd_list(options: ListOptions) -> Result<Vec<Issue>, String> {
+    if is_builtin_backend() {
+        return with_engine(options.cwd.as_deref(), |engine| {
+            // Determine status filter
+            let status_filter = if options.include_all.unwrap_or(false) {
+                Some("all")
+            } else if let Some(ref statuses) = options.status {
+                if statuses.len() == 1 {
+                    // Single status: pass directly
+                    Some(statuses[0].as_str())
+                } else {
+                    Some("all") // Multi-status: fetch all, filter in-memory
+                }
+            } else {
+                None // Default: open only
+            };
+
+            let mut issues = engine.list_issues(status_filter)
+                .map_err(|e| format!("list_issues: {}", e))?;
+
+            // In-memory filtering for type, priority, assignee, multi-status
+            if let Some(ref statuses) = options.status {
+                if statuses.len() > 1 {
+                    issues.retain(|i| statuses.contains(&i.status));
+                }
+            }
+            if let Some(ref types) = options.issue_type {
+                if !types.is_empty() {
+                    issues.retain(|i| types.contains(&i.issue_type));
+                }
+            }
+            if let Some(ref priorities) = options.priority {
+                if !priorities.is_empty() {
+                    issues.retain(|i| priorities.contains(&i.priority));
+                }
+            }
+            if let Some(ref assignee) = options.assignee {
+                issues.retain(|i| i.assignee.as_deref() == Some(assignee.as_str()));
+            }
+
+            Ok(issues.into_iter().map(tracker::convert::tracker_issue_to_issue).collect())
+        });
+    }
+
     log_info!("[bd_list] cwd: {:?}", options.cwd);
 
     // Sync database before reading to ensure data is up-to-date
@@ -2444,6 +2634,42 @@ async fn bd_list(options: ListOptions) -> Result<Vec<Issue>, String> {
 
 #[tauri::command]
 async fn bd_count(options: CwdOptions) -> Result<CountResult, String> {
+    if is_builtin_backend() {
+        return with_engine(options.cwd.as_deref(), |engine| {
+            let issues = engine.list_issues(Some("all"))
+                .map_err(|e| format!("list_issues: {}", e))?;
+
+            let mut by_type: HashMap<String, usize> = HashMap::new();
+            for t in &["bug", "task", "feature", "epic", "chore"] {
+                by_type.insert(t.to_string(), 0);
+            }
+            let mut by_priority: HashMap<String, usize> = HashMap::new();
+            for p in &["p0", "p1", "p2", "p3", "p4"] {
+                by_priority.insert(p.to_string(), 0);
+            }
+            let mut last_updated: Option<String> = None;
+
+            for issue in &issues {
+                if let Some(count) = by_type.get_mut(&issue.issue_type) {
+                    *count += 1;
+                }
+                if let Some(count) = by_priority.get_mut(&issue.priority) {
+                    *count += 1;
+                }
+                if last_updated.is_none() || issue.updated_at > *last_updated.as_ref().unwrap() {
+                    last_updated = Some(issue.updated_at.clone());
+                }
+            }
+
+            Ok(CountResult {
+                count: issues.len(),
+                by_type,
+                by_priority,
+                last_updated,
+            })
+        });
+    }
+
     // Sync database before reading to ensure data is up-to-date
     sync_bd_database(options.cwd.as_deref());
 
@@ -2501,6 +2727,14 @@ async fn bd_count(options: CwdOptions) -> Result<CountResult, String> {
 
 #[tauri::command]
 async fn bd_ready(options: CwdOptions) -> Result<Vec<Issue>, String> {
+    if is_builtin_backend() {
+        return with_engine(options.cwd.as_deref(), |engine| {
+            let issues = engine.list_ready_issues()
+                .map_err(|e| format!("list_ready_issues: {}", e))?;
+            Ok(issues.into_iter().map(tracker::convert::tracker_issue_to_issue).collect())
+        });
+    }
+
     log_info!("[bd_ready] Called with cwd: {:?}", options.cwd);
 
     // Sync database before reading to ensure data is up-to-date
@@ -2524,6 +2758,27 @@ async fn bd_status(options: CwdOptions) -> Result<serde_json::Value, String> {
 
 #[tauri::command]
 async fn bd_show(id: String, options: CwdOptions) -> Result<Option<Issue>, String> {
+    if is_builtin_backend() {
+        return with_engine(options.cwd.as_deref(), |engine| {
+            match engine.get_issue(&id) {
+                Ok(ti) => {
+                    let mut issue = tracker::convert::tracker_issue_to_issue(ti);
+                    // Enrich with children
+                    if let Ok(children) = engine.list_children(&id) {
+                        if !children.is_empty() {
+                            issue.children = Some(
+                                children.iter().map(tracker::convert::tracker_issue_to_child).collect()
+                            );
+                        }
+                    }
+                    Ok(Some(issue))
+                }
+                Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+                Err(e) => Err(format!("get_issue: {}", e)),
+            }
+        });
+    }
+
     log_info!("[bd_show] Called for issue: {} with cwd: {:?}", id, options.cwd);
 
     // Sync database before reading to ensure data is up-to-date
@@ -2570,6 +2825,15 @@ async fn bd_show(id: String, options: CwdOptions) -> Result<Option<Issue>, Strin
 
 #[tauri::command]
 async fn bd_create(payload: CreatePayload) -> Result<Option<Issue>, String> {
+    if is_builtin_backend() {
+        return with_engine(payload.cwd.as_deref(), |engine| {
+            let params = tracker::convert::create_payload_to_params(&payload);
+            let ti = engine.create_issue(params)
+                .map_err(|e| format!("create_issue: {}", e))?;
+            Ok(Some(tracker::convert::tracker_issue_to_issue(ti)))
+        });
+    }
+
     log_info!("[bd_create] Creating issue: {:?}", payload.title);
     let mut args: Vec<String> = vec![payload.title.clone()];
 
@@ -2638,6 +2902,15 @@ async fn bd_create(payload: CreatePayload) -> Result<Option<Issue>, String> {
 
 #[tauri::command]
 async fn bd_update(id: String, updates: UpdatePayload) -> Result<Option<Issue>, String> {
+    if is_builtin_backend() {
+        return with_engine(updates.cwd.as_deref(), |engine| {
+            let params = tracker::convert::update_payload_to_params(&updates);
+            let ti = engine.update_issue(&id, params)
+                .map_err(|e| format!("update_issue: {}", e))?;
+            Ok(Some(tracker::convert::tracker_issue_to_issue(ti)))
+        });
+    }
+
     // Always log update calls for debugging (regardless of LOGGING_ENABLED)
     log::info!("[bd_update] Updating issue: {} with cwd: {:?}", id, updates.cwd);
     log::info!("[bd_update] Updates: status={:?}, title={:?}, type={:?}", updates.status, updates.title, updates.issue_type);
@@ -2764,6 +3037,15 @@ async fn bd_update(id: String, updates: UpdatePayload) -> Result<Option<Issue>, 
 
 #[tauri::command]
 async fn bd_close(id: String, options: CwdOptions) -> Result<serde_json::Value, String> {
+    if is_builtin_backend() {
+        return with_engine(options.cwd.as_deref(), |engine| {
+            let ti = engine.close_issue(&id)
+                .map_err(|e| format!("close_issue: {}", e))?;
+            serde_json::to_value(tracker::convert::tracker_issue_to_issue(ti))
+                .map_err(|e| format!("serialize: {}", e))
+        });
+    }
+
     log_info!("[bd_close] Closing issue: {} with cwd: {:?}", id, options.cwd);
 
     let mut args = vec![id.clone()];
@@ -2788,6 +3070,21 @@ async fn bd_close(id: String, options: CwdOptions) -> Result<serde_json::Value, 
 
 #[tauri::command]
 async fn bd_search(query: String, options: CwdOptions) -> Result<Vec<Issue>, String> {
+    if is_builtin_backend() {
+        return with_engine(options.cwd.as_deref(), |engine| {
+            let results = engine.search(&query, Some(50))
+                .map_err(|e| format!("search: {}", e))?;
+            // Fetch full issues for each search result
+            let mut issues = Vec::with_capacity(results.len());
+            for result in results {
+                if let Ok(ti) = engine.get_issue(&result.issue_id) {
+                    issues.push(tracker::convert::tracker_issue_to_issue(ti));
+                }
+            }
+            Ok(issues)
+        });
+    }
+
     log_info!("[bd_search] Searching for: {} with cwd: {:?}", query, options.cwd);
 
     let args = vec![query];
@@ -2811,6 +3108,12 @@ async fn bd_search(query: String, options: CwdOptions) -> Result<Vec<Issue>, Str
 
 #[tauri::command]
 async fn bd_label_add(id: String, label: String, options: CwdOptions) -> Result<(), String> {
+    if is_builtin_backend() {
+        return with_engine(options.cwd.as_deref(), |engine| {
+            engine.add_label(&id, &label)
+                .map_err(|e| format!("add_label: {}", e))
+        });
+    }
     log_info!("[bd_label_add] Adding label '{}' to issue {}", label, id);
     let args = vec![id, label];
     execute_bd("label add", &args, options.cwd.as_deref())?;
@@ -2819,6 +3122,12 @@ async fn bd_label_add(id: String, label: String, options: CwdOptions) -> Result<
 
 #[tauri::command]
 async fn bd_label_remove(id: String, label: String, options: CwdOptions) -> Result<(), String> {
+    if is_builtin_backend() {
+        return with_engine(options.cwd.as_deref(), |engine| {
+            engine.remove_label(&id, &label)
+                .map_err(|e| format!("remove_label: {}", e))
+        });
+    }
     log_info!("[bd_label_remove] Removing label '{}' from issue {}", label, id);
     let args = vec![id, label];
     execute_bd("label remove", &args, options.cwd.as_deref())?;
@@ -2827,15 +3136,24 @@ async fn bd_label_remove(id: String, label: String, options: CwdOptions) -> Resu
 
 #[tauri::command]
 async fn bd_delete(id: String, options: CwdOptions) -> Result<serde_json::Value, String> {
-    let mut args = vec![id.clone(), "--force".to_string()];
-    if supports_delete_hard_flag() {
-        args.push("--hard".to_string());
-    }
-    log::info!("[bd_delete] Deleting issue: {} with args: {:?}", id, args);
-    execute_bd("delete", &args, options.cwd.as_deref())?;
+    if is_builtin_backend() {
+        with_engine(options.cwd.as_deref(), |engine| {
+            engine.delete_issue(&id, true)
+                .map_err(|e| format!("delete_issue: {}", e))?;
+            Ok(serde_json::json!({ "success": true, "id": id }))
+        })?;
+        // Fall through to attachment cleanup below
+    } else {
+        let mut args = vec![id.clone(), "--force".to_string()];
+        if supports_delete_hard_flag() {
+            args.push("--hard".to_string());
+        }
+        log::info!("[bd_delete] Deleting issue: {} with args: {:?}", id, args);
+        execute_bd("delete", &args, options.cwd.as_deref())?;
 
-    // Sync after delete to push deletion to remote and prevent resurrection
-    sync_bd_database(options.cwd.as_deref());
+        // Sync after delete to push deletion to remote and prevent resurrection
+        sync_bd_database(options.cwd.as_deref());
+    }
 
     // Clean up attachments folder for this issue
     let project_path = options.cwd.as_deref().unwrap_or(".");
@@ -2868,6 +3186,15 @@ async fn bd_delete(id: String, options: CwdOptions) -> Result<serde_json::Value,
 
 #[tauri::command]
 async fn bd_comments_add(id: String, content: String, options: CwdOptions) -> Result<serde_json::Value, String> {
+    if is_builtin_backend() {
+        return with_engine(options.cwd.as_deref(), |engine| {
+            // Use a default actor for now
+            engine.add_comment(&id, "user", &content)
+                .map_err(|e| format!("add_comment: {}", e))?;
+            Ok(serde_json::json!({ "success": true }))
+        });
+    }
+
     let args = vec![id, content];
 
     execute_bd("comments add", &args, options.cwd.as_deref())?;
@@ -2877,6 +3204,14 @@ async fn bd_comments_add(id: String, content: String, options: CwdOptions) -> Re
 
 #[tauri::command]
 async fn bd_dep_add(issue_id: String, blocker_id: String, options: CwdOptions) -> Result<serde_json::Value, String> {
+    if is_builtin_backend() {
+        return with_engine(options.cwd.as_deref(), |engine| {
+            engine.add_dependency(&issue_id, &blocker_id, "blocks")
+                .map_err(|e| format!("add_dependency: {}", e))?;
+            Ok(serde_json::json!({ "success": true }))
+        });
+    }
+
     let args = vec![issue_id, blocker_id];
 
     execute_bd("dep add", &args, options.cwd.as_deref())?;
@@ -2886,6 +3221,14 @@ async fn bd_dep_add(issue_id: String, blocker_id: String, options: CwdOptions) -
 
 #[tauri::command]
 async fn bd_dep_remove(issue_id: String, blocker_id: String, options: CwdOptions) -> Result<serde_json::Value, String> {
+    if is_builtin_backend() {
+        return with_engine(options.cwd.as_deref(), |engine| {
+            engine.remove_dependency(&issue_id, &blocker_id)
+                .map_err(|e| format!("remove_dependency: {}", e))?;
+            Ok(serde_json::json!({ "success": true }))
+        });
+    }
+
     let args = vec![issue_id, blocker_id];
 
     execute_bd("dep remove", &args, options.cwd.as_deref())?;
@@ -2895,6 +3238,14 @@ async fn bd_dep_remove(issue_id: String, blocker_id: String, options: CwdOptions
 
 #[tauri::command]
 async fn bd_dep_add_relation(id1: String, id2: String, relation_type: String, options: CwdOptions) -> Result<serde_json::Value, String> {
+    if is_builtin_backend() {
+        return with_engine(options.cwd.as_deref(), |engine| {
+            engine.add_dependency(&id1, &id2, &relation_type)
+                .map_err(|e| format!("add_dependency: {}", e))?;
+            Ok(serde_json::json!({ "success": true }))
+        });
+    }
+
     let args = vec![id1, id2, "--type".to_string(), relation_type];
 
     execute_bd("dep add", &args, options.cwd.as_deref())?;
@@ -2904,6 +3255,14 @@ async fn bd_dep_add_relation(id1: String, id2: String, relation_type: String, op
 
 #[tauri::command]
 async fn bd_dep_remove_relation(id1: String, id2: String, options: CwdOptions) -> Result<serde_json::Value, String> {
+    if is_builtin_backend() {
+        return with_engine(options.cwd.as_deref(), |engine| {
+            engine.remove_dependency(&id1, &id2)
+                .map_err(|e| format!("remove_dependency: {}", e))?;
+            Ok(serde_json::json!({ "success": true }))
+        });
+    }
+
     let args = vec![id1, id2];
 
     execute_bd("dep remove", &args, options.cwd.as_deref())?;
@@ -2928,12 +3287,17 @@ async fn bd_available_relation_types() -> Vec<serde_json::Value> {
         ("validates", "Validates"),
     ];
 
-    let types = match get_cli_client_info() {
-        Some((CliClient::Br, _, _, _)) => common,
-        _ => {
-            let mut all = common;
-            all.extend(bd_only);
-            all
+    let types = if is_builtin_backend() {
+        // Built-in backend supports all common types (same as br)
+        common
+    } else {
+        match get_cli_client_info() {
+            Some((CliClient::Br, _, _, _)) => common,
+            _ => {
+                let mut all = common;
+                all.extend(bd_only);
+                all
+            }
         }
     };
 
@@ -4736,6 +5100,10 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            get_backend_mode,
+            set_backend_mode,
+            tracker_init,
+            tracker_detect,
             bd_sync,
             bd_repair_database,
             bd_migrate_to_dolt,

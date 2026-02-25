@@ -294,6 +294,69 @@ pub fn delete_issue(conn: &Connection, id: &str, hard: bool) -> Result<()> {
     Ok(())
 }
 
+/// List "ready" issues: open/in_progress issues that are NOT blocked by any other issue.
+pub fn list_ready_issues(conn: &Connection) -> Result<Vec<TrackerIssue>> {
+    let sql =
+        "SELECT i.id, i.title, i.body, i.issue_type, i.status, i.priority,
+                i.assignee, i.author, i.created_at, i.updated_at, i.closed_at,
+                i.external_ref, i.estimate_minutes, i.design, i.acceptance_criteria,
+                i.notes, i.parent, i.metadata, i.spec_id,
+                (SELECT COUNT(*) FROM comments c WHERE c.issue_id = i.id) AS comment_count,
+                (SELECT COUNT(*) FROM dependencies d WHERE d.to_id = i.id AND d.dep_type = 'blocks') AS dependency_count,
+                (SELECT COUNT(*) FROM dependencies d WHERE d.from_id = i.id AND d.dep_type = 'blocks') AS dependent_count
+         FROM issues i
+         WHERE i.status IN ('open', 'in_progress')
+           AND NOT EXISTS (
+               SELECT 1 FROM dependencies d
+               JOIN issues blocker ON blocker.id = d.from_id
+               WHERE d.to_id = i.id
+                 AND d.dep_type = 'blocks'
+                 AND blocker.status NOT IN ('closed', 'tombstone')
+           )
+         ORDER BY i.created_at DESC";
+
+    let mut stmt = conn.prepare(sql)?;
+    let raw_issues: Vec<TrackerIssue> = stmt
+        .query_map([], |row| row_to_issue(row, false))?
+        .collect::<Result<Vec<_>>>()?;
+
+    let mut issues = Vec::with_capacity(raw_issues.len());
+    for mut issue in raw_issues {
+        issue.labels = fetch_labels(conn, &issue.id)?;
+        issues.push(issue);
+    }
+
+    Ok(issues)
+}
+
+/// List child issues of a parent issue.
+pub fn list_children(conn: &Connection, parent_id: &str) -> Result<Vec<TrackerIssue>> {
+    let sql =
+        "SELECT i.id, i.title, i.body, i.issue_type, i.status, i.priority,
+                i.assignee, i.author, i.created_at, i.updated_at, i.closed_at,
+                i.external_ref, i.estimate_minutes, i.design, i.acceptance_criteria,
+                i.notes, i.parent, i.metadata, i.spec_id,
+                (SELECT COUNT(*) FROM comments c WHERE c.issue_id = i.id) AS comment_count,
+                (SELECT COUNT(*) FROM dependencies d WHERE d.to_id = i.id AND d.dep_type = 'blocks') AS dependency_count,
+                (SELECT COUNT(*) FROM dependencies d WHERE d.from_id = i.id AND d.dep_type = 'blocks') AS dependent_count
+         FROM issues i
+         WHERE i.parent = ?1
+         ORDER BY i.created_at DESC";
+
+    let mut stmt = conn.prepare(sql)?;
+    let raw_issues: Vec<TrackerIssue> = stmt
+        .query_map([parent_id], |row| row_to_issue(row, false))?
+        .collect::<Result<Vec<_>>>()?;
+
+    let mut issues = Vec::with_capacity(raw_issues.len());
+    for mut issue in raw_issues {
+        issue.labels = fetch_labels(conn, &issue.id)?;
+        issues.push(issue);
+    }
+
+    Ok(issues)
+}
+
 // --- Internal helpers ---
 
 fn row_to_issue(row: &rusqlite::Row, _full: bool) -> rusqlite::Result<TrackerIssue> {
@@ -1103,5 +1166,136 @@ mod tests {
         assert_eq!(b.blocked_by, vec![issue_a.id.clone()]);
         assert!(b.blocks.is_empty());
         assert_eq!(b.dependency_count, 1); // B is blocked by 1 issue
+    }
+
+    #[test]
+    fn test_list_ready_issues() {
+        let conn = setup_db();
+        let a = make_issue(&conn, "Unblocked issue");
+        let b = make_issue(&conn, "Blocked issue");
+
+        // A blocks B
+        add_dependency(&conn, &a.id, &b.id, "blocks").unwrap();
+
+        let ready = list_ready_issues(&conn).unwrap();
+        // Only A should be ready (B is blocked)
+        assert_eq!(ready.len(), 1);
+        assert_eq!(ready[0].id, a.id);
+    }
+
+    #[test]
+    fn test_list_ready_excludes_closed() {
+        let conn = setup_db();
+        let a = make_issue(&conn, "Open issue");
+        make_issue(&conn, "Another open");
+
+        // Close A
+        close_issue(&conn, &a.id).unwrap();
+
+        let ready = list_ready_issues(&conn).unwrap();
+        // Only the remaining open issue should be ready
+        assert_eq!(ready.len(), 1);
+        assert_eq!(ready[0].title, "Another open");
+    }
+
+    #[test]
+    fn test_list_ready_unblocked_when_blocker_closed() {
+        let conn = setup_db();
+        let a = make_issue(&conn, "Blocker");
+        let b = make_issue(&conn, "Blocked");
+
+        add_dependency(&conn, &a.id, &b.id, "blocks").unwrap();
+
+        // B is blocked
+        let ready = list_ready_issues(&conn).unwrap();
+        assert!(ready.iter().all(|i| i.id != b.id));
+
+        // Close blocker A — B should become ready
+        close_issue(&conn, &a.id).unwrap();
+        let ready = list_ready_issues(&conn).unwrap();
+        assert!(ready.iter().any(|i| i.id == b.id));
+    }
+
+    #[test]
+    fn test_list_children() {
+        let conn = setup_db();
+        let parent = create_issue(
+            &conn,
+            "test",
+            CreateIssueParams {
+                title: "Parent epic".to_string(),
+                body: None,
+                issue_type: Some("epic".to_string()),
+                status: None,
+                priority: None,
+                assignee: None,
+                author: None,
+                labels: None,
+                external_ref: None,
+                estimate_minutes: None,
+                design: None,
+                acceptance_criteria: None,
+                notes: None,
+                parent: None,
+                metadata: None,
+                spec_id: None,
+            },
+        )
+        .unwrap();
+
+        let child1 = create_issue(
+            &conn,
+            "test",
+            CreateIssueParams {
+                title: "Child 1".to_string(),
+                body: None,
+                issue_type: None,
+                status: None,
+                priority: None,
+                assignee: None,
+                author: None,
+                labels: None,
+                external_ref: None,
+                estimate_minutes: None,
+                design: None,
+                acceptance_criteria: None,
+                notes: None,
+                parent: Some(parent.id.clone()),
+                metadata: None,
+                spec_id: None,
+            },
+        )
+        .unwrap();
+
+        let _child2 = create_issue(
+            &conn,
+            "test",
+            CreateIssueParams {
+                title: "Child 2".to_string(),
+                body: None,
+                issue_type: None,
+                status: None,
+                priority: None,
+                assignee: None,
+                author: None,
+                labels: None,
+                external_ref: None,
+                estimate_minutes: None,
+                design: None,
+                acceptance_criteria: None,
+                notes: None,
+                parent: Some(parent.id.clone()),
+                metadata: None,
+                spec_id: None,
+            },
+        )
+        .unwrap();
+
+        // Unrelated issue
+        make_issue(&conn, "Unrelated");
+
+        let children = list_children(&conn, &parent.id).unwrap();
+        assert_eq!(children.len(), 2);
+        assert!(children.iter().any(|c| c.id == child1.id));
     }
 }

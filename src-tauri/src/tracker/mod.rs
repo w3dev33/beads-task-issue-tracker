@@ -1,4 +1,5 @@
 mod config;
+pub mod convert;
 mod db;
 mod export;
 mod ids;
@@ -178,6 +179,16 @@ impl Engine {
     /// Full-text search across issue titles, bodies, and notes.
     pub fn search(&self, query: &str, limit: Option<usize>) -> rusqlite::Result<Vec<SearchResult>> {
         search::search(&self.conn, query, limit.unwrap_or(50))
+    }
+
+    /// List "ready" issues: open/in_progress issues not blocked by any open issue.
+    pub fn list_ready_issues(&self) -> rusqlite::Result<Vec<TrackerIssue>> {
+        issues::list_ready_issues(&self.conn)
+    }
+
+    /// List child issues of a parent issue.
+    pub fn list_children(&self, parent_id: &str) -> rusqlite::Result<Vec<TrackerIssue>> {
+        issues::list_children(&self.conn, parent_id)
     }
 
     fn db_path(project_path: &Path, config: &ProjectConfig) -> PathBuf {
