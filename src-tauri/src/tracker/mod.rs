@@ -1,5 +1,6 @@
 mod config;
 mod db;
+mod export;
 mod ids;
 mod issues;
 mod search;
@@ -27,10 +28,9 @@ const GITIGNORE_CONTENT: &str = "\
 /// The built-in tracker engine. Manages a SQLite database inside a project's
 /// `.tracker/` directory.
 pub struct Engine {
-    #[allow(dead_code)]
     conn: Connection,
-    #[allow(dead_code)]
     config: ProjectConfig,
+    project_path: PathBuf,
 }
 
 impl Engine {
@@ -43,7 +43,11 @@ impl Engine {
         let conn = db::open_connection(&db_path)?;
         db::ensure_schema(&conn)?;
 
-        Ok(Self { conn, config })
+        Ok(Self {
+            conn,
+            config,
+            project_path: project_path.to_path_buf(),
+        })
     }
 
     /// Initialize a new tracker in `project_path/.tracker/`.
@@ -67,7 +71,18 @@ impl Engine {
         let conn = db::open_connection(&db_path)?;
         db::ensure_schema(&conn)?;
 
-        Ok(Self { conn, config })
+        Ok(Self {
+            conn,
+            config,
+            project_path: project_path.to_path_buf(),
+        })
+    }
+
+    /// Best-effort JSONL export after every write mutation.
+    fn export_jsonl(&self) {
+        if let Err(e) = export::export_all(&self.conn, &self.config, &self.project_path) {
+            log::warn!("[tracker] JSONL export failed: {}", e);
+        }
     }
 
     /// List issues, optionally filtered by status ("open", "closed", "all").
@@ -82,22 +97,30 @@ impl Engine {
 
     /// Create a new issue. ID is auto-generated from the config prefix.
     pub fn create_issue(&self, params: CreateIssueParams) -> rusqlite::Result<TrackerIssue> {
-        issues::create_issue(&self.conn, &self.config.issue_prefix, params)
+        let result = issues::create_issue(&self.conn, &self.config.issue_prefix, params)?;
+        self.export_jsonl();
+        Ok(result)
     }
 
     /// Update an existing issue. Only provided fields are modified.
     pub fn update_issue(&self, id: &str, params: UpdateIssueParams) -> rusqlite::Result<TrackerIssue> {
-        issues::update_issue(&self.conn, id, params)
+        let result = issues::update_issue(&self.conn, id, params)?;
+        self.export_jsonl();
+        Ok(result)
     }
 
     /// Close an issue (set status=closed, closed_at=now).
     pub fn close_issue(&self, id: &str) -> rusqlite::Result<TrackerIssue> {
-        issues::close_issue(&self.conn, id)
+        let result = issues::close_issue(&self.conn, id)?;
+        self.export_jsonl();
+        Ok(result)
     }
 
     /// Delete an issue. Hard delete removes the row; soft delete sets status=tombstone.
     pub fn delete_issue(&self, id: &str, hard: bool) -> rusqlite::Result<()> {
-        issues::delete_issue(&self.conn, id, hard)
+        issues::delete_issue(&self.conn, id, hard)?;
+        self.export_jsonl();
+        Ok(())
     }
 
     /// Add a comment to an issue.
@@ -107,22 +130,30 @@ impl Engine {
         author: &str,
         body: &str,
     ) -> rusqlite::Result<TrackerComment> {
-        issues::add_comment(&self.conn, issue_id, author, body)
+        let result = issues::add_comment(&self.conn, issue_id, author, body)?;
+        self.export_jsonl();
+        Ok(result)
     }
 
     /// Delete a comment by ID.
     pub fn delete_comment(&self, comment_id: &str) -> rusqlite::Result<()> {
-        issues::delete_comment(&self.conn, comment_id)
+        issues::delete_comment(&self.conn, comment_id)?;
+        self.export_jsonl();
+        Ok(())
     }
 
     /// Add a label to an issue (idempotent).
     pub fn add_label(&self, issue_id: &str, label: &str) -> rusqlite::Result<()> {
-        issues::add_label(&self.conn, issue_id, label)
+        issues::add_label(&self.conn, issue_id, label)?;
+        self.export_jsonl();
+        Ok(())
     }
 
     /// Remove a label from an issue.
     pub fn remove_label(&self, issue_id: &str, label: &str) -> rusqlite::Result<()> {
-        issues::remove_label(&self.conn, issue_id, label)
+        issues::remove_label(&self.conn, issue_id, label)?;
+        self.export_jsonl();
+        Ok(())
     }
 
     /// Add a dependency/relation between two issues.
@@ -132,12 +163,16 @@ impl Engine {
         to_id: &str,
         dep_type: &str,
     ) -> rusqlite::Result<()> {
-        issues::add_dependency(&self.conn, from_id, to_id, dep_type)
+        issues::add_dependency(&self.conn, from_id, to_id, dep_type)?;
+        self.export_jsonl();
+        Ok(())
     }
 
     /// Remove a dependency between two issues.
     pub fn remove_dependency(&self, from_id: &str, to_id: &str) -> rusqlite::Result<()> {
-        issues::remove_dependency(&self.conn, from_id, to_id)
+        issues::remove_dependency(&self.conn, from_id, to_id)?;
+        self.export_jsonl();
+        Ok(())
     }
 
     /// Full-text search across issue titles, bodies, and notes.
