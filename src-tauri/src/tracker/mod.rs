@@ -26,6 +26,8 @@ const GITIGNORE_CONTENT: &str = "\
 *.db-journal
 ";
 
+const AGENTS_MD_CONTENT: &str = include_str!("agents_template.md");
+
 /// The built-in tracker engine. Manages a SQLite database inside a project's
 /// `.tracker/` directory.
 pub struct Engine {
@@ -66,6 +68,12 @@ impl Engine {
         let gitignore_path = tracker_dir.join(".gitignore");
         if !gitignore_path.exists() {
             let _ = fs::write(&gitignore_path, GITIGNORE_CONTENT);
+        }
+
+        // Write AGENTS.md (CLI reference for AI agents)
+        let agents_path = tracker_dir.join("AGENTS.md");
+        if !agents_path.exists() {
+            let _ = fs::write(&agents_path, AGENTS_MD_CONTENT);
         }
 
         let db_path = tracker_dir.join("tracker.db");
@@ -221,6 +229,10 @@ mod tests {
         let gitignore = fs::read_to_string(project_path.join(".tracker/.gitignore")).unwrap();
         assert!(gitignore.contains("*.db"));
         assert!(gitignore.contains("*.db-wal"));
+
+        // Verify AGENTS.md was created
+        let agents = fs::read_to_string(project_path.join(".tracker/AGENTS.md")).unwrap();
+        assert!(agents.contains("beads-tracker"));
 
         // Verify database file was created
         assert!(project_path.join(".tracker/tracker.db").exists());
