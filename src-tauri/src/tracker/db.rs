@@ -30,6 +30,9 @@ pub fn ensure_schema(conn: &Connection) -> Result<()> {
     if current_version < 1 {
         migrate_v1(conn)?;
     }
+    if current_version < 2 {
+        migrate_v2(conn)?;
+    }
 
     Ok(())
 }
@@ -75,13 +78,36 @@ fn migrate_v1(conn: &Connection) -> Result<()> {
         );
 
         CREATE VIRTUAL TABLE IF NOT EXISTS issues_fts USING fts5(
+            issue_id,
             title,
-            body,
-            content='issues',
-            content_rowid='rowid'
+            body
         );
 
         INSERT INTO schema_version (version) VALUES (1);
+
+        COMMIT;"
+    )?;
+
+    Ok(())
+}
+
+/// Schema version 2: add missing columns for full Issue compatibility.
+fn migrate_v2(conn: &Connection) -> Result<()> {
+    conn.execute_batch(
+        "BEGIN;
+
+        ALTER TABLE issues ADD COLUMN issue_type TEXT NOT NULL DEFAULT 'task';
+        ALTER TABLE issues ADD COLUMN assignee TEXT;
+        ALTER TABLE issues ADD COLUMN external_ref TEXT;
+        ALTER TABLE issues ADD COLUMN estimate_minutes INTEGER;
+        ALTER TABLE issues ADD COLUMN design TEXT;
+        ALTER TABLE issues ADD COLUMN acceptance_criteria TEXT;
+        ALTER TABLE issues ADD COLUMN notes TEXT;
+        ALTER TABLE issues ADD COLUMN parent TEXT;
+        ALTER TABLE issues ADD COLUMN metadata TEXT;
+        ALTER TABLE issues ADD COLUMN spec_id TEXT;
+
+        INSERT INTO schema_version (version) VALUES (2);
 
         COMMIT;"
     )?;
@@ -117,7 +143,7 @@ mod tests {
         let version: i64 = conn
             .query_row("SELECT MAX(version) FROM schema_version", [], |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 1);
+        assert_eq!(version, 2);
 
         // Verify issues table exists
         let count: i64 = conn
@@ -141,6 +167,6 @@ mod tests {
         let version: i64 = conn
             .query_row("SELECT MAX(version) FROM schema_version", [], |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 1);
+        assert_eq!(version, 2);
     }
 }

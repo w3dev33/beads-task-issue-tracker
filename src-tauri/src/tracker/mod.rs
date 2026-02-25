@@ -1,10 +1,12 @@
 mod config;
 mod db;
 mod ids;
+mod issues;
 
 pub use ids::generate_id;
 
 pub use config::ProjectConfig;
+pub use issues::{CreateIssueParams, TrackerIssue, UpdateIssueParams};
 
 use rusqlite::Connection;
 use std::fs;
@@ -62,6 +64,36 @@ impl Engine {
         db::ensure_schema(&conn)?;
 
         Ok(Self { conn, config })
+    }
+
+    /// List issues, optionally filtered by status ("open", "closed", "all").
+    pub fn list_issues(&self, status_filter: Option<&str>) -> rusqlite::Result<Vec<TrackerIssue>> {
+        issues::list_issues(&self.conn, status_filter)
+    }
+
+    /// Get a single issue by ID with full details (comments, labels, deps).
+    pub fn get_issue(&self, id: &str) -> rusqlite::Result<TrackerIssue> {
+        issues::get_issue(&self.conn, id)
+    }
+
+    /// Create a new issue. ID is auto-generated from the config prefix.
+    pub fn create_issue(&self, params: CreateIssueParams) -> rusqlite::Result<TrackerIssue> {
+        issues::create_issue(&self.conn, &self.config.issue_prefix, params)
+    }
+
+    /// Update an existing issue. Only provided fields are modified.
+    pub fn update_issue(&self, id: &str, params: UpdateIssueParams) -> rusqlite::Result<TrackerIssue> {
+        issues::update_issue(&self.conn, id, params)
+    }
+
+    /// Close an issue (set status=closed, closed_at=now).
+    pub fn close_issue(&self, id: &str) -> rusqlite::Result<TrackerIssue> {
+        issues::close_issue(&self.conn, id)
+    }
+
+    /// Delete an issue. Hard delete removes the row; soft delete sets status=tombstone.
+    pub fn delete_issue(&self, id: &str, hard: bool) -> rusqlite::Result<()> {
+        issues::delete_issue(&self.conn, id, hard)
     }
 
     fn db_path(project_path: &Path, config: &ProjectConfig) -> PathBuf {
