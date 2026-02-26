@@ -604,6 +604,24 @@ export async function bdSync(path?: string): Promise<void> {
   // Web fallback - no-op (sync not available in web mode)
 }
 
+export interface TrackerSyncResult {
+  exported: boolean
+  committed: boolean
+  pushed: boolean
+  pulled: boolean
+  importResult: {
+    inserted: number
+    updated: number
+    skipped: number
+    errors: number
+  } | null
+  conflict: boolean
+}
+
+export async function trackerSync(path?: string): Promise<TrackerSyncResult> {
+  return invoke<TrackerSyncResult>('tracker_sync', { cwd: path })
+}
+
 export interface PurgeResult {
   deletedCount: number
   deletedFolders: string[]

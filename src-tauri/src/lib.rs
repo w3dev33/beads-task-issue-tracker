@@ -2438,6 +2438,38 @@ async fn tracker_detect(cwd: Option<String>) -> Result<bool, String> {
     Ok(tracker_db.exists())
 }
 
+#[tauri::command]
+async fn tracker_sync(cwd: Option<String>) -> Result<tracker::SyncResult, String> {
+    // Enforce cooldown
+    {
+        let last = LAST_SYNC_TIME.lock().unwrap();
+        if let Some(t) = *last {
+            if t.elapsed().as_secs() < SYNC_COOLDOWN_SECS {
+                log_info!(
+                    "[tracker/sync] Skipping — cooldown active ({:.1}s ago)",
+                    t.elapsed().as_secs_f32()
+                );
+                return Ok(tracker::SyncResult {
+                    exported: false,
+                    committed: false,
+                    pushed: false,
+                    pulled: false,
+                    import_result: None,
+                    conflict: false,
+                });
+            }
+        }
+    }
+
+    let result = with_engine(cwd.as_deref(), |engine| engine.sync())?;
+
+    // Update cooldown timestamp
+    let mut last = LAST_SYNC_TIME.lock().unwrap();
+    *last = Some(Instant::now());
+
+    Ok(result)
+}
+
 /// Check if the beads database has changed since last check (via filesystem mtime).
 /// Returns true if changes detected or if this is the first check.
 /// This is extremely cheap — just a few stat() calls, no bd process spawns.
@@ -5104,6 +5136,7 @@ pub fn run() {
             set_backend_mode,
             tracker_init,
             tracker_detect,
+            tracker_sync,
             bd_sync,
             bd_repair_database,
             bd_migrate_to_dolt,

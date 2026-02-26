@@ -6,9 +6,11 @@ mod ids;
 mod import;
 mod issues;
 mod search;
+pub mod sync;
 
 pub use ids::generate_id;
 pub use import::ImportResult;
+pub use sync::SyncResult;
 
 pub use config::ProjectConfig;
 pub use issues::{
@@ -94,6 +96,11 @@ impl Engine {
         if let Err(e) = export::export_all(&self.conn, &self.config, &self.project_path) {
             log::warn!("[tracker] JSONL export failed: {}", e);
         }
+    }
+
+    /// Run a full git sync cycle: export → commit → pull → import → push.
+    pub fn sync(&self) -> Result<sync::SyncResult, String> {
+        sync::sync(&self.conn, &self.config, &self.project_path)
     }
 
     /// Import issues from a JSONL file with merge logic.
