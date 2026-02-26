@@ -1,7 +1,7 @@
 # Codebase Map - Beads Task-Issue Tracker
 
 > Auto-generated comprehensive map of the codebase for faster AI reasoning.
-> Last updated: 2026-02-22 | App version: 1.22.0
+> Last updated: 2026-02-26 | App version: 1.24.0
 
 ## Architecture Overview
 
@@ -13,12 +13,15 @@
 │  └── Right sidebar: issue detail/preview/edit           │
 ├─────────────────────────────────────────────────────────┤
 │  Tauri 2 Desktop Shell                                  │
-│  ├── Rust backend (src-tauri/src/lib.rs)                │
-│  ├── 53 Tauri commands wrapping bd CLI + per-project mutex│
+│  ├── Rust backend (src-tauri/src/lib.rs) — 75 commands  │
+│  ├── Built-in tracker engine (src-tauri/src/tracker/)   │
+│  ├── bd/br CLI bridge (legacy backend)                  │
 │  └── File watcher, logging, update checker              │
 ├─────────────────────────────────────────────────────────┤
-│  bd CLI (beads) — AI-native issue tracker                │
-│  └── .beads/ folder in each project                     │
+│  Three selectable backends per project (Settings UI):   │
+│  ├── built-in: SQLite-native via tracker::Engine        │
+│  ├── br: beads_rust CLI → .beads/                       │
+│  └── bd: beads Go CLI 0.49.x → .beads/                 │
 └─────────────────────────────────────────────────────────┘
 ```
 
@@ -51,6 +54,14 @@
 | `useBeadsPath.ts` | `useBeadsPath()` | Project path management — validates, triggers storage reload on change |
 | `useFavorites.ts` | `useProjects()` | Projects — add/remove/rename/reorder, sort modes (renamed from favorites) |
 
+#### Backend & Sync
+| File | Exports | Purpose |
+|------|---------|---------|
+| `useBackendMode.ts` | `useBackendMode()` | Backend mode switching (`br`/`bd`/`built-in`). `syncFromStorage()` syncs to Rust on mount. `ensureTrackerInit()` auto-inits `.tracker/` if needed |
+| `useCliClient.ts` | `useCliClient()` | Detects `br` vs `bd` CLI binary in use via `getCliBinaryPath` |
+| `useSyncStatus.ts` | `useSyncStatus()` | Git sync status, force sync, error dialog |
+| `useConflicts.ts` | `useConflicts()` | Module-singleton for sync conflicts; wraps `trackerGetConflicts/resolveConflict/dismissConflict`; computes `diffFields`, `parsedLocal`, `parsedRemote` for diff UI |
+
 #### UI State
 | File | Exports | Purpose |
 |------|---------|---------|
@@ -61,12 +72,14 @@
 | `useZoom.ts` | `useZoom()` | Content zoom 75-150% |
 | `useAppMenu.ts` | `useAppMenu()` | Tauri native menu bar setup |
 | `useTauriWindow.ts` | `useTauriWindow()` | Window drag for custom title bar |
+| `usePinnedIssues.ts` | `usePinnedIssues()` | Pinned issue list with sort modes (`added`, `updated`, `manual`) |
+| `useKeyboardNavigation.ts` | `useKeyboardNavigation()` | Arrow key navigation for issue list with scroll-to-focused |
 
 #### Polling & Change Detection
 | File | Exports | Purpose |
 |------|---------|---------|
 | `useAdaptivePolling.ts` | `useAdaptivePolling()` | Smart polling: 5s active, 30s blurred, 60s idle, paused when hidden. Cheap mtime check (1s) + expensive data fetch |
-| `useChangeDetection.ts` | `useChangeDetection()` | Change detection via native file watcher (Tauri events). SSE backend kept as dead code for future dashboard use. 300ms debounce + 3s cooldown |
+| `useChangeDetection.ts` | `useChangeDetection()` | Change detection via native file watcher (Tauri events). Watches `.beads/` or `.tracker/` based on backend mode. SSE backend kept as dead code. 300ms debounce + 3s cooldown |
 
 #### Page Orchestration
 | File | Exports | Purpose |
@@ -79,14 +92,15 @@
 |------|---------|---------|
 | `useImagePreview.ts` | `useImagePreview()` | Image gallery viewer — loads base64 from filesystem |
 | `useMarkdownPreview.ts` | `useMarkdownPreview()` | Markdown file viewer with edit mode + multi-file gallery |
+| `useAttachments.ts` | `useAttachments()` | Attachment management for issue detail |
 
 #### System
 | File | Exports | Purpose |
 |------|---------|---------|
 | `useUpdateChecker.ts` | `useUpdateChecker()` | App update checker via GitHub API, supports demo mode |
-| `useSyncStatus.ts` | `useSyncStatus()` | Git sync status, force sync, error dialog |
 | `useRepairDatabase.ts` | `useRepairDatabase()` | Detects SCHEMA_MIGRATION_ERROR, repairs single or all projects |
 | `useMigrateToDolt.ts` | `useMigrateToDolt()` | Detects Dolt migration needed (bd >= 0.50 with SQLite project), runs 7-step migration preserving labels/deps/comments/attachments |
+| `useMigrateRefs.ts` | `useMigrateRefs()` | Wraps `bdCheckRefsMigration`/`bdMigrateRefs` for attachment ref migration checks |
 
 ### Components (`app/components/`)
 
@@ -96,7 +110,7 @@
 | `AppHeader.vue` | Top bar: title, zoom controls, theme toggle, Tauri drag region |
 | `UpdateIndicator.vue` | Sync/watcher status badges |
 | `UpdateDialog.vue` | Available updates UI |
-| `SettingsDialog.vue` | Theme, CLI client, probe toggle (dev-only) |
+| `SettingsDialog.vue` | Theme, CLI client, backend selector, probe toggle (dev-only) |
 | `AboutDialog.vue` | App info, credits |
 | `DebugPanel.vue` | Live log viewer with filters |
 | `DebugDialog.vue` | BD CLI version, compatibility info |
@@ -155,7 +169,7 @@
 
 | File | Key Exports | Purpose |
 |------|-------------|---------|
-| `bd-api.ts` (~650 lines) | `bdList()`, `bdCreate()`, `bdUpdate()`, `bdShow()`, `bdClose()`, `bdDelete()`, `bdPollData()`, `bdCheckChanged()`, `bdSync()`, `bdMigrateToDolt()`, `bdCheckNeedsMigration()`, etc. | Tauri invoke bridge — all 53 commands. Falls back to web API in browser mode. Probe functions guarded by `isProbeEnabled()` (dev-only) |
+| `bd-api.ts` (~995 lines) | `bdList()`, `bdCreate()`, `bdUpdate()`, `bdShow()`, `bdClose()`, `bdDelete()`, `bdPollData()`, `bdCheckChanged()`, `bdSync()`, `bdMigrateToDolt()`, `bdCheckNeedsMigration()`, `trackerSync()`, `trackerDetect()`, `trackerInit()`, `trackerGetConflicts()`, `trackerResolveConflict()`, `trackerDismissConflict()`, `trackerCheckBeadsSource()`, `trackerMigrateFromBeads()`, `getBackendMode()`, `setBackendMode()`, etc. | Tauri invoke bridge — all 75 commands. Tracker types: `TrackerSyncResult`, `ConflictRecord`, `BeadsSourceInfo`, `TrackerMigrationResult`. Falls back to web API in browser mode |
 | `probe-adapter.ts` | `probeMetricsToIssues()`, `probeMetricsToPollData()`, `matchProbeProject()` | Probe response → app types adapter. `matchProbeProject()`: pure path matching with `.beads` suffix normalization |
 | `issue-helpers.ts` | `deduplicateIssues()`, `naturalCompare()`, `sortIssues()`, `filterIssues()`, `groupIssues()`, `computeStatsFromIssues()` | Pure functions extracted from useIssues + useDashboard for testability. Sorting, filtering, epic grouping, dashboard KPIs |
 | `favorites-helpers.ts` | `normalizePath()`, `deduplicateFavorites()`, `sortFavorites()`, `isFavorite()`, `createFavoriteEntry()` | Pure functions extracted from useFavorites for testability |
@@ -200,13 +214,34 @@ interface DashboardStats { total, open, inProgress, blocked, closed, ready, byTy
 
 | File | Purpose |
 |------|---------|
-| `src/lib.rs` (4140 lines) | All Tauri commands, data structures, helpers. Single-file backend |
+| `src/lib.rs` (5274 lines) | All Tauri commands, data structures, helpers. Single-file backend |
 | `src/main.rs` | Entry point — calls `lib::run()` |
+| `src/tracker/` (5114 lines, 12 modules) | Built-in SQLite-native issue tracker engine |
 | `tauri.conf.json` | Window config (1400x900, overlay title bar), bundle, CSP (connect-src includes `http://localhost:*` for probe SSE), dev port 3133 |
-| `Cargo.toml` | Deps: tauri 2.9.5, serde, reqwest, notify 7, dirs 6 |
+| `Cargo.toml` | Deps: tauri 2.9.5, serde, reqwest, notify 7, dirs 6, rusqlite (bundled) |
 | `capabilities/default.json` | Tauri capability permissions |
 
-### Tauri Commands (53 total)
+### Built-in Tracker Engine (`src/tracker/`)
+
+| Module | Lines | Purpose |
+|--------|-------|---------|
+| `mod.rs` | 313 | `Engine` struct — facade for all operations. `open`/`init`, delegates to sub-modules |
+| `config.rs` | 46 | `ProjectConfig` loader (`.tracker/config.toml`) |
+| `db.rs` | 229 | SQLite schema (v4), migrations v1→v4 (core tables, FTS5, synced_at, conflicts) |
+| `ids.rs` | 103 | ID generation — base36, 4-char suffix, collision-retry |
+| `issues.rs` | 1317 | CRUD for issues, comments, labels, deps. FTS5 insert/delete |
+| `export.rs` | 628 | JSONL export (atomic write via .tmp+rename) |
+| `import.rs` | 1033 | JSONL import with last-write-wins merge, conflict detection via synced_at |
+| `sync.rs` | 183 | Git sync cycle: export → commit → pull --rebase → import → push |
+| `conflicts.rs` | 171 | Sync conflict storage/resolution ("local" keep / "remote" apply) |
+| `migrate.rs` | 511 | `.beads/` → `.tracker/` migration (non-destructive: import JSONL, copy attachments) |
+| `search.rs` | 218 | FTS5 full-text search with prefix matching, BM25 rank, snippets |
+| `convert.rs` | 362 | Type conversion: `TrackerIssue` ↔ frontend `Issue`, payload mapping |
+| `agents_template.md` | — | AGENTS.md template embedded via `include_str!` |
+
+**SQLite schema (v4):** `issues`, `comments`, `labels`, `dependencies`, `issues_fts` (FTS5), `conflicts`, `schema_version`
+
+### Tauri Commands (75 total)
 
 #### Issue Operations
 | Command | bd CLI | Special Logic |
@@ -234,10 +269,28 @@ interface DashboardStats { total, open, inProgress, blocked, closed, ready, byTy
 #### Polling & Sync
 | Command | Purpose |
 |---------|---------|
-| `bd_check_changed` | Cheap mtime check on `.beads/` files — no CLI call. Scans nested Dolt layout (`.beads/dolt/<name>/.dolt/`) for bd 0.52+ |
+| `bd_check_changed` | Cheap mtime check — `.beads/` files (bd/br) or `.tracker/tracker.db` (built-in). No CLI call |
 | `bd_reset_mtime` | Clear mtime cache (on project switch) |
 | `bd_poll_data` | Batched: 1 sync + 3 fetches (open + closed + ready) |
 | `bd_sync` | Manual `bd sync` trigger; 10s cooldown |
+
+#### Built-in Tracker Commands (8)
+| Command | Purpose |
+|---------|---------|
+| `tracker_init` | Initialize `.tracker/` dir + DB + .gitignore + AGENTS.md |
+| `tracker_detect` | Check if `.tracker/tracker.db` exists |
+| `tracker_sync` | Full git sync cycle (export → commit → pull → import → push) with cooldown |
+| `tracker_get_conflicts` | List unresolved sync conflicts |
+| `tracker_resolve_conflict` | Apply "local" or "remote" resolution |
+| `tracker_dismiss_conflict` | Dismiss conflict without changing issue |
+| `tracker_check_beads_source` | Check `.beads/issues.jsonl` availability + count for migration |
+| `tracker_migrate_from_beads` | Full `.beads/` → `.tracker/` migration (JSONL import + attachment copy) |
+
+#### Backend Mode
+| Command | Purpose |
+|---------|---------|
+| `get_backend_mode` | Get current backend mode (`bd`/`br`/`built-in`) |
+| `set_backend_mode` | Set backend mode (updates `BACKEND_MODE` global) |
 
 #### Filesystem
 | Command | Purpose |
@@ -287,7 +340,7 @@ interface DashboardStats { total, open, inProgress, blocked, closed, ready, byTy
 #### File Watching
 | Command | Purpose |
 |---------|---------|
-| `start_watching` | Watch `.beads/` — emits `beads-changed` event (1s debounce) |
+| `start_watching` | Watch `.beads/` (bd/br) or `.tracker/` (built-in) — emits `beads-changed` event (1s debounce) |
 | `stop_watching` | Stop watcher |
 | `get_watcher_status` | Return active + watched path |
 
@@ -300,16 +353,18 @@ interface DashboardStats { total, open, inProgress, blocked, closed, ready, byTy
 
 ### Key Backend Patterns
 
-1. **CLI Client Detection** — Detects `bd` (Go) vs `br` (Rust) client from `--version` output. Cached globally. Affects: daemon flag, JSONL support, relation types. Runs `bd --version` from temp dir to avoid triggering auto-migration
-2. **Per-Project Mutex** — `BD_PROJECT_LOCKS` serializes all `bd` CLI calls per project to prevent concurrent Dolt embedded access (SIGSEGV crash in dolthub/driver)
-3. **Sync Cooldown** — 10s cooldown between `bd sync` calls via `LAST_SYNC_TIME` mutex. Dolt projects skip sync entirely (Dolt handles sync via git)
-4. **Mtime Change Detection** — Tracks `.beads/beads.db` + WAL mtime per-project. Scans nested Dolt layout (`.beads/dolt/<name>/.dolt/`) for bd 0.52+. Cheap polling without CLI calls
-5. **External Ref Sentinel** — Empty string → `cleared:{id}` to satisfy SQLite UNIQUE constraint
-6. **Issue Transform** — `BdRawIssue` → `Issue`: priority int→string, extracts parent/children/relations/blockers from dependency arrays
-7. **Tolerant Parsing** — `parse_issues_tolerant()`: tries strict JSON first, falls back to line-by-line
-8. **Path Security** — All attachment operations canonicalize paths + verify inside `.beads/attachments/`
-9. **Dolt Migration** — 7-step process: export JSONL from SQLite, backup, init Dolt, import JSONL, restore labels/deps/comments, convert attachment paths to absolute. Handles empty projects via init-only path
-10. **Dot Notation Parent-Child** — bd >= 0.50 uses structural parent-child via ID (e.g., `abc.1` is child of `abc`). Frontend derives relationships from loaded issues list instead of relying on JSON fields
+1. **Backend Mode** — `BACKEND_MODE` global (`bd`/`br`/`built-in`). `is_builtin_backend()` gates behavior in `bd_check_changed`, `bd_poll_data`, `start_watching`. Per-project setting synced from frontend on mount
+2. **Tracker Engine Pool** — `TRACKER_ENGINES: HashMap<String, tracker::Engine>` keyed by project path. `with_engine()` helper opens or reuses engine per project
+3. **CLI Client Detection** — Detects `bd` (Go) vs `br` (Rust) client from `--version` output. Cached globally. Affects: daemon flag, JSONL support, relation types. Runs `bd --version` from temp dir to avoid triggering auto-migration
+4. **Per-Project Mutex** — `BD_PROJECT_LOCKS` serializes all `bd` CLI calls per project to prevent concurrent Dolt embedded access (SIGSEGV crash in dolthub/driver)
+5. **Sync Cooldown** — 10s cooldown between `bd sync` calls via `LAST_SYNC_TIME` mutex. Dolt projects skip sync entirely (Dolt handles sync via git)
+6. **Mtime Change Detection** — Tracks `.beads/beads.db` + WAL mtime (bd/br) or `.tracker/tracker.db` (built-in) per-project. Scans nested Dolt layout for bd 0.52+. Cheap polling without CLI calls
+7. **External Ref Sentinel** — Empty string → `cleared:{id}` to satisfy SQLite UNIQUE constraint
+8. **Issue Transform** — `BdRawIssue` → `Issue`: priority int→string, extracts parent/children/relations/blockers from dependency arrays. `TrackerIssue` → `Issue` via `convert.rs`
+9. **Tolerant Parsing** — `parse_issues_tolerant()`: tries strict JSON first, falls back to line-by-line
+10. **Path Security** — All attachment operations canonicalize paths + verify inside `.beads/attachments/`
+11. **Dolt Migration** — 7-step process: export JSONL from SQLite, backup, init Dolt, import JSONL, restore labels/deps/comments, convert attachment paths to absolute. Handles empty projects via init-only path
+12. **Dot Notation Parent-Child** — bd >= 0.50 uses structural parent-child via ID (e.g., `abc.1` is child of `abc`). Frontend derives relationships from loaded issues list instead of relying on JSON fields
 
 ### Global State (Rust)
 
@@ -321,6 +376,8 @@ LAST_KNOWN_MTIME: HashMap<String, SystemTime> — per-project mtime cache
 BD_PROJECT_LOCKS: HashMap<String, Arc<Mutex<()>>> — per-project mutex (prevents concurrent Dolt SIGSEGV)
 CLI_BINARY: Mutex<String> ("bd")             — configurable CLI binary
 CLI_CLIENT_INFO: Mutex<Option<(CliClient, u32, u32, u32)>> — cached version
+BACKEND_MODE: Mutex<String> ("bd")           — active backend (bd/br/built-in)
+TRACKER_ENGINES: HashMap<String, tracker::Engine> — per-project engine pool
 ```
 
 ---
@@ -329,16 +386,24 @@ CLI_CLIENT_INFO: Mutex<Option<(CliClient, u32, u32, u32)>> — cached version
 
 ```
 User Action → Vue Component → Composable → bd-api.ts → Tauri invoke()
-  → Rust Command → bd CLI → .beads/ SQLite
+  → Rust Command → bd CLI or tracker::Engine → .beads/ or .tracker/ SQLite
   → JSON response → Rust transform → Frontend state → Reactive UI update
 
+Backend routing (bd_poll_data, bd_check_changed, etc.):
+  is_builtin_backend() → with_engine() → tracker::Engine (direct rusqlite)
+  else → bd/br CLI subprocess → parse JSON output
+
 Change Detection (useChangeDetection — native file watcher):
-  .beads/ change → notify crate → Tauri event → watcher backend
+  .beads/ or .tracker/ change → notify crate → Tauri event → watcher backend
     → pollForChanges() → bdPollData() → refresh all data
 
 Polling: useAdaptivePolling → bdCheckChanged() (mtime) → if changed → bdPollData()
   → useIssues + useDashboard update
   (30s safety-net when change detection active, 5s/1s fallback otherwise)
+
+Git Sync (built-in backend):
+  trackerSync() → export JSONL → git add/commit → pull --rebase
+    → import JSONL (last-write-wins) → detect conflicts → push
 ```
 
 ---
@@ -348,6 +413,7 @@ Polling: useAdaptivePolling → bdCheckChanged() (mtime) → if changed → bdPo
 | Setting | Location | Purpose |
 |---------|----------|---------|
 | CLI binary | `~/.config/com.beads.manager/settings.json` | bd or br path |
+| Backend mode | `localStorage beads:proj:{hash}:backendMode` | Per-project: `br`/`bd`/`built-in` |
 | Logs | `~/Library/Logs/com.beads.manager/beads.log` | Backend logs (5MB max) |
 | Project settings | `localStorage beads:proj:{hash}:*` | Filters, columns, expanded epics, collapsible states |
 | Global settings | `localStorage beads:*` | Theme, favorites, zoom, notifications |
@@ -360,17 +426,21 @@ Polling: useAdaptivePolling → bdCheckChanged() (mtime) → if changed → bdPo
 
 **Framework**: Vitest with jsdom environment | **Config**: `vitest.config.ts` | **Run**: `pnpm test` / `pnpm test:watch`
 
-### Test Files (`tests/utils/`)
+### Test Files
 
 | File | Tests | Covers |
 |------|-------|--------|
-| `markdown.test.ts` | 54 | `isImagePath`, `isMarkdownPath`, `isUrl`, `extractImagesFromMarkdown`, `extractImagesFromExternalRef`, `extractMarkdownFromExternalRef`, `extractNonImageRefs`, `renderMarkdown` |
-| `issue-helpers.test.ts` | 53 | `deduplicateIssues`, `naturalCompare`, `getParentIdFromIssue`, `compareChildIssues`, sort orders, `sortIssues`, `filterIssues`, `groupIssues`, `computeReadyIssues` |
-| `favorites-helpers.test.ts` | 22 | `normalizePath`, `deduplicateFavorites`, `sortFavorites`, `isFavorite`, `createFavoriteEntry` |
-| `path.test.ts` | 19 | `splitPath`, `getPathSeparator`, `getFolderName`, `getParentPath` |
-| `open-url.test.ts` | 19 | `isValidUrl`, `isLocalPath`, `normalizeUrl` |
-| `dashboard-stats.test.ts` | 11 | `computeStatsFromIssues` |
-| `hash.test.ts` | 6 | `hashPath` |
-| `probe-adapter.test.ts` | 8 | `matchProbeProject` — path matching with `.beads` suffix normalization |
+| `tests/utils/issue-helpers.test.ts` | 56 | `deduplicateIssues`, `naturalCompare`, `getParentIdFromIssue`, `compareChildIssues`, sort orders, `sortIssues`, `filterIssues`, `groupIssues`, `computeReadyIssues` |
+| `tests/utils/markdown.test.ts` | 42 | `isImagePath`, `isMarkdownPath`, `isUrl`, `extractImagesFromMarkdown`, `extractImagesFromExternalRef`, `extractMarkdownFromExternalRef`, `extractNonImageRefs`, `renderMarkdown` |
+| `tests/utils/favorites-helpers.test.ts` | 22 | `normalizePath`, `deduplicateFavorites`, `sortFavorites`, `isFavorite`, `createFavoriteEntry` |
+| `tests/utils/path.test.ts` | 19 | `splitPath`, `getPathSeparator`, `getFolderName`, `getParentPath` |
+| `tests/utils/open-url.test.ts` | 19 | `isValidUrl`, `isLocalPath`, `normalizeUrl` |
+| `tests/composables/useKeyboardNavigation.test.ts` | 17 | Arrow key navigation, scroll-to-focused |
+| `tests/utils/attachment-encoding.test.ts` | 14 | Attachment path encoding/decoding |
+| `tests/utils/dashboard-stats.test.ts` | 11 | `computeStatsFromIssues` |
+| `tests/utils/probe-adapter.test.ts` | 8 | `matchProbeProject` — path matching with `.beads` suffix normalization |
+| `tests/utils/hash.test.ts` | 6 | `hashPath` |
 
-**Total: 192 tests** | **Strategy**: Extract pure functions from composables into `app/utils/` for unit testing. Composables remain thin reactive wrappers.
+**Total: 214 tests** (10 files) | **Strategy**: Extract pure functions from composables into `app/utils/` for unit testing. Composables remain thin reactive wrappers.
+
+**Rust tests**: Tracker modules contain `#[cfg(test)]` blocks — run via `cargo test` in `src-tauri/`.

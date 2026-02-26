@@ -120,15 +120,30 @@ export const typeOrder: Record<string, number> = {
 
 /**
  * Sort issues by a given field and direction.
+ * Pinned issues always float to the top regardless of sort field/direction.
+ * Within pinned and non-pinned partitions, the requested sort applies normally.
  * Returns a new sorted array (does not mutate input).
  */
 export function sortIssues(issues: Issue[], field: string | null, direction: 'asc' | 'desc', pinnedIds?: string[]): Issue[] {
-  if (!field) return issues
+  const pinnedSet = new Set(pinnedIds || [])
 
+  // No sort field: just float pinned to top, keep original order otherwise
+  if (!field) {
+    if (pinnedSet.size === 0) return issues
+    const pinned = issues.filter(i => pinnedSet.has(i.id))
+    const rest = issues.filter(i => !pinnedSet.has(i.id))
+    return [...pinned, ...rest]
+  }
   const sorted = [...issues]
   const dir = direction === 'asc' ? 1 : -1
 
   sorted.sort((a, b) => {
+    // Primary: pinned issues always on top
+    const aPinned = pinnedSet.has(a.id) ? 0 : 1
+    const bPinned = pinnedSet.has(b.id) ? 0 : 1
+    if (aPinned !== bPinned) return aPinned - bPinned
+
+    // Secondary: sort by requested field within each partition
     let aVal: string | number | null = null
     let bVal: string | number | null = null
 
@@ -147,12 +162,11 @@ export function sortIssues(issues: Issue[], field: string | null, direction: 'as
         aVal = typeOrder[a.type] ?? 99
         bVal = typeOrder[b.type] ?? 99
         break
-      case 'pinned': {
-        const pinnedSet = new Set(pinnedIds || [])
-        aVal = pinnedSet.has(a.id) ? 0 : 1
-        bVal = pinnedSet.has(b.id) ? 0 : 1
+      case 'pinned':
+        // Already partitioned above — sort by updatedAt within each group
+        aVal = a.updatedAt ? new Date(a.updatedAt).getTime() : 0
+        bVal = b.updatedAt ? new Date(b.updatedAt).getTime() : 0
         break
-      }
       case 'labels':
         aVal = a.labels?.length ? a.labels[0]!.toLowerCase() : '\uffff'
         bVal = b.labels?.length ? b.labels[0]!.toLowerCase() : '\uffff'
@@ -291,9 +305,11 @@ export function groupIssues(
     }
   }
 
-  // EPICs with their children
+  // Single pass: create groups in sort order (epics stay where the sort places them)
   for (const issue of paginatedIssues) {
-    if (issue.type === 'epic' && !processedIds.has(issue.id)) {
+    if (processedIds.has(issue.id)) continue
+
+    if (issue.type === 'epic') {
       const filteredChildren = (filteredEpicChildrenMap.get(issue.id) || []).sort(compareChildIssues)
       const allChildren = (allEpicChildrenMap.get(issue.id) || []).sort(compareChildIssues)
       const closedCount = allChildren.filter(c => c.status === 'closed').length
@@ -308,23 +324,19 @@ export function groupIssues(
       })
       processedIds.add(issue.id)
       filteredChildren.forEach(c => processedIds.add(c.id))
+    } else {
+      // Skip children of visible epics (they'll be absorbed into the epic group)
+      const parentId = getParentIdFromIssue(issue)
+      if (parentId && visibleEpicIds.has(parentId)) continue
+
+      groups.push({
+        epic: null,
+        children: [issue],
+        childCount: 0,
+        closedChildCount: 0,
+      })
+      processedIds.add(issue.id)
     }
-  }
-
-  // Orphan issues
-  for (const issue of paginatedIssues) {
-    if (processedIds.has(issue.id)) continue
-
-    const parentId = getParentIdFromIssue(issue)
-    if (parentId && visibleEpicIds.has(parentId)) continue
-
-    groups.push({
-      epic: null,
-      children: [issue],
-      childCount: 0,
-      closedChildCount: 0,
-    })
-    processedIds.add(issue.id)
   }
 
   return groups

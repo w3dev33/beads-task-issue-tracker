@@ -50,6 +50,17 @@ const emit = defineEmits<{
 
 const pinnedSet = computed(() => new Set(props.pinnedIds ?? []))
 
+// Index of the first non-pinned group (for visual separator)
+const pinnedSeparatorIndex = computed(() => {
+  if (!props.groupedIssues || pinnedSet.value.size === 0) return -1
+  for (let i = 0; i < props.groupedIssues.length; i++) {
+    const group = props.groupedIssues[i]!
+    const groupId = group.epic?.id || group.children[0]?.id
+    if (groupId && !pinnedSet.value.has(groupId)) return i
+  }
+  return -1 // all pinned, no separator needed
+})
+
 // Sorting state - sync with external (composable) state if provided
 type SortDirection = 'asc' | 'desc'
 const internalSortColumn = ref<string | null>('updatedAt')
@@ -437,6 +448,15 @@ const { focusedId, setFocused, handleKeydown, isFocused } = useKeyboardNavigatio
         <!-- Hierarchical display with grouped issues -->
         <template v-if="useHierarchicalDisplay">
           <template v-for="(group, groupIndex) in groupedIssues" :key="group.epic?.id || group.children[0]?.id">
+            <!-- Pinned / non-pinned separator -->
+            <TableRow
+              v-if="groupIndex === pinnedSeparatorIndex && pinnedSeparatorIndex > 0"
+              class="hover:bg-transparent pointer-events-none"
+            >
+              <TableCell :colspan="(multiSelectMode ? 1 : 0) + columns.length" class="!p-0 h-3 bg-transparent">
+                <div class="h-[2px] bg-primary/80" />
+              </TableCell>
+            </TableRow>
             <!-- Epic row with expand/collapse -->
             <template v-if="group.epic">
               <TableRow

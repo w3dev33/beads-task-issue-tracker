@@ -227,12 +227,13 @@ describe('sortIssues', () => {
     expect(result.map(i => i.id)).toEqual(['b', 'c', 'a'])
   })
 
-  it('sorts pinned issues after unpinned (desc)', () => {
-    const a = makeIssue({ id: 'a' })
-    const b = makeIssue({ id: 'b' })
-    const c = makeIssue({ id: 'c' })
+  it('keeps pinned issues on top even in desc mode', () => {
+    const a = makeIssue({ id: 'a', updatedAt: '2025-01-01T00:00:00Z' })
+    const b = makeIssue({ id: 'b', updatedAt: '2025-01-02T00:00:00Z' })
+    const c = makeIssue({ id: 'c', updatedAt: '2025-01-03T00:00:00Z' })
     const result = sortIssues([a, b, c], 'pinned', 'desc', ['b'])
-    expect(result.map(i => i.id)).toEqual(['a', 'c', 'b'])
+    // Pinned (b) always on top; non-pinned sorted desc by updatedAt: c (Jan 3) then a (Jan 1)
+    expect(result.map(i => i.id)).toEqual(['b', 'c', 'a'])
   })
 
   it('sorts pinned without pinnedIds as no-op (all equal)', () => {
@@ -241,6 +242,18 @@ describe('sortIssues', () => {
     const result = sortIssues([a, b], 'pinned', 'asc')
     // All unpinned, falls back to natural ID sort
     expect(result.map(i => i.id)).toEqual(['a', 'b'])
+  })
+
+  it('pinned issues float to top regardless of sort field', () => {
+    const a = makeIssue({ id: 'a', priority: 'p0' })
+    const b = makeIssue({ id: 'b', priority: 'p3' })
+    const c = makeIssue({ id: 'c', priority: 'p1' })
+    // b is pinned but has lowest priority — should still be first
+    const result = sortIssues([a, b, c], 'priority', 'asc', ['b'])
+    expect(result[0]!.id).toBe('b')
+    // Non-pinned sorted by priority asc: p0 (a) then p1 (c)
+    expect(result[1]!.id).toBe('a')
+    expect(result[2]!.id).toBe('c')
   })
 
   it('sorts issues without labels last when sorting by labels', () => {
