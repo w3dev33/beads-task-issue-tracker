@@ -3,10 +3,12 @@ pub mod convert;
 mod db;
 mod export;
 mod ids;
+mod import;
 mod issues;
 mod search;
 
 pub use ids::generate_id;
+pub use import::ImportResult;
 
 pub use config::ProjectConfig;
 pub use issues::{
@@ -92,6 +94,14 @@ impl Engine {
         if let Err(e) = export::export_all(&self.conn, &self.config, &self.project_path) {
             log::warn!("[tracker] JSONL export failed: {}", e);
         }
+    }
+
+    /// Import issues from a JSONL file with merge logic.
+    /// After import, re-exports to normalize the JSONL file.
+    pub fn import_all(&self, jsonl_path: &Path) -> rusqlite::Result<ImportResult> {
+        let result = import::import_all(&self.conn, jsonl_path)?;
+        self.export_jsonl();
+        Ok(result)
     }
 
     /// List issues, optionally filtered by status ("open", "closed", "all").

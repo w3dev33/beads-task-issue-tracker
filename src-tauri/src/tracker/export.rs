@@ -1,5 +1,5 @@
 use rusqlite::{Connection, Result};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
@@ -7,74 +7,104 @@ use std::path::Path;
 use super::config::ProjectConfig;
 
 /// JSONL representation of an issue, matching bd/br format.
-#[derive(Serialize)]
-struct JsonlIssue {
-    id: String,
-    title: String,
+#[derive(Serialize, Deserialize)]
+pub(crate) struct JsonlIssue {
+    pub(crate) id: String,
+    pub(crate) title: String,
+    #[serde(default)]
     #[serde(skip_serializing_if = "String::is_empty")]
-    description: String,
-    status: String,
-    priority: i32,
-    issue_type: String,
-    created_at: String,
-    created_by: String,
-    updated_at: String,
+    pub(crate) description: String,
+    pub(crate) status: String,
+    #[serde(default = "default_priority")]
+    pub(crate) priority: i32,
+    #[serde(default = "default_issue_type")]
+    pub(crate) issue_type: String,
+    pub(crate) created_at: String,
+    #[serde(default)]
+    pub(crate) created_by: String,
+    pub(crate) updated_at: String,
+    #[serde(default)]
     #[serde(skip_serializing_if = "Option::is_none")]
-    closed_at: Option<String>,
+    pub(crate) closed_at: Option<String>,
+    #[serde(default)]
     #[serde(skip_serializing_if = "Option::is_none")]
-    close_reason: Option<String>,
+    pub(crate) close_reason: Option<String>,
+    #[serde(default)]
     #[serde(skip_serializing_if = "Option::is_none")]
-    owner: Option<String>,
-    source_repo: String,
-    compaction_level: i32,
-    original_size: i32,
+    pub(crate) owner: Option<String>,
+    #[serde(default)]
+    pub(crate) source_repo: String,
+    #[serde(default)]
+    pub(crate) compaction_level: i32,
+    #[serde(default)]
+    pub(crate) original_size: i32,
     // Extra tracker fields (bd/br silently ignores them)
+    #[serde(default)]
     #[serde(skip_serializing_if = "Option::is_none")]
-    external_ref: Option<String>,
+    pub(crate) external_ref: Option<String>,
+    #[serde(default)]
     #[serde(skip_serializing_if = "Option::is_none")]
-    estimate_minutes: Option<i32>,
+    pub(crate) estimate_minutes: Option<i32>,
+    #[serde(default)]
     #[serde(skip_serializing_if = "Option::is_none")]
-    design: Option<String>,
+    pub(crate) design: Option<String>,
+    #[serde(default)]
     #[serde(skip_serializing_if = "Option::is_none")]
-    acceptance_criteria: Option<String>,
+    pub(crate) acceptance_criteria: Option<String>,
+    #[serde(default)]
     #[serde(skip_serializing_if = "Option::is_none")]
-    notes: Option<String>,
+    pub(crate) notes: Option<String>,
+    #[serde(default)]
     #[serde(skip_serializing_if = "Option::is_none")]
-    parent: Option<String>,
+    pub(crate) parent: Option<String>,
+    #[serde(default)]
     #[serde(skip_serializing_if = "Option::is_none")]
-    metadata: Option<String>,
+    pub(crate) metadata: Option<String>,
+    #[serde(default)]
     #[serde(skip_serializing_if = "Option::is_none")]
-    spec_id: Option<String>,
+    pub(crate) spec_id: Option<String>,
     // Inlined collections
+    #[serde(default)]
     #[serde(skip_serializing_if = "Vec::is_empty")]
-    labels: Vec<String>,
+    pub(crate) labels: Vec<String>,
+    #[serde(default)]
     #[serde(skip_serializing_if = "Vec::is_empty")]
-    comments: Vec<JsonlComment>,
+    pub(crate) comments: Vec<JsonlComment>,
+    #[serde(default)]
     #[serde(skip_serializing_if = "Vec::is_empty")]
-    dependencies: Vec<JsonlDependency>,
+    pub(crate) dependencies: Vec<JsonlDependency>,
+}
+
+fn default_priority() -> i32 {
+    2
+}
+
+fn default_issue_type() -> String {
+    "task".to_string()
 }
 
 /// JSONL representation of a comment.
-#[derive(Serialize)]
-struct JsonlComment {
-    id: String,
-    issue_id: String,
-    author: String,
-    text: String,
-    created_at: String,
+#[derive(Serialize, Deserialize)]
+pub(crate) struct JsonlComment {
+    #[serde(default)]
+    pub(crate) id: String,
+    pub(crate) issue_id: String,
+    pub(crate) author: String,
+    pub(crate) text: String,
+    pub(crate) created_at: String,
 }
 
 /// JSONL representation of a dependency.
-#[derive(Serialize)]
-struct JsonlDependency {
-    issue_id: String,
-    depends_on_id: String,
+#[derive(Serialize, Deserialize)]
+pub(crate) struct JsonlDependency {
+    pub(crate) issue_id: String,
+    pub(crate) depends_on_id: String,
     #[serde(rename = "type")]
-    dep_type: String,
+    pub(crate) dep_type: String,
 }
 
 /// Convert priority string ("p0"-"p4") to integer (0-4). Defaults to 2 (medium).
-fn priority_to_int(priority: &str) -> i32 {
+pub(crate) fn priority_to_int(priority: &str) -> i32 {
     match priority {
         "p0" => 0,
         "p1" => 1,
@@ -82,6 +112,18 @@ fn priority_to_int(priority: &str) -> i32 {
         "p3" => 3,
         "p4" => 4,
         other => other.parse().unwrap_or(2),
+    }
+}
+
+/// Convert priority integer (0-4) back to string ("p0"-"p4"). Defaults to "p2".
+pub(crate) fn int_to_priority(p: i32) -> String {
+    match p {
+        0 => "p0".to_string(),
+        1 => "p1".to_string(),
+        2 => "p2".to_string(),
+        3 => "p3".to_string(),
+        4 => "p4".to_string(),
+        _ => "p2".to_string(),
     }
 }
 

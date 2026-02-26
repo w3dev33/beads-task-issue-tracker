@@ -589,7 +589,7 @@ fn insert_labels(conn: &Connection, issue_id: &str, labels: &[String]) -> Result
 }
 
 /// Insert issue into FTS5 index (standalone table with issue_id column).
-fn fts_insert(conn: &Connection, issue_id: &str) -> Result<()> {
+pub(crate) fn fts_insert(conn: &Connection, issue_id: &str) -> Result<()> {
     conn.execute(
         "INSERT INTO issues_fts(issue_id, title, body, notes)
          SELECT id, title, body, COALESCE(notes, '') FROM issues WHERE id = ?1",
@@ -599,7 +599,7 @@ fn fts_insert(conn: &Connection, issue_id: &str) -> Result<()> {
 }
 
 /// Delete issue from FTS5 index.
-fn fts_delete(conn: &Connection, issue_id: &str) -> Result<()> {
+pub(crate) fn fts_delete(conn: &Connection, issue_id: &str) -> Result<()> {
     conn.execute(
         "DELETE FROM issues_fts WHERE issue_id = ?1",
         [issue_id],

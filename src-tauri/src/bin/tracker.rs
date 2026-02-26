@@ -209,6 +209,12 @@ enum Commands {
     /// List ready issues (open, not blocked)
     Ready,
 
+    /// Import issues from a JSONL file
+    Import {
+        /// Path to the JSONL file
+        path: PathBuf,
+    },
+
     /// Manage comments
     #[command(subcommand)]
     Comments(CommentsCmd),
@@ -516,6 +522,23 @@ fn run(
                 println!("{}", serde_json::to_string(&issues)?);
             } else {
                 print_issue_list(&issues);
+            }
+        }
+
+        Commands::Import { path } => {
+            let engine = open_engine(project_path)?;
+            let result = engine.import_all(&path)?;
+
+            if json {
+                println!(
+                    r#"{{"inserted":{},"updated":{},"skipped":{},"errors":{}}}"#,
+                    result.inserted, result.updated, result.skipped, result.errors
+                );
+            } else {
+                println!(
+                    "Import complete: {} inserted, {} updated, {} skipped, {} errors",
+                    result.inserted, result.updated, result.skipped, result.errors
+                );
             }
         }
 
