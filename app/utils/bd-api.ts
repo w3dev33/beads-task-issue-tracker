@@ -798,6 +798,29 @@ export async function trackerInit(cwd?: string): Promise<void> {
   return invoke<void>('tracker_init', { cwd: cwd || null })
 }
 
+export interface BeadsSourceInfo {
+  has_jsonl: boolean
+  issue_count: number
+}
+
+export async function trackerCheckBeadsSource(cwd?: string): Promise<BeadsSourceInfo> {
+  if (isTauri()) return invoke<BeadsSourceInfo>('tracker_check_beads_source', { cwd: cwd || null })
+  return { has_jsonl: false, issue_count: 0 }
+}
+
+export interface TrackerMigrationResult {
+  issues: { inserted: number; updated: number; skipped: number; errors: number }
+  attachments_copied: number
+  attachments_skipped: number
+  config_migrated: boolean
+  warnings: string[]
+}
+
+export async function trackerMigrateFromBeads(cwd?: string): Promise<TrackerMigrationResult> {
+  if (!isTauri()) throw new Error('Migration is only available in the desktop app')
+  return invoke<TrackerMigrationResult>('tracker_migrate_from_beads', { cwd: cwd || null })
+}
+
 
 // ============================================================================
 // File System API - For folder picker

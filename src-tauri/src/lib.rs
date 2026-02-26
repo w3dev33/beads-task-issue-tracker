@@ -2470,6 +2470,24 @@ async fn tracker_sync(cwd: Option<String>) -> Result<tracker::SyncResult, String
     Ok(result)
 }
 
+#[tauri::command]
+async fn tracker_check_beads_source(cwd: Option<String>) -> Result<tracker::BeadsSourceInfo, String> {
+    let project_path = cwd
+        .or_else(|| env::var("BEADS_PATH").ok())
+        .unwrap_or_else(|| {
+            env::current_dir()
+                .map(|p| p.to_string_lossy().to_string())
+                .unwrap_or_else(|_| ".".to_string())
+        });
+    let path = std::path::Path::new(&project_path);
+    Ok(tracker::migrate::check_beads_source(path))
+}
+
+#[tauri::command]
+async fn tracker_migrate_from_beads(cwd: Option<String>) -> Result<tracker::MigrationResult, String> {
+    Ok(with_engine(cwd.as_deref(), |engine| engine.migrate_from_beads())?)
+}
+
 /// Check if the beads database has changed since last check (via filesystem mtime).
 /// Returns true if changes detected or if this is the first check.
 /// This is extremely cheap — just a few stat() calls, no bd process spawns.
@@ -5137,6 +5155,8 @@ pub fn run() {
             tracker_init,
             tracker_detect,
             tracker_sync,
+            tracker_check_beads_source,
+            tracker_migrate_from_beads,
             bd_sync,
             bd_repair_database,
             bd_migrate_to_dolt,

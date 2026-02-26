@@ -5,11 +5,13 @@ mod export;
 mod ids;
 mod import;
 mod issues;
+pub mod migrate;
 mod search;
 pub mod sync;
 
 pub use ids::generate_id;
 pub use import::ImportResult;
+pub use migrate::{BeadsSourceInfo, MigrationResult};
 pub use sync::SyncResult;
 
 pub use config::ProjectConfig;
@@ -214,6 +216,16 @@ impl Engine {
     /// List child issues of a parent issue.
     pub fn list_children(&self, parent_id: &str) -> rusqlite::Result<Vec<TrackerIssue>> {
         issues::list_children(&self.conn, parent_id)
+    }
+
+    /// Check if a `.beads/` directory has data available for migration.
+    pub fn check_beads_source(&self) -> BeadsSourceInfo {
+        migrate::check_beads_source(&self.project_path)
+    }
+
+    /// Migrate data from `.beads/` into the tracker.
+    pub fn migrate_from_beads(&self) -> Result<MigrationResult, String> {
+        migrate::migrate_from_beads(&self.conn, &self.config, &self.project_path)
     }
 
     fn db_path(project_path: &Path, config: &ProjectConfig) -> PathBuf {
