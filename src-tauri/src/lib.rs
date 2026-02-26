@@ -4865,12 +4865,31 @@ fn start_watching(
         watcher_state.watched_path = None;
     }
 
-    let beads_dir = PathBuf::from(&path).join(".beads");
-    if !beads_dir.exists() {
-        return Err(format!(".beads directory not found at: {}", beads_dir.display()));
-    }
+    // Choose watch directory based on active backend
+    let (watch_dir, watch_mode) = if is_builtin_backend() {
+        let tracker_dir = PathBuf::from(&path).join(".tracker");
+        if !tracker_dir.exists() {
+            return Err(format!(".tracker directory not found at: {}", tracker_dir.display()));
+        }
+        // Built-in backend: flat SQLite DB, non-recursive
+        (tracker_dir, notify::RecursiveMode::NonRecursive)
+    } else {
+        let beads_dir = PathBuf::from(&path).join(".beads");
+        if !beads_dir.exists() {
+            return Err(format!(".beads directory not found at: {}", beads_dir.display()));
+        }
+        // Dolt backend: recursive (changes in .dolt/ subdirectories)
+        // SQLite backend: non-recursive (files at root level)
+        let mode = if project_uses_dolt(&beads_dir) {
+            notify::RecursiveMode::Recursive
+        } else {
+            notify::RecursiveMode::NonRecursive
+        };
+        (beads_dir, mode)
+    };
 
     let project_path = path.clone();
+    let watch_dir_display = watch_dir.display().to_string();
     let app_handle = app.clone();
 
     let mut debouncer = new_debouncer(
@@ -4883,7 +4902,7 @@ fn start_watching(
                         matches!(e.kind, DebouncedEventKind::Any | DebouncedEventKind::AnyContinuous)
                     });
                     if has_data_events {
-                        log::info!("[watcher] Change detected in .beads/ ({} events)", events.len());
+                        log::info!("[watcher] Change detected in {} ({} events)", watch_dir_display, events.len());
                         let _ = app_handle.emit(
                             "beads-changed",
                             BeadsChangedPayload { path: project_path.clone() },
@@ -4897,20 +4916,12 @@ fn start_watching(
         },
     ).map_err(|e| format!("Failed to create watcher: {}", e))?;
 
-    // Watch .beads/ directory
-    // Dolt backend: recursive (changes happen in .dolt/ subdirectories)
-    // SQLite backend: non-recursive (all target files are at root level)
-    let watch_mode = if project_uses_dolt(&beads_dir) {
-        notify::RecursiveMode::Recursive
-    } else {
-        notify::RecursiveMode::NonRecursive
-    };
     debouncer.watcher().watch(
-        beads_dir.as_path(),
+        watch_dir.as_path(),
         watch_mode,
-    ).map_err(|e| format!("Failed to watch .beads/: {}", e))?;
+    ).map_err(|e| format!("Failed to watch {}: {}", watch_dir.display(), e))?;
 
-    log::info!("[watcher] Started watching: {}", beads_dir.display());
+    log::info!("[watcher] Started watching: {}", watch_dir.display());
     watcher_state.debouncer = Some(debouncer);
     watcher_state.watched_path = Some(path);
 
