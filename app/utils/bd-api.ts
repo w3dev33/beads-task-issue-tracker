@@ -613,6 +613,7 @@ export interface TrackerSyncResult {
     inserted: number
     updated: number
     skipped: number
+    conflicted: number
     errors: number
   } | null
   conflict: boolean
@@ -620,6 +621,26 @@ export interface TrackerSyncResult {
 
 export async function trackerSync(path?: string): Promise<TrackerSyncResult> {
   return invoke<TrackerSyncResult>('tracker_sync', { cwd: path })
+}
+
+export interface ConflictRecord {
+  id: number
+  issue_id: string
+  local_json: string
+  remote_json: string
+  detected_at: string
+}
+
+export async function trackerGetConflicts(cwd?: string): Promise<ConflictRecord[]> {
+  return invoke<ConflictRecord[]>('tracker_get_conflicts', { cwd: cwd || null })
+}
+
+export async function trackerResolveConflict(conflictId: number, resolution: 'local' | 'remote', cwd?: string): Promise<void> {
+  return invoke<void>('tracker_resolve_conflict', { cwd: cwd || null, conflictId, resolution })
+}
+
+export async function trackerDismissConflict(conflictId: number, cwd?: string): Promise<void> {
+  return invoke<void>('tracker_dismiss_conflict', { cwd: cwd || null, conflictId })
 }
 
 export interface PurgeResult {

@@ -2488,6 +2488,38 @@ async fn tracker_migrate_from_beads(cwd: Option<String>) -> Result<tracker::Migr
     Ok(with_engine(cwd.as_deref(), |engine| engine.migrate_from_beads())?)
 }
 
+#[tauri::command]
+async fn tracker_get_conflicts(cwd: Option<String>) -> Result<Vec<tracker::ConflictRecord>, String> {
+    with_engine(cwd.as_deref(), |engine| {
+        engine.get_conflicts().map_err(|e| format!("get_conflicts: {}", e))
+    })
+}
+
+#[tauri::command]
+async fn tracker_resolve_conflict(
+    cwd: Option<String>,
+    conflict_id: i64,
+    resolution: String,
+) -> Result<(), String> {
+    with_engine(cwd.as_deref(), |engine| {
+        engine
+            .resolve_conflict(conflict_id, &resolution)
+            .map_err(|e| format!("resolve_conflict: {}", e))
+    })
+}
+
+#[tauri::command]
+async fn tracker_dismiss_conflict(
+    cwd: Option<String>,
+    conflict_id: i64,
+) -> Result<(), String> {
+    with_engine(cwd.as_deref(), |engine| {
+        engine
+            .dismiss_conflict(conflict_id)
+            .map_err(|e| format!("dismiss_conflict: {}", e))
+    })
+}
+
 /// Check if the beads database has changed since last check (via filesystem mtime).
 /// Returns true if changes detected or if this is the first check.
 /// This is extremely cheap — just a few stat() calls, no bd process spawns.
@@ -5155,6 +5187,9 @@ pub fn run() {
             tracker_init,
             tracker_detect,
             tracker_sync,
+            tracker_get_conflicts,
+            tracker_resolve_conflict,
+            tracker_dismiss_conflict,
             tracker_check_beads_source,
             tracker_migrate_from_beads,
             bd_sync,

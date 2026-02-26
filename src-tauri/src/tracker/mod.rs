@@ -1,4 +1,5 @@
 mod config;
+pub mod conflicts;
 pub mod convert;
 mod db;
 mod export;
@@ -9,6 +10,7 @@ pub mod migrate;
 mod search;
 pub mod sync;
 
+pub use conflicts::ConflictRecord;
 pub use ids::generate_id;
 pub use import::ImportResult;
 pub use migrate::{BeadsSourceInfo, MigrationResult};
@@ -226,6 +228,30 @@ impl Engine {
     /// Migrate data from `.beads/` into the tracker.
     pub fn migrate_from_beads(&self) -> Result<MigrationResult, String> {
         migrate::migrate_from_beads(&self.conn, &self.config, &self.project_path)
+    }
+
+    /// List all unresolved sync conflicts.
+    pub fn get_conflicts(&self) -> rusqlite::Result<Vec<ConflictRecord>> {
+        conflicts::get_conflicts(&self.conn)
+    }
+
+    /// Count unresolved sync conflicts.
+    pub fn count_conflicts(&self) -> rusqlite::Result<i64> {
+        conflicts::count_conflicts(&self.conn)
+    }
+
+    /// Resolve a sync conflict by applying the chosen version.
+    /// After resolution, re-exports the JSONL.
+    pub fn resolve_conflict(&self, conflict_id: i64, resolution: &str) -> rusqlite::Result<()> {
+        conflicts::resolve_conflict(&self.conn, conflict_id, resolution)?;
+        self.export_jsonl();
+        Ok(())
+    }
+
+    /// Dismiss a sync conflict without changing the issue.
+    pub fn dismiss_conflict(&self, conflict_id: i64) -> rusqlite::Result<()> {
+        conflicts::dismiss_conflict(&self.conn, conflict_id)?;
+        Ok(())
     }
 
     fn db_path(project_path: &Path, config: &ProjectConfig) -> PathBuf {

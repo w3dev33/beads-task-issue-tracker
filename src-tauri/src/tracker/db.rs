@@ -36,6 +36,9 @@ pub fn ensure_schema(conn: &Connection) -> Result<()> {
     if current_version < 3 {
         migrate_v3(conn)?;
     }
+    if current_version < 4 {
+        migrate_v4(conn)?;
+    }
 
     Ok(())
 }
@@ -143,6 +146,32 @@ fn migrate_v3(conn: &Connection) -> Result<()> {
     Ok(())
 }
 
+/// Schema version 4: add `synced_at` column and `conflicts` table for sync conflict detection.
+fn migrate_v4(conn: &Connection) -> Result<()> {
+    conn.execute_batch(
+        "BEGIN;
+
+        ALTER TABLE issues ADD COLUMN synced_at TEXT;
+
+        -- Back-fill synced_at with updated_at so existing issues start with no conflicts
+        UPDATE issues SET synced_at = updated_at;
+
+        CREATE TABLE IF NOT EXISTS conflicts (
+            id INTEGER PRIMARY KEY,
+            issue_id TEXT NOT NULL,
+            local_json TEXT NOT NULL,
+            remote_json TEXT NOT NULL,
+            detected_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+
+        INSERT INTO schema_version (version) VALUES (4);
+
+        COMMIT;"
+    )?;
+
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -171,7 +200,7 @@ mod tests {
         let version: i64 = conn
             .query_row("SELECT MAX(version) FROM schema_version", [], |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 3);
+        assert_eq!(version, 4);
 
         // Verify issues table exists
         let count: i64 = conn
@@ -195,6 +224,6 @@ mod tests {
         let version: i64 = conn
             .query_row("SELECT MAX(version) FROM schema_version", [], |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 3);
+        assert_eq!(version, 4);
     }
 }

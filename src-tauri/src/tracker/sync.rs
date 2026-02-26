@@ -25,6 +25,7 @@ pub struct SerializableImportResult {
     pub inserted: usize,
     pub updated: usize,
     pub skipped: usize,
+    pub conflicted: usize,
     pub errors: usize,
 }
 
@@ -34,6 +35,7 @@ impl From<ImportResult> for SerializableImportResult {
             inserted: r.inserted,
             updated: r.updated,
             skipped: r.skipped,
+            conflicted: r.conflicted,
             errors: r.errors,
         }
     }
@@ -99,6 +101,12 @@ pub fn sync(
         .map_err(|e| format!("Export failed: {}", e))?;
     result.exported = true;
 
+    // Set synced_at baseline for newly exported issues (only those without synced_at)
+    let _ = conn.execute(
+        "UPDATE issues SET synced_at = updated_at WHERE synced_at IS NULL",
+        [],
+    );
+
     let jsonl_rel = format!("{}/issues.jsonl", config.folder_name);
 
     // 3. Stage the JSONL file
@@ -143,6 +151,11 @@ pub fn sync(
                 match import::import_all(conn, &jsonl_path) {
                     Ok(import_res) => {
                         result.import_result = Some(import_res.into());
+                        // Mark all non-conflicted issues as synced
+                        let _ = conn.execute(
+                            "UPDATE issues SET synced_at = updated_at WHERE id NOT IN (SELECT issue_id FROM conflicts)",
+                            [],
+                        );
                         // Re-export to normalize after merge
                         let _ = export::export_all(conn, config, project_path);
                     }

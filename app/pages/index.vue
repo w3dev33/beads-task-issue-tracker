@@ -177,7 +177,10 @@ const checkViewport = () => {
 }
 
 // Sync status composable (for auto-sync indicator and error dialog)
-const { showErrorDialog: showSyncErrorDialog, lastSyncError, closeErrorDialog: closeSyncErrorDialog } = useSyncStatus()
+const { showErrorDialog: showSyncErrorDialog, lastSyncError, closeErrorDialog: closeSyncErrorDialog, checkConflicts } = useSyncStatus()
+
+// Conflict detection (for sync conflict resolution)
+const { hasConflicts, conflictCount, openDialog: openConflictDialog, refreshConflicts } = useConflicts()
 
 // Change detection: native file watcher via Tauri events
 const { active: changeDetectionActive, startListening, stopListening, notifySelfWrite } = useChangeDetection({
@@ -235,6 +238,9 @@ const pollForChanges = async () => {
       updateFromPollData(issues.value, readyData)
     }
 
+    // Check for sync conflicts (non-blocking)
+    checkConflicts()
+
     // Snapshot mtime AFTER all operations (including epic bd_show calls in fetchPollData)
     // so the next check ignores changes caused by our own poll cycle
     await bdCheckChanged(path)
@@ -291,6 +297,9 @@ onMounted(async () => {
         // Fetch available relation types + detect bd >= 0.50 for dot-notation parent-child
         initRelationTypes()
       }
+      // Check for unresolved sync conflicts
+      refreshConflicts()
+
       // Auto-launch probe if enabled (must complete before fetch)
       await launchProbeIfNeeded()
       // Auto-register with probe if enabled (fire-and-forget, never blocks UI)
@@ -786,6 +795,20 @@ watch(
         :is-exposed="isCurrentProjectExposed"
         @refresh="handleRefresh"
       />
+
+    <!-- Sync Conflict Banner -->
+    <div
+      v-if="hasConflicts"
+      class="flex items-center gap-2 px-4 py-2 bg-amber-500/10 border-b border-amber-500/30 text-amber-400 text-sm cursor-pointer hover:bg-amber-500/15 transition-colors"
+      @click="openConflictDialog"
+    >
+      <svg class="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+        <line x1="12" y1="9" x2="12" y2="13" />
+        <line x1="12" y1="17" x2="12.01" y2="17" />
+      </svg>
+      <span>{{ conflictCount }} sync conflict{{ conflictCount > 1 ? 's' : '' }} need{{ conflictCount === 1 ? 's' : '' }} resolution</span>
+    </div>
 
     <!-- Desktop Layout (3 columns) -->
     <div v-if="!isMobileView" class="flex overflow-hidden">
@@ -1286,6 +1309,9 @@ watch(
       current-path="~"
       @select="handleOnboardingFolderSelect"
     />
+
+    <!-- Sync Conflict Resolution Dialog -->
+    <ConflictDialog />
 
     <!-- Sync Error Dialog -->
     <ConfirmDialog

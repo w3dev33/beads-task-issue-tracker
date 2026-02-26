@@ -1,4 +1,4 @@
-import { bdSync } from '~/utils/bd-api'
+import { bdSync, logFrontend } from '~/utils/bd-api'
 
 // Shared state across all components
 const lastSyncError = ref<string | null>(null)
@@ -20,6 +20,7 @@ function showSuccessMessage() {
 
 export function useSyncStatus() {
   const { beadsPath } = useBeadsPath()
+  const { refreshConflicts } = useConflicts()
 
   const forceSync = async () => {
     if (isSyncing.value) return
@@ -33,12 +34,23 @@ export function useSyncStatus() {
       await bdSync(beadsPath.value || undefined)
       lastSyncSuccess.value = true
       showSuccessMessage()
+      // Check for conflicts after sync
+      await refreshConflicts()
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e)
       lastSyncError.value = message
       showErrorDialog.value = true
     } finally {
       isSyncing.value = false
+    }
+  }
+
+  /** Check for conflicts without triggering a full sync (e.g., after poll). */
+  const checkConflicts = async () => {
+    try {
+      await refreshConflicts()
+    } catch (e) {
+      logFrontend('warn', `[sync] Failed to check conflicts: ${e}`)
     }
   }
 
@@ -53,6 +65,7 @@ export function useSyncStatus() {
     syncMessage: readonly(syncMessage),
     showErrorDialog,
     forceSync,
+    checkConflicts,
     closeErrorDialog,
   }
 }

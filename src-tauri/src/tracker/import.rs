@@ -12,6 +12,7 @@ pub struct ImportResult {
     pub inserted: usize,
     pub updated: usize,
     pub skipped: usize,
+    pub conflicted: usize,
     pub errors: usize,
 }
 
@@ -66,6 +67,7 @@ pub fn import_all(conn: &Connection, jsonl_path: &Path) -> Result<ImportResult> 
             ImportAction::Inserted => result.inserted += 1,
             ImportAction::Updated => result.updated += 1,
             ImportAction::Skipped => result.skipped += 1,
+            ImportAction::Conflicted => result.conflicted += 1,
         }
     }
 
@@ -77,14 +79,15 @@ enum ImportAction {
     Inserted,
     Updated,
     Skipped,
+    Conflicted,
 }
 
 fn import_one_issue(conn: &Connection, issue: &JsonlIssue) -> Result<ImportAction> {
-    let existing: Option<String> = conn
+    let existing: Option<(String, Option<String>)> = conn
         .query_row(
-            "SELECT updated_at FROM issues WHERE id = ?1",
+            "SELECT updated_at, synced_at FROM issues WHERE id = ?1",
             params![issue.id],
-            |row| row.get(0),
+            |row| Ok((row.get(0)?, row.get(1)?)),
         )
         .ok();
 
@@ -98,7 +101,25 @@ fn import_one_issue(conn: &Connection, issue: &JsonlIssue) -> Result<ImportActio
             fts_insert(conn, &issue.id)?;
             Ok(ImportAction::Inserted)
         }
-        Some(db_updated_at) => {
+        Some((db_updated_at, synced_at)) => {
+            let baseline = synced_at.as_deref().unwrap_or(&db_updated_at);
+
+            // Conflict: both local and remote modified since last sync
+            if *db_updated_at > *baseline && *issue.updated_at > *baseline {
+                // Build local JSON from DB
+                let local_json = build_local_json(conn, &issue.id)?;
+                let remote_json = serde_json::to_string(issue).unwrap_or_default();
+
+                conn.execute(
+                    "INSERT INTO conflicts (issue_id, local_json, remote_json, detected_at) VALUES (?1, ?2, ?3, datetime('now'))",
+                    params![issue.id, local_json, remote_json],
+                )?;
+
+                // Still merge comments (append-only, non-destructive)
+                merge_comments(conn, &issue.id, &issue.comments)?;
+                return Ok(ImportAction::Conflicted);
+            }
+
             if issue.updated_at > db_updated_at {
                 // JSONL is newer → UPDATE
                 update_issue_from_jsonl(conn, issue)?;
@@ -116,6 +137,95 @@ fn import_one_issue(conn: &Connection, issue: &JsonlIssue) -> Result<ImportActio
             }
         }
     }
+}
+
+/// Build a JSON string representing the local (DB) version of an issue,
+/// in the same format as the JSONL export.
+fn build_local_json(conn: &Connection, issue_id: &str) -> Result<String> {
+    use super::export::{priority_to_int, JsonlComment, JsonlDependency, JsonlIssue};
+
+    let issue = conn.query_row(
+        "SELECT id, title, body, issue_type, status, priority,
+                assignee, author, created_at, updated_at, closed_at,
+                external_ref, estimate_minutes, design, acceptance_criteria,
+                notes, parent, metadata, spec_id
+         FROM issues WHERE id = ?1",
+        params![issue_id],
+        |row| {
+            let status: String = row.get(4)?;
+            let close_reason = if status == "closed" { Some("done".to_string()) } else { None };
+            Ok(JsonlIssue {
+                id: row.get(0)?,
+                title: row.get(1)?,
+                description: row.get(2)?,
+                issue_type: row.get(3)?,
+                status,
+                priority: priority_to_int(&row.get::<_, String>(5)?),
+                owner: row.get(6)?,
+                created_by: row.get(7)?,
+                created_at: row.get(8)?,
+                updated_at: row.get(9)?,
+                closed_at: row.get(10)?,
+                close_reason,
+                source_repo: ".".to_string(),
+                compaction_level: 0,
+                original_size: 0,
+                external_ref: row.get(11)?,
+                estimate_minutes: row.get(12)?,
+                design: row.get(13)?,
+                acceptance_criteria: row.get(14)?,
+                notes: row.get(15)?,
+                parent: row.get(16)?,
+                metadata: row.get(17)?,
+                spec_id: row.get(18)?,
+                labels: Vec::new(),
+                comments: Vec::new(),
+                dependencies: Vec::new(),
+            })
+        },
+    )?;
+
+    // Fetch labels
+    let mut label_stmt = conn.prepare("SELECT label FROM labels WHERE issue_id = ?1 ORDER BY label")?;
+    let labels: Vec<String> = label_stmt
+        .query_map(params![issue_id], |row| row.get(0))?
+        .filter_map(|r| r.ok())
+        .collect();
+
+    // Fetch comments
+    let mut comment_stmt = conn.prepare("SELECT id, issue_id, author, body, created_at FROM comments WHERE issue_id = ?1 ORDER BY created_at")?;
+    let comments: Vec<JsonlComment> = comment_stmt
+        .query_map(params![issue_id], |row| {
+            Ok(JsonlComment {
+                id: row.get(0)?,
+                issue_id: row.get(1)?,
+                author: row.get(2)?,
+                text: row.get(3)?,
+                created_at: row.get(4)?,
+            })
+        })?
+        .filter_map(|r| r.ok())
+        .collect();
+
+    // Fetch dependencies
+    let mut dep_stmt = conn.prepare("SELECT from_id, to_id, dep_type FROM dependencies WHERE from_id = ?1")?;
+    let dependencies: Vec<JsonlDependency> = dep_stmt
+        .query_map(params![issue_id], |row| {
+            Ok(JsonlDependency {
+                issue_id: row.get(0)?,
+                depends_on_id: row.get(1)?,
+                dep_type: row.get(2)?,
+            })
+        })?
+        .filter_map(|r| r.ok())
+        .collect();
+
+    let mut issue = issue;
+    issue.labels = labels;
+    issue.comments = comments;
+    issue.dependencies = dependencies;
+
+    Ok(serde_json::to_string(&issue).unwrap_or_default())
 }
 
 fn upsert_issue(conn: &Connection, issue: &JsonlIssue) -> Result<()> {
@@ -845,5 +955,79 @@ mod tests {
         let result = import_all(&conn, &path).unwrap();
         assert_eq!(result.inserted, 2);
         assert_eq!(result.errors, 0);
+    }
+
+    // 14. test_import_conflict_detection — both sides changed since synced_at → conflict
+    #[test]
+    fn test_import_conflict_detection() {
+        let (tmp, conn) = setup();
+
+        // Create issue in DB with a specific synced_at baseline
+        conn.execute(
+            "INSERT INTO issues (id, title, body, author, created_at, updated_at, synced_at)
+             VALUES ('test-0001', 'Local title', '', 'tester', '2026-01-01T00:00:00Z', '2026-01-02T00:00:00Z', '2026-01-01T00:00:00Z')",
+            [],
+        ).unwrap();
+
+        // Import with remote also newer than synced_at → conflict
+        let line = make_jsonl_line("test-0001", "Remote title", "2026-01-02T12:00:00Z");
+        let path = write_jsonl(&tmp, &line);
+
+        let result = import_all(&conn, &path).unwrap();
+        assert_eq!(result.conflicted, 1);
+        assert_eq!(result.inserted, 0);
+        assert_eq!(result.updated, 0);
+        assert_eq!(result.skipped, 0);
+
+        // Verify conflict was stored
+        let conflict_count: i32 = conn
+            .query_row("SELECT COUNT(*) FROM conflicts WHERE issue_id = 'test-0001'", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(conflict_count, 1);
+
+        // Verify local JSON was captured
+        let local_json: String = conn
+            .query_row("SELECT local_json FROM conflicts WHERE issue_id = 'test-0001'", [], |r| r.get(0))
+            .unwrap();
+        assert!(local_json.contains("Local title"));
+
+        // Verify remote JSON was captured
+        let remote_json: String = conn
+            .query_row("SELECT remote_json FROM conflicts WHERE issue_id = 'test-0001'", [], |r| r.get(0))
+            .unwrap();
+        assert!(remote_json.contains("Remote title"));
+
+        // Verify DB issue was NOT modified (conflict leaves local intact)
+        let title: String = conn
+            .query_row("SELECT title FROM issues WHERE id = 'test-0001'", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(title, "Local title");
+    }
+
+    // 15. test_import_no_conflict_when_only_remote_changed — only JSONL changed → normal update
+    #[test]
+    fn test_import_no_conflict_when_only_remote_changed() {
+        let (tmp, conn) = setup();
+
+        // synced_at == updated_at → local not modified since last sync
+        conn.execute(
+            "INSERT INTO issues (id, title, body, author, created_at, updated_at, synced_at)
+             VALUES ('test-0001', 'Old title', '', 'tester', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')",
+            [],
+        ).unwrap();
+        fts_insert(&conn, "test-0001").unwrap();
+
+        // Import with newer timestamp → should update normally, no conflict
+        let line = make_jsonl_line("test-0001", "Remote title", "2026-01-02T00:00:00Z");
+        let path = write_jsonl(&tmp, &line);
+
+        let result = import_all(&conn, &path).unwrap();
+        assert_eq!(result.updated, 1);
+        assert_eq!(result.conflicted, 0);
+
+        let title: String = conn
+            .query_row("SELECT title FROM issues WHERE id = 'test-0001'", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(title, "Remote title");
     }
 }
