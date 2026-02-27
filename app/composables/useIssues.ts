@@ -300,13 +300,21 @@ export function useIssues() {
       }
 
       // Preserve blockedBy/blocks from previous enrichments (fetchIssues or fetchIssue)
-      // Poll data doesn't return these, but they were populated by earlier bdShow calls
+      // Poll data doesn't return these, but they were populated by earlier bdShow calls.
+      // Filter out blockers that are now closed so lock icons disappear (#7).
       const existingMap = new Map(issues.value.map(i => [i.id, i]))
+      const closedIds = new Set(newIssues.filter(i => i.status === 'closed').map(i => i.id))
       for (const issue of newIssues) {
         const existing = existingMap.get(issue.id)
         if (existing) {
-          if (!issue.blockedBy && existing.blockedBy) issue.blockedBy = existing.blockedBy
-          if (!issue.blocks && existing.blocks) issue.blocks = existing.blocks
+          if (!issue.blockedBy && existing.blockedBy) {
+            const stillOpen = existing.blockedBy.filter(id => !closedIds.has(id))
+            if (stillOpen.length) issue.blockedBy = stillOpen
+          }
+          if (!issue.blocks && existing.blocks) {
+            const stillOpen = existing.blocks.filter(id => !closedIds.has(id))
+            if (stillOpen.length) issue.blocks = stillOpen
+          }
         }
       }
 
@@ -541,11 +549,36 @@ export function useIssues() {
     error.value = null
 
     try {
+      // Find issues that were blocked by this one BEFORE closing
+      const dependentIds = issues.value
+        .filter(i => i.blockedBy?.includes(id))
+        .map(i => i.id)
+
       const result = await bdClose(id, getPath())
       await fetchIssues()
       if (selectedIssue.value?.id === id) {
         await fetchIssue(id)
       }
+
+      // Re-fetch dependent issues so their blockedBy is refreshed (#7)
+      // Use bdShow directly to avoid overwriting selectedIssue
+      const path = getPath()
+      for (const depId of dependentIds) {
+        const fresh = await bdShow(depId, path)
+        if (fresh) {
+          const idx = issues.value.findIndex(i => i.id === depId)
+          const existing = idx !== -1 ? issues.value[idx] : undefined
+          if (existing) {
+            existing.blockedBy = fresh.blockedBy
+            existing.blocks = fresh.blocks
+          }
+          if (selectedIssue.value && selectedIssue.value.id === depId) {
+            selectedIssue.value.blockedBy = fresh.blockedBy
+            selectedIssue.value.blocks = fresh.blocks
+          }
+        }
+      }
+
       return result
     } catch (e) {
       error.value = e instanceof Error ? e.message : 'Failed to close issue'
