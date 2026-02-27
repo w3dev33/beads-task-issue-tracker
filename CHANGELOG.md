@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.24.1] - 2026-02-27
+
+> Requires **bd 0.49.x**. Recommended CLI: **br** (beads_rust) — stay on **br 0.1.14** until the bug in 0.1.19 is fixed.
+
+### New Features
+- **Pinned issues always on top**: Pinned issues float to the top of the table regardless of sort field and direction, with a visual separator between pinned and non-pinned sections
+- **Epic sort order fix**: `groupIssues` now uses single-pass iteration so epics follow the active sort order instead of being forced to the top
+
+### Fixes
+- **Lock icon not disappearing after blocker is completed** (#7): When a blocking issue was closed, the lock icon on dependent issues remained visible due to stale cached `blockedBy` data. The icon now disappears automatically on the next poll, and dependent issues are immediately refreshed when a blocker is closed from within the app
+
 ## [1.24.0] - 2026-02-25
 
 > Requires **bd 0.49.x**. Recommended CLI: **br** (beads_rust) — stay on **br 0.1.14** until the bug in 0.1.19 is fixed.
