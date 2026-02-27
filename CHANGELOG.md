@@ -2,7 +2,7 @@
 
 ## [1.24.1] - 2026-02-27
 
-> Requires **bd 0.49.x**. Recommended CLI: **br 0.1.20** (beads_rust).
+> Requires **bd 0.49.x**. Recommended CLI: **br 0.1.14** — br 0.1.20 has a regression with older databases (fsqlite schema parsing bug), avoid until fixed.
 
 ### New Features
 - **Pinned issues always on top**: Pinned issues float to the top of the table regardless of sort field and direction, with a visual separator between pinned and non-pinned sections
