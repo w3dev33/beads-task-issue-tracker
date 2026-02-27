@@ -2,7 +2,7 @@
 
 ## [1.24.1] - 2026-02-27
 
-> Requires **bd 0.49.x**. Recommended CLI: **br** (beads_rust) — stay on **br 0.1.14** until the bug in 0.1.19 is fixed.
+> Requires **bd 0.49.x**. Recommended CLI: **br 0.1.20** (beads_rust).
 
 ### New Features
 - **Pinned issues always on top**: Pinned issues float to the top of the table regardless of sort field and direction, with a visual separator between pinned and non-pinned sections
@@ -13,7 +13,7 @@
 
 ## [1.24.0] - 2026-02-25
 
-> Requires **bd 0.49.x**. Recommended CLI: **br** (beads_rust) — stay on **br 0.1.14** until the bug in 0.1.19 is fixed.
+> Requires **bd 0.49.x**. Recommended CLI: **br** (beads_rust) — use **br 0.1.14** (0.1.19 had a regression, fixed in 0.1.20).
 
 ### New Features
 - **Pin/favorite issues**: Pin issues to the dashboard with a dedicated "Check This Out" section and a pin column in the issues table
