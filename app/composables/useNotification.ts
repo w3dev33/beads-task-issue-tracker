@@ -11,7 +11,7 @@ const notifications = ref<Notification[]>([])
 let nextId = 0
 
 export function useNotification() {
-  const addNotification = (message: string, description?: string, type: NotificationType = 'info', durationMs = 3000) => {
+  const addNotification = (message: string, description?: string, type: NotificationType = 'info', durationMs = 5000) => {
     const id = nextId++
     notifications.value.push({ id, message, description, type })
 

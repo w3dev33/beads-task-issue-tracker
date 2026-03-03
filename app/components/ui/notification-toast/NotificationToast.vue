@@ -6,24 +6,24 @@ const { notifications, dismiss } = useNotification()
 
 const typeStyles: Record<NotificationType, { bg: string; border: string; icon: string }> = {
   info: {
-    bg: 'bg-[#0a1929]',
+    bg: 'bg-sky-50 dark:bg-[#0a1929]',
     border: 'border-sky-500',
-    icon: 'text-sky-400',
+    icon: 'text-sky-600 dark:text-sky-400',
   },
   success: {
-    bg: 'bg-[#071a12]',
+    bg: 'bg-emerald-50 dark:bg-[#071a12]',
     border: 'border-emerald-500',
-    icon: 'text-emerald-400',
+    icon: 'text-emerald-600 dark:text-emerald-400',
   },
   error: {
-    bg: 'bg-[#1f0a0a]',
+    bg: 'bg-red-50 dark:bg-[#1f0a0a]',
     border: 'border-red-500',
-    icon: 'text-red-400',
+    icon: 'text-red-600 dark:text-red-400',
   },
   warning: {
-    bg: 'bg-[#1a1408]',
+    bg: 'bg-amber-50 dark:bg-[#1a1408]',
     border: 'border-amber-500',
-    icon: 'text-amber-400',
+    icon: 'text-amber-600 dark:text-amber-400',
   },
 }
 
