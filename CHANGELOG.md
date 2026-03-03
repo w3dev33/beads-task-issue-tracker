@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.24.2] - 2026-03-03
+
+> Requires **bd 0.49.x**. Recommended CLI: **br 0.1.14**.
+
+### Fixes
+- **Toast notifications unreadable in light theme** (#8): Added theme-aware backgrounds (light pastel tones in light mode, original dark backgrounds preserved in dark mode) and adjusted icon contrast. Increased default display duration from 3s to 5s
+- **No window title on Windows** (#9): Set default window title to "Beads Task-Issue Tracker" and dynamically update it with the current project name for Windows task switchers (PowerToys Run, Flow Launcher, Switcheroo, etc.)
+
 ## [1.24.1] - 2026-02-27
 
 > Requires **bd 0.49.x**. Recommended CLI: **br 0.1.14** — br 0.1.20 has a regression with older databases (fsqlite schema parsing bug), avoid until fixed.
