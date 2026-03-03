@@ -112,6 +112,13 @@ const currentProjectName = computed(() => {
   return project?.name
 })
 
+// Update window title with current project name (for Windows task switchers)
+const APP_TITLE = 'Beads Task-Issue Tracker'
+const { setWindowTitle } = useTauriWindow()
+watch(currentProjectName, (name) => {
+  setWindowTitle(name ? `${name} — ${APP_TITLE}` : APP_TITLE)
+}, { immediate: true })
+
 // Whether the current project is exposed to the probe (read from PathSelector)
 const isCurrentProjectExposed = computed(() => {
   return pathSelectorRef.value?.isCurrentExposed || mobilePathSelectorRef.value?.isCurrentExposed || false

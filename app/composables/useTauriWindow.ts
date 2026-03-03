@@ -16,7 +16,14 @@ export function useTauriWindow() {
     }
   }
 
+  const setWindowTitle = (title: string) => {
+    if (windowModule) {
+      windowModule.getCurrentWindow().setTitle(title)
+    }
+  }
+
   return {
     startDragging,
+    setWindowTitle,
   }
 }
