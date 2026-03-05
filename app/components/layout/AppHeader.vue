@@ -25,12 +25,6 @@ const { isDark, currentTheme, cycleTheme } = useTheme()
 const { zoomLevel, zoomIn, zoomOut, resetZoom, canZoomIn, canZoomOut } = useZoom()
 const { startDragging } = useTauriWindow()
 
-// Detect macOS — on non-macOS, window controls are on the right so we need extra right padding
-const isMacOS = computed(() => {
-  if (!import.meta.client) return true
-  return navigator.platform?.startsWith('Mac') || navigator.userAgent?.includes('Macintosh')
-})
-
 // Handle window dragging via Tauri API
 const handleMouseDown = (event: MouseEvent) => {
   // Only handle left click
@@ -61,12 +55,9 @@ const handleZoomIn = (event: MouseEvent) => {
 </script>
 
 <template>
-  <!-- macOS: pl-20 leaves space for traffic lights; Linux/Windows: pr-20 leaves space for window controls -->
+  <!-- macOS: pl-20 leaves space for traffic lights, mousedown triggers Tauri window dragging -->
   <header
-    :class="[
-      'flex items-center justify-center py-3 border-b border-border bg-card relative app-drag-region',
-      isMacOS ? 'pl-20 pr-4' : 'pl-4 pr-20',
-    ]"
+    class="flex items-center justify-center pl-20 pr-4 py-3 border-b border-border bg-card relative app-drag-region"
     data-tauri-drag-region
     @mousedown="handleMouseDown"
   >
@@ -114,7 +105,7 @@ const handleZoomIn = (event: MouseEvent) => {
     </div>
 
     <!-- Zoom and Theme controls (right, absolute positioned) - no-drag to keep buttons clickable -->
-    <div :class="['absolute flex items-center gap-1 app-no-drag', isMacOS ? 'right-4' : 'right-20']">
+    <div class="absolute right-4 flex items-center gap-1 app-no-drag">
       <!-- Zoom controls -->
       <Tooltip>
         <TooltipTrigger as-child>

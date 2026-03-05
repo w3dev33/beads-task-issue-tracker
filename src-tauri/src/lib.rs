@@ -1,6 +1,6 @@
 use notify_debouncer_mini::{new_debouncer, DebouncedEventKind};
 use serde::{Deserialize, Serialize};
-use tauri::Emitter;
+use tauri::{Emitter, WebviewWindowBuilder};
 use std::collections::HashMap;
 use std::env;
 use std::fs;
@@ -4934,6 +4934,16 @@ pub fn run() {
                     ))
                     .build(),
             )?;
+
+            // Create the main window from config, applying titleBarStyle only on macOS
+            let window_config = &app.config().app.windows[0];
+            #[allow(unused_mut)]
+            let mut builder = WebviewWindowBuilder::from_config(app.handle(), window_config)?;
+            #[cfg(target_os = "macos")]
+            {
+                builder = builder.title_bar_style(tauri::TitleBarStyle::Overlay);
+            }
+            builder.build()?;
 
             // Log startup info
             log::info!("=== Beads Task-Issue Tracker starting ===");
