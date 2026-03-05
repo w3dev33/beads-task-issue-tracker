@@ -9,6 +9,79 @@ interface UseChangeDetectionOptions {
 // ============================================================================
 const SELF_TRIGGER_COOLDOWN_MS = 3_000
 const DEBOUNCE_MS = 300
+const MAX_CONSECUTIVE_RERUNS = 5
+
+/**
+ * Queue-based handler: at most one `onChanged()` in flight with at most one
+ * pending rerun. Events arriving during processing set a rerun flag instead
+ * of spawning extra timers. Bounded by MAX_CONSECUTIVE_RERUNS to prevent
+ * unbounded loops under sustained churn.
+ */
+export function createQueuedHandler(
+  onChanged: () => Promise<void>,
+  getSelfWriteCooldownActive: () => boolean,
+  onProcessed: () => void,
+) {
+  let inflight = false
+  let pendingRerun = false
+  let debounceTimer: ReturnType<typeof setTimeout> | null = null
+  let consecutiveReruns = 0
+
+  function schedule() {
+    if (debounceTimer) clearTimeout(debounceTimer)
+    debounceTimer = setTimeout(() => run(), DEBOUNCE_MS)
+  }
+
+  async function run() {
+    debounceTimer = null
+
+    if (inflight) {
+      pendingRerun = true
+      return
+    }
+
+    inflight = true
+    consecutiveReruns = 0
+
+    try {
+      // eslint-disable-next-line no-constant-condition
+      while (true) {
+        pendingRerun = false
+        try {
+          await onChanged()
+        } catch {
+          // Ignore — polling will catch up
+        }
+        onProcessed()
+        consecutiveReruns++
+
+        if (!pendingRerun || consecutiveReruns >= MAX_CONSECUTIVE_RERUNS) break
+      }
+    } finally {
+      inflight = false
+      consecutiveReruns = 0
+    }
+  }
+
+  function trigger() {
+    if (getSelfWriteCooldownActive()) return
+    if (inflight) {
+      pendingRerun = true
+      return
+    }
+    schedule()
+  }
+
+  function cancel() {
+    if (debounceTimer) {
+      clearTimeout(debounceTimer)
+      debounceTimer = null
+    }
+    pendingRerun = false
+  }
+
+  return { trigger, cancel }
+}
 
 // ============================================================================
 // Native file watcher backend (direct mode)
@@ -16,30 +89,20 @@ const DEBOUNCE_MS = 300
 
 function createWatcherBackend(options: UseChangeDetectionOptions) {
   const active = ref(false)
-  const isProcessing = ref(false)
 
   let currentPath: string | null = null
   let unlisten: (() => void) | null = null
-  let debounceTimer: ReturnType<typeof setTimeout> | null = null
   let lastProcessedAt = 0
+
+  const queue = createQueuedHandler(
+    options.onChanged,
+    () => Date.now() - lastProcessedAt < SELF_TRIGGER_COOLDOWN_MS,
+    () => { lastProcessedAt = Date.now() },
+  )
 
   const handleEvent = (payload: { path: string }) => {
     if (currentPath && payload.path !== currentPath) return
-    if (Date.now() - lastProcessedAt < SELF_TRIGGER_COOLDOWN_MS) return
-
-    if (debounceTimer) clearTimeout(debounceTimer)
-    debounceTimer = setTimeout(async () => {
-      if (isProcessing.value) return
-      isProcessing.value = true
-      try {
-        await options.onChanged()
-      } catch {
-        // Ignore errors — polling will catch up
-      } finally {
-        isProcessing.value = false
-        lastProcessedAt = Date.now()
-      }
-    }, DEBOUNCE_MS)
+    queue.trigger()
   }
 
   const start = async (path: string) => {
@@ -68,10 +131,7 @@ function createWatcherBackend(options: UseChangeDetectionOptions) {
   }
 
   const stop = () => {
-    if (debounceTimer) {
-      clearTimeout(debounceTimer)
-      debounceTimer = null
-    }
+    queue.cancel()
     if (unlisten) {
       unlisten()
       unlisten = null
@@ -94,29 +154,15 @@ function createWatcherBackend(options: UseChangeDetectionOptions) {
 
 function createSSEBackend(options: UseChangeDetectionOptions) {
   const active = ref(false)
-  const isProcessing = ref(false)
 
   let eventSource: EventSource | null = null
-  let debounceTimer: ReturnType<typeof setTimeout> | null = null
   let lastProcessedAt = 0
 
-  const handleChange = () => {
-    if (Date.now() - lastProcessedAt < SELF_TRIGGER_COOLDOWN_MS) return
-
-    if (debounceTimer) clearTimeout(debounceTimer)
-    debounceTimer = setTimeout(async () => {
-      if (isProcessing.value) return
-      isProcessing.value = true
-      try {
-        await options.onChanged()
-      } catch {
-        // Ignore errors — polling will catch up
-      } finally {
-        isProcessing.value = false
-        lastProcessedAt = Date.now()
-      }
-    }, DEBOUNCE_MS)
-  }
+  const queue = createQueuedHandler(
+    options.onChanged,
+    () => Date.now() - lastProcessedAt < SELF_TRIGGER_COOLDOWN_MS,
+    () => { lastProcessedAt = Date.now() },
+  )
 
   const start = async (beadsPath: string) => {
     stop()
@@ -131,7 +177,7 @@ function createSSEBackend(options: UseChangeDetectionOptions) {
       const url = `${getExternalUrl()}/events/${encodeURIComponent(projectName)}`
       eventSource = new EventSource(url)
 
-      eventSource.addEventListener('change', () => handleChange())
+      eventSource.addEventListener('change', () => queue.trigger())
       eventSource.onopen = () => { active.value = true }
       eventSource.onerror = () => { active.value = false }
     } catch (e) {
@@ -142,10 +188,7 @@ function createSSEBackend(options: UseChangeDetectionOptions) {
   }
 
   const stop = () => {
-    if (debounceTimer) {
-      clearTimeout(debounceTimer)
-      debounceTimer = null
-    }
+    queue.cancel()
     eventSource?.close()
     eventSource = null
     active.value = false
