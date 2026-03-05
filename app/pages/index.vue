@@ -186,31 +186,15 @@ const checkViewport = () => {
 const { showErrorDialog: showSyncErrorDialog, lastSyncError, closeErrorDialog: closeSyncErrorDialog } = useSyncStatus()
 
 // Change detection: native file watcher via Tauri events
-const { active: changeDetectionActive, startListening, stopListening, notifySelfWrite } = useChangeDetection({
-  onChanged: async () => {
-    await pollForChanges()
-  },
-})
-
-// Polling for external changes — optimized with 5 layers:
+// Polling for external changes — optimized with 6 layers:
 // 1. Native file watcher (0 CPU when idle, instant detection)
-// 2. Sync cooldown (Rust backend skips redundant syncs within 10s)
-// 3. Filesystem mtime check as fallback (zero bd processes if nothing changed)
-// 4. Batched poll command (1 IPC call instead of 3 when changes detected)
-// 5. Adaptive intervals (30s safety net when watcher active, 5s/1s fallback without watcher)
+// 2. Poll scheduler backpressure (min 2s between expensive cycles)
+// 3. Sync cooldown (Rust backend skips redundant syncs within 10s)
+// 4. Filesystem mtime check as fallback (zero bd processes if nothing changed)
+// 5. Batched poll command (1 IPC call instead of 3 when changes detected)
+// 6. Adaptive intervals (30s safety net when watcher active, 5s/1s fallback without watcher)
 const isSyncing = ref(false)
 let skipMtimeCheck = false // Set by watcher/fast check to avoid redundant bdCheckChanged in pollFn
-
-// Fast change detection (cheap mtime stat, ~0ms) — runs every 1s when active
-const checkMtimeChanged = async (): Promise<boolean> => {
-  if (isLoading.value || isUpdating.value || showOnboarding.value || !beadsPath.value || projects.value.length === 0) {
-    return false
-  }
-  const path = beadsPath.value && beadsPath.value !== '.' ? beadsPath.value : undefined
-  const changed = await bdCheckChanged(path)
-  if (changed) skipMtimeCheck = true // pollFn can skip the mtime check — we already consumed it
-  return changed
-}
 
 const pollForChanges = async () => {
   // Don't poll if no active project
@@ -223,7 +207,7 @@ const pollForChanges = async () => {
 
     const path = beadsPath.value && beadsPath.value !== '.' ? beadsPath.value : undefined
 
-    // Layer 2: Check filesystem mtime first — skip if fast check already detected change
+    // Layer 4: Check filesystem mtime first — skip if fast check already detected change
     if (!skipMtimeCheck) {
       const changed = await bdCheckChanged(path)
       if (!changed) {
@@ -233,7 +217,7 @@ const pollForChanges = async () => {
     }
     skipMtimeCheck = false
 
-    // Layer 3: Changes detected — use batched command (1 IPC instead of 3)
+    // Layer 5: Changes detected — use batched command (1 IPC instead of 3)
     const readyData = await fetchPollData()
 
     // Update dashboard from pre-fetched data (no extra API call)
@@ -254,11 +238,35 @@ const pollForChanges = async () => {
   }
 }
 
-// Adaptive polling with fast mtime detection (degrades gracefully if watcher unavailable)
-const { start: startPolling, stop: stopPolling } = useAdaptivePolling(pollForChanges, {
-  checkFn: checkMtimeChanged,
-  watcherActive: changeDetectionActive,
+// Layer 2: Backpressure gate — merges watcher + timer triggers, enforces min interval
+const { requestPoll, requestImmediatePoll, cancel: cancelScheduledPoll, stats: pollStats } = usePollScheduler(pollForChanges)
+
+const { active: changeDetectionActive, startListening, stopListening, notifySelfWrite } = useChangeDetection({
+  onChanged: async () => {
+    requestPoll()
+  },
 })
+
+// Fast change detection (cheap mtime stat, ~0ms) — runs every 1s when active
+const checkMtimeChanged = async (): Promise<boolean> => {
+  if (isLoading.value || isUpdating.value || showOnboarding.value || !beadsPath.value || projects.value.length === 0) {
+    return false
+  }
+  const path = beadsPath.value && beadsPath.value !== '.' ? beadsPath.value : undefined
+  const changed = await bdCheckChanged(path)
+  if (changed) skipMtimeCheck = true // pollFn can skip the mtime check — we already consumed it
+  return changed
+}
+
+// Adaptive polling with fast mtime detection (degrades gracefully if watcher unavailable)
+// Polls go through the scheduler's backpressure gate
+const { start: startPolling, stop: stopPolling } = useAdaptivePolling(
+  () => { requestPoll(); return Promise.resolve() },
+  {
+    checkFn: checkMtimeChanged,
+    watcherActive: changeDetectionActive,
+  },
+)
 
 onMounted(async () => {
   checkViewport()
@@ -322,6 +330,7 @@ onUnmounted(() => {
     window.removeEventListener('resize', checkViewport)
     stopListening()
     stopPolling()
+    cancelScheduledPoll()
     stopPeriodicCheck()
     // Auto-unregister from probe (fire-and-forget)
     probeUnregisterProject(beadsPath.value)
