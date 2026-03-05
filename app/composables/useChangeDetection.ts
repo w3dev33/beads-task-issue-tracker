@@ -1,4 +1,5 @@
 import { getExternalUrl, getProbeProjectName, logFrontend, startWatching, stopWatching } from '~/utils/bd-api'
+import { usePipelineDiagnostics } from './usePipelineDiagnostics'
 
 interface UseChangeDetectionOptions {
   onChanged: () => Promise<void>
@@ -22,6 +23,8 @@ export function createQueuedHandler(
   getSelfWriteCooldownActive: () => boolean,
   onProcessed: () => void,
 ) {
+  const { recordWatcherTrigger, recordWatcherDebounce, recordWatcherRerun } = usePipelineDiagnostics()
+
   let inflight = false
   let pendingRerun = false
   let debounceTimer: ReturnType<typeof setTimeout> | null = null
@@ -29,6 +32,7 @@ export function createQueuedHandler(
 
   function schedule() {
     if (debounceTimer) clearTimeout(debounceTimer)
+    recordWatcherDebounce()
     debounceTimer = setTimeout(() => run(), DEBOUNCE_MS)
   }
 
@@ -56,6 +60,7 @@ export function createQueuedHandler(
         consecutiveReruns++
 
         if (!pendingRerun || consecutiveReruns >= MAX_CONSECUTIVE_RERUNS) break
+        recordWatcherRerun()
       }
     } finally {
       inflight = false
@@ -64,7 +69,11 @@ export function createQueuedHandler(
   }
 
   function trigger() {
-    if (getSelfWriteCooldownActive()) return
+    if (getSelfWriteCooldownActive()) {
+      recordWatcherTrigger(false)
+      return
+    }
+    recordWatcherTrigger(true)
     if (inflight) {
       pendingRerun = true
       return

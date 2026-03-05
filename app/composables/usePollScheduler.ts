@@ -9,6 +9,8 @@
  * - `stats` — lightweight instrumentation (skipped, deferred, executed counts).
  */
 
+import { usePipelineDiagnostics } from './usePipelineDiagnostics'
+
 const DEFAULT_MIN_INTERVAL_MS = 2_000
 
 interface PollSchedulerOptions {
@@ -21,6 +23,7 @@ export function usePollScheduler(
   options?: PollSchedulerOptions,
 ) {
   const minInterval = options?.minInterval ?? DEFAULT_MIN_INTERVAL_MS
+  const { recordPollRequest, recordPollDecision } = usePipelineDiagnostics()
 
   let lastPollEnd = 0
   let inflight = false
@@ -43,12 +46,14 @@ export function usePollScheduler(
   const runPoll = async () => {
     if (inflight) {
       stats.skipped++
+      recordPollDecision('skipped')
       return
     }
     inflight = true
     try {
       await pollFn()
       stats.executed++
+      recordPollDecision('executed')
     } finally {
       inflight = false
       lastPollEnd = Date.now()
@@ -62,8 +67,11 @@ export function usePollScheduler(
    * - If already inflight or a deferred poll is pending → skips.
    */
   const requestPoll = () => {
+    recordPollRequest('normal')
+
     if (inflight) {
       stats.skipped++
+      recordPollDecision('skipped')
       return
     }
 
@@ -77,10 +85,12 @@ export function usePollScheduler(
     // Too soon — defer to end of cooldown window (if not already deferred)
     if (deferredTimer) {
       stats.skipped++
+      recordPollDecision('skipped')
       return
     }
 
     stats.deferred++
+    recordPollDecision('deferred')
     const remaining = minInterval - elapsed
     deferredTimer = setTimeout(() => {
       deferredTimer = null
@@ -93,6 +103,7 @@ export function usePollScheduler(
    * Still prevents concurrent polls.
    */
   const requestImmediatePoll = () => {
+    recordPollRequest('immediate')
     clearDeferred()
     runPoll()
   }

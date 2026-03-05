@@ -195,12 +195,17 @@ const { showErrorDialog: showSyncErrorDialog, lastSyncError, closeErrorDialog: c
 // 6. Adaptive intervals (30s safety net when watcher active, 5s/1s fallback without watcher)
 const isSyncing = ref(false)
 let skipMtimeCheck = false // Set by watcher/fast check to avoid redundant bdCheckChanged in pollFn
+const { recordPollStart, recordPollFinish, recordMtimeCheck } = usePipelineDiagnostics()
 
 const pollForChanges = async () => {
   // Don't poll if no active project
   if (isLoading.value || isUpdating.value || showOnboarding.value || !beadsPath.value || projects.value.length === 0) {
     return
   }
+
+  const pollT0 = performance.now()
+  let hadError = false
+  recordPollStart()
 
   try {
     isSyncing.value = true
@@ -210,6 +215,7 @@ const pollForChanges = async () => {
     // Layer 4: Check filesystem mtime first — skip if fast check already detected change
     if (!skipMtimeCheck) {
       const changed = await bdCheckChanged(path)
+      recordMtimeCheck(changed)
       if (!changed) {
         // Nothing changed on disk — skip entire poll cycle
         return
@@ -232,9 +238,10 @@ const pollForChanges = async () => {
     // Tell change detection backend to ignore self-triggered events
     notifySelfWrite()
   } catch {
-    // Ignore polling errors
+    hadError = true
   } finally {
     isSyncing.value = false
+    recordPollFinish(Math.round(performance.now() - pollT0), hadError)
   }
 }
 
@@ -254,6 +261,7 @@ const checkMtimeChanged = async (): Promise<boolean> => {
   }
   const path = beadsPath.value && beadsPath.value !== '.' ? beadsPath.value : undefined
   const changed = await bdCheckChanged(path)
+  recordMtimeCheck(changed)
   if (changed) skipMtimeCheck = true // pollFn can skip the mtime check — we already consumed it
   return changed
 }
