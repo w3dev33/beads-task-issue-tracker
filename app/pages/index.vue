@@ -871,7 +871,7 @@ watch(
             <PathSelector v-if="!showOnboarding" ref="pathSelectorRef" :is-loading="isLoading" @change="handlePathChange" @reset="handleReset" />
 
             <div v-if="stats" class="space-y-4 mt-6">
-              <div class="grid gap-1.5 content-start p-0.5 -m-0.5 [grid-template-columns:repeat(auto-fit,minmax(4rem,1fr))]">
+              <div class="flex flex-wrap gap-1.5 p-0.5 -m-0.5">
                 <KpiCard title="Workflow" :value="stats.workflow" color="var(--color-status-deferred)" :active="activeKpiFilter === 'workflow'" @click="handleKpiClick('workflow')" />
                 <KpiCard title="Open" :value="stats.open" color="var(--color-status-open)" :active="activeKpiFilter === 'open'" @click="handleKpiClick('open')" />
                 <KpiCard title="In Progress" :value="stats.inProgress" color="var(--color-status-in-progress)" :active="activeKpiFilter === 'in_progress'" @click="handleKpiClick('in_progress')" />
