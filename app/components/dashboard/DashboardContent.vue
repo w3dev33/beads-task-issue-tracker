@@ -15,7 +15,7 @@ import {
   TooltipTrigger,
 } from '~/components/ui/tooltip'
 
-type KpiFilter = 'total' | 'open' | 'in_progress' | 'blocked'
+type KpiFilter = 'total' | 'open' | 'in_progress' | 'blocked' | 'workflow'
 
 const props = withDefaults(defineProps<{
   stats: DashboardStats | null
@@ -24,13 +24,12 @@ const props = withDefaults(defineProps<{
   blockedIssues: Issue[]
   pinnedIssues: Issue[]
   pinnedSortMode?: PinnedSortMode
-  kpiGridCols?: 2 | 4
+  kpiGridCols?: 2 | 5
   activeKpiFilter: KpiFilter | null
-  statusFilters: string[]
   showOnboarding?: boolean
   hideKpis?: boolean
 }>(), {
-  kpiGridCols: 4,
+  kpiGridCols: 5,
   showOnboarding: false,
   hideKpis: false,
 })
@@ -55,11 +54,12 @@ const isReadyCollapsed = useProjectStorage('readyCollapsed', true)
 <template>
   <template v-if="stats">
     <!-- KPI cards (hidden in desktop scrollable section where KPIs are in the fixed section) -->
-    <div v-if="!hideKpis" :class="['grid', kpiGridCols === 4 ? 'grid-cols-4 gap-1.5' : 'grid-cols-2 gap-3']">
+    <div v-if="!hideKpis" :class="['grid', kpiGridCols === 5 ? 'grid-cols-5 gap-1.5' : 'grid-cols-2 gap-3']">
       <KpiCard title="Open" :value="stats.open" color="var(--color-status-open)" :active="activeKpiFilter === 'open'" @click="emit('kpi-click', 'open')" />
       <KpiCard title="In Progress" :value="stats.inProgress" color="var(--color-status-in-progress)" :active="activeKpiFilter === 'in_progress'" @click="emit('kpi-click', 'in_progress')" />
       <KpiCard title="Blocked" :value="stats.blocked" color="var(--color-status-blocked)" :active="activeKpiFilter === 'blocked'" @click="emit('kpi-click', 'blocked')" />
-      <KpiCard title="Total" :value="stats.total" :active="activeKpiFilter === null && statusFilters.length === 0" @click="emit('kpi-click', 'total')" />
+      <KpiCard title="Workflow" :value="stats.workflow" color="var(--color-status-deferred)" :active="activeKpiFilter === 'workflow'" @click="emit('kpi-click', 'workflow')" />
+      <KpiCard title="Total" :value="stats.total" :active="activeKpiFilter === 'total'" @click="emit('kpi-click', 'total')" />
     </div>
 
     <!-- Collapsible Charts Section -->

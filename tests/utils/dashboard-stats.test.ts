@@ -27,6 +27,7 @@ describe('computeStatsFromIssues', () => {
     expect(stats.inProgress).toBe(0)
     expect(stats.blocked).toBe(0)
     expect(stats.closed).toBe(0)
+    expect(stats.workflow).toBe(0)
     expect(stats.byType.bug).toBe(0)
     expect(stats.byPriority.p0).toBe(0)
   })
@@ -76,6 +77,22 @@ describe('computeStatsFromIssues', () => {
     const stats = computeStatsFromIssues(issues)
     expect(stats.blocked).toBe(1)
     expect(stats.open).toBe(1)
+    expect(stats.workflow).toBe(1)
+  })
+
+  it('counts workflow as non-blocked, non-closed, non-deleted issues', () => {
+    const issues = [
+      makeIssue({ id: '1', status: 'open' }),
+      makeIssue({ id: '2', status: 'in_progress' }),
+      makeIssue({ id: '3', status: 'deferred' }),
+      makeIssue({ id: '4', status: 'blocked' }),
+      makeIssue({ id: '5', status: 'closed' }),
+      makeIssue({ id: '6', status: 'deleted' as any }),
+      makeIssue({ id: '7', status: 'tombstone' as any }),
+      makeIssue({ id: '8', status: 'open', blockedBy: ['1'] }),
+    ]
+    const stats = computeStatsFromIssues(issues)
+    expect(stats.workflow).toBe(3)
   })
 
   it('counts closed separately', () => {
@@ -136,6 +153,7 @@ describe('computeStatsFromIssues', () => {
     expect(stats.inProgress).toBe(1)
     expect(stats.blocked).toBe(1)
     expect(stats.closed).toBe(1)
+    expect(stats.workflow).toBe(3)
   })
 
   it('initializes ready to 0', () => {

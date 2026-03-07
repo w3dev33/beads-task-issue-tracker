@@ -84,6 +84,7 @@ export interface DashboardStats {
   inProgress: number
   blocked: number
   closed: number
+  workflow: number
   ready: number
   byType: Record<IssueType, number>
   byPriority: Record<IssuePriority, number>

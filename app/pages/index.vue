@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { Issue, UpdateIssuePayload } from '~/types/issue'
+import type { Issue, IssueStatus, UpdateIssuePayload } from '~/types/issue'
 import { isIssueBlocked } from '~/utils/issue-helpers'
 
 // Layout components
@@ -761,10 +761,19 @@ const handleRemoveLabelFilter = (label: string) => {
 }
 
 // KPI filter handlers
-type KpiFilter = 'total' | 'open' | 'in_progress' | 'blocked'
+type KpiFilter = 'total' | 'open' | 'in_progress' | 'blocked' | 'workflow'
+const allStatusFilters: IssueStatus[] = ['open', 'in_progress', 'blocked', 'closed', 'deferred', 'pinned', 'hooked']
+const workflowStatusFilters: IssueStatus[] = ['open', 'in_progress', 'deferred', 'pinned', 'hooked']
+
+const matchesStatusFilters = (selected: IssueStatus[], expected: IssueStatus[]) => {
+  if (selected.length !== expected.length) return false
+  return expected.every(status => selected.includes(status))
+}
+
 const activeKpiFilter = computed<KpiFilter | null>(() => {
   const statusFilters = filters.value.status
-  if (statusFilters.length === 0) return null
+  if (statusFilters.length === 0 || matchesStatusFilters(statusFilters, workflowStatusFilters)) return 'workflow'
+  if (matchesStatusFilters(statusFilters, allStatusFilters)) return 'total'
   if (statusFilters.length === 1 && statusFilters[0] === 'open') return 'open'
   if (statusFilters.length === 1 && statusFilters[0] === 'in_progress') return 'in_progress'
   if (statusFilters.length === 1 && statusFilters[0] === 'blocked') return 'blocked'
@@ -772,8 +781,12 @@ const activeKpiFilter = computed<KpiFilter | null>(() => {
 })
 
 const handleKpiClick = (kpi: KpiFilter) => {
-  if (kpi === 'total') {
+  if (kpi === 'workflow') {
+    // Empty status filter maps to WORKFLOW in filterIssues.
+    setStatusFilter([])
+  } else if (kpi === 'total') {
     clearFilters()
+    setStatusFilter(allStatusFilters)
   } else if (kpi === 'open') {
     setStatusFilter(['open'])
   } else if (kpi === 'in_progress') {
@@ -859,12 +872,13 @@ watch(
             <PathSelector v-if="!showOnboarding" ref="pathSelectorRef" :is-loading="isLoading" @change="handlePathChange" @reset="handleReset" />
 
             <div v-if="stats" class="space-y-4 mt-6">
-              <div class="grid grid-cols-4 gap-1.5">
+              <div class="grid grid-cols-5 gap-1.5">
                 <KpiCard title="Open" :value="stats.open" color="var(--color-status-open)" :active="activeKpiFilter === 'open'" @click="handleKpiClick('open')" />
                 <KpiCard title="In Progress" :value="stats.inProgress" color="var(--color-status-in-progress)" :active="activeKpiFilter === 'in_progress'" @click="handleKpiClick('in_progress')" />
                 <KpiCard title="Blocked" :value="stats.blocked" color="var(--color-status-blocked)" :active="activeKpiFilter === 'blocked'" @click="handleKpiClick('blocked')" />
-                <KpiCard title="Total" :value="stats.total" :active="activeKpiFilter === null && filters.status.length === 0" @click="handleKpiClick('total')" />
-              </div>
+                <KpiCard title="Workflow" :value="stats.workflow" color="var(--color-status-deferred)" :active="activeKpiFilter === 'workflow'" @click="handleKpiClick('workflow')" />
+                <KpiCard title="Total" :value="stats.total" :active="activeKpiFilter === 'total'" @click="handleKpiClick('total')" />
+            </div>
             </div>
 
             <div v-if="!stats" class="flex items-center justify-center py-8">
@@ -884,7 +898,6 @@ watch(
               :pinned-issues="pinnedIssuesList"
               :pinned-sort-mode="pinnedSortMode"
               :active-kpi-filter="activeKpiFilter"
-              :status-filters="filters.status"
               @select-issue="handleSelectIssue"
               @kpi-click="handleKpiClick"
               @reorder-pinned="reorderPinned"
@@ -1120,7 +1133,6 @@ watch(
             :pinned-sort-mode="pinnedSortMode"
             :kpi-grid-cols="2"
             :active-kpi-filter="activeKpiFilter"
-            :status-filters="filters.status"
             :show-onboarding="showOnboarding"
             @select-issue="handleSelectIssue"
             @kpi-click="handleKpiClick"

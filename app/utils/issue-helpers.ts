@@ -70,6 +70,17 @@ export function isIssueBlocked(issue: Pick<Issue, 'status' | 'blockedBy'>): bool
 }
 
 /**
+ * Determine whether an issue belongs in the WORKFLOW view.
+ *
+ * WORKFLOW includes everything except closed/deleted/tombstone and blocked.
+ */
+export function isIssueWorkflow(issue: Pick<Issue, 'status' | 'blockedBy'>): boolean {
+  const status = issue.status as string
+  if (status === 'closed' || status === 'deleted' || status === 'tombstone') return false
+  return !isIssueBlocked(issue)
+}
+
+/**
  * Natural sort comparison for IDs (handles multi-digit numbers correctly).
  * e.g., "40b.2" < "40b.10" instead of "40b.10" < "40b.2"
  */
@@ -251,7 +262,7 @@ export function filterIssues(
     )
   }
 
-  // Status filter (default: exclude closed)
+  // Status filter (default: WORKFLOW view)
   if (filters.status.length > 0) {
     const includeBlocked = filters.status.includes('blocked')
     result = result.filter((issue) => {
@@ -259,7 +270,7 @@ export function filterIssues(
       return filters.status.includes(issue.status)
     })
   } else {
-    result = result.filter((issue) => issue.status !== 'closed')
+    result = result.filter((issue) => isIssueWorkflow(issue))
   }
 
   if (filters.type.length > 0) {
@@ -401,12 +412,17 @@ export function computeStatsFromIssues(issues: Issue[]): DashboardStats {
     inProgress: 0,
     blocked: 0,
     closed: 0,
+    workflow: 0,
     ready: 0,
     byType: { bug: 0, task: 0, feature: 0, epic: 0, chore: 0 },
     byPriority: { p0: 0, p1: 0, p2: 0, p3: 0, p4: 0 },
   }
 
   for (const issue of issues) {
+    if (isIssueWorkflow(issue)) {
+      stats.workflow++
+    }
+
     if (isIssueBlocked(issue)) {
       stats.blocked++
     } else {

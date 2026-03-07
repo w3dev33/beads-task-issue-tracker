@@ -10,17 +10,16 @@ const defaultFilters: FilterState = {
   labels: [],
 }
 
-const validStatuses: IssueStatus[] = ['open', 'in_progress', 'blocked', 'closed', 'deferred', 'pinned', 'hooked']
-
 export function useFilters() {
   const filters = useProjectStorage<FilterState>('filters', defaultFilters)
 
-  // Clear transient filters on init and drop statuses from old persisted schemas.
+  // Clear transient filters on init and reset status to the default KPI view.
   if (import.meta.client) {
     filters.value.search = ''
     filters.value.labels = []
     filters.value.assignee = []
-    filters.value.status = filters.value.status.filter(status => validStatuses.includes(status))
+    // Always reset to the default WORKFLOW view on load/refresh.
+    filters.value.status = []
   }
 
   const toggleStatus = (status: IssueStatus) => {

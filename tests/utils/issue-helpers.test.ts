@@ -278,14 +278,42 @@ describe('filterIssues', () => {
     makeIssue({ id: '3', title: 'Old feature', status: 'closed', type: 'feature', priority: 'p3' }),
   ]
 
-  it('excludes closed by default (no status filter)', () => {
+  it('uses workflow view by default (no status filter)', () => {
     const result = filterIssues(issues, noFilters, noExclusions)
+    expect(result.map(i => i.id)).toEqual(['1', '2'])
+  })
+
+  it('default workflow view excludes blocked statuses and dependency-blocked issues', () => {
+    const dependencyBlocked = makeIssue({ id: '5', status: 'open', blockedBy: ['1'] })
+    const explicitlyBlocked = makeIssue({ id: '6', status: 'blocked' })
+    const result = filterIssues([...issues, dependencyBlocked, explicitlyBlocked], noFilters, noExclusions)
     expect(result.map(i => i.id)).toEqual(['1', '2'])
   })
 
   it('shows only selected statuses when status filter active', () => {
     const result = filterIssues(issues, { ...noFilters, status: ['closed'] }, noExclusions)
     expect(result.map(i => i.id)).toEqual(['3'])
+  })
+
+  it('returns every supported status when all status filters are selected (TOTAL view)', () => {
+    const fullStatusSet = [
+      ...issues,
+      makeIssue({ id: '4', status: 'blocked' }),
+      makeIssue({ id: '5', status: 'deferred' }),
+      makeIssue({ id: '6', status: 'pinned' }),
+      makeIssue({ id: '7', status: 'hooked' }),
+    ]
+
+    const result = filterIssues(
+      fullStatusSet,
+      {
+        ...noFilters,
+        status: ['open', 'in_progress', 'blocked', 'closed', 'deferred', 'pinned', 'hooked'],
+      },
+      noExclusions,
+    )
+
+    expect(result.map(i => i.id)).toEqual(['1', '2', '3', '4', '5', '6', '7'])
   })
 
   it('includes dependency-blocked issues in blocked status filter', () => {
@@ -360,7 +388,7 @@ describe('filterIssues', () => {
     expect(result.map(i => i.id)).toEqual(['2'])
   })
 
-  it('returns all non-closed when no filters and no exclusions', () => {
+  it('returns all workflow issues when no filters and no exclusions', () => {
     const result = filterIssues(issues, noFilters, noExclusions)
     expect(result).toHaveLength(2)
   })
