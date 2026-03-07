@@ -405,7 +405,7 @@ export function groupIssues(
 
 /**
  * Compute dashboard stats from an issues array.
- * Groups open/deferred/pinned/hooked as "open".
+ * "open" counts only true open issues to match the Open KPI filter.
  */
 export function computeStatsFromIssues(issues: Issue[]): DashboardStats {
   const stats: DashboardStats = {
@@ -430,9 +430,6 @@ export function computeStatsFromIssues(issues: Issue[]): DashboardStats {
     } else {
       switch (issue.status) {
         case 'open':
-        case 'deferred':
-        case 'pinned':
-        case 'hooked':
           stats.open++
           break
         case 'in_progress':

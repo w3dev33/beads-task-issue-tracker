@@ -42,7 +42,7 @@ describe('computeStatsFromIssues', () => {
     expect(stats.total).toBe(3)
   })
 
-  it('groups open, deferred, pinned, hooked as "open"', () => {
+  it('counts only true open issues as "open"', () => {
     const issues = [
       makeIssue({ id: '1', status: 'open' }),
       makeIssue({ id: '2', status: 'deferred' }),
@@ -50,7 +50,7 @@ describe('computeStatsFromIssues', () => {
       makeIssue({ id: '4', status: 'hooked' }),
     ]
     const stats = computeStatsFromIssues(issues)
-    expect(stats.open).toBe(4)
+    expect(stats.open).toBe(1)
     expect(stats.inProgress).toBe(0)
   })
 
@@ -149,7 +149,7 @@ describe('computeStatsFromIssues', () => {
     ]
     const stats = computeStatsFromIssues(issues)
     expect(stats.total).toBe(5)
-    expect(stats.open).toBe(2) // open + deferred
+    expect(stats.open).toBe(1)
     expect(stats.inProgress).toBe(1)
     expect(stats.blocked).toBe(1)
     expect(stats.closed).toBe(1)
