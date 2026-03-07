@@ -45,7 +45,7 @@ import {
 } from '~/components/ui/tooltip'
 
 // Composables
-const { filters, toggleStatus, toggleType, togglePriority, toggleAssignee, clearFilters, setStatusFilter, setSearch, toggleLabelFilter } = useFilters()
+const { filters, toggleStatus, toggleType, togglePriority, toggleAssignee, clearFilters, setStatusFilter, setAllFilters, setSearch, toggleLabelFilter } = useFilters()
 const { columns, toggleColumn, setColumns, resetColumns } = useColumnConfig()
 const { beadsPath, hasStoredPath } = useBeadsPath()
 const { success: notifySuccess, error: notifyError } = useNotification()
@@ -784,7 +784,7 @@ const handleKpiClick = (kpi: KpiFilter) => {
   if (kpi === 'workflow') {
     setStatusFilter([...workflowStatusFilters])
   } else if (kpi === 'total') {
-    clearFilters()
+    setAllFilters()
   } else if (kpi === 'open') {
     setStatusFilter(['open'])
   } else if (kpi === 'in_progress') {

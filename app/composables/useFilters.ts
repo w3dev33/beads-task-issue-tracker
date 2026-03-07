@@ -86,6 +86,19 @@ export function useFilters() {
     filters.value.status = [...statuses]
   }
 
+  const allStatuses: IssueStatus[] = ['open', 'in_progress', 'blocked', 'closed', 'deferred', 'pinned', 'hooked']
+  const allTypes: IssueType[] = ['bug', 'task', 'feature', 'epic', 'chore']
+  const allPriorities: IssuePriority[] = ['p0', 'p1', 'p2', 'p3', 'p4']
+
+  const setAllFilters = () => {
+    filters.value.status = [...allStatuses]
+    filters.value.type = []
+    filters.value.priority = []
+    filters.value.assignee = []
+    filters.value.search = ''
+    filters.value.labels = []
+  }
+
   const hasActiveFilters = computed(() => {
     return (
       filters.value.status.length > 0 ||
@@ -107,6 +120,7 @@ export function useFilters() {
     toggleLabelFilter,
     clearFilters,
     setStatusFilter,
+    setAllFilters,
     hasActiveFilters,
   }
 }
