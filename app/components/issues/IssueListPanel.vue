@@ -16,7 +16,6 @@ defineProps<{
   multiSelectMode: boolean
   selectedCount: number
   columns: ColumnConfig[]
-  isSearchActive: boolean
   issues: Issue[]
   groupedIssues: IssueGroup[]
   selectedId?: string
@@ -82,7 +81,6 @@ const handleSort = (field: string | null, direction: 'asc' | 'desc') => {
     />
 
     <FilterChips
-      v-if="!isSearchActive"
       :status-filters="filters.status"
       :type-filters="filters.type"
       :priority-filters="filters.priority"
