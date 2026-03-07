@@ -65,7 +65,7 @@ const neonTitleStyle = computed(() => {
     @click="$emit('click')"
   >
     <div
-      class="text-[9px] uppercase tracking-wide mb-0.5 truncate"
+      class="text-[9px] uppercase tracking-wide mb-0.5 leading-tight"
       :class="isNeon && color ? '' : 'text-muted-foreground'"
       :style="neonTitleStyle"
     >
