@@ -54,7 +54,7 @@ const isReadyCollapsed = useProjectStorage('readyCollapsed', true)
 <template>
   <template v-if="stats">
     <!-- KPI cards (hidden in desktop scrollable section where KPIs are in the fixed section) -->
-    <div v-if="!hideKpis" :class="['grid', kpiGridCols === 5 ? 'grid-cols-5 gap-1.5' : 'grid-cols-2 gap-3']">
+    <div v-if="!hideKpis" :class="['grid p-0.5 -m-0.5', kpiGridCols === 5 ? 'grid-cols-5 gap-1.5' : 'grid-cols-2 gap-3']">
       <KpiCard title="Workflow" :value="stats.workflow" color="var(--color-status-deferred)" :active="activeKpiFilter === 'workflow'" @click="emit('kpi-click', 'workflow')" />
       <KpiCard title="Open" :value="stats.open" color="var(--color-status-open)" :active="activeKpiFilter === 'open'" @click="emit('kpi-click', 'open')" />
       <KpiCard title="In Progress" :value="stats.inProgress" color="var(--color-status-in-progress)" :active="activeKpiFilter === 'in_progress'" @click="emit('kpi-click', 'in_progress')" />
