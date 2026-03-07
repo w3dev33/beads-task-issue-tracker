@@ -276,10 +276,9 @@ describe('filterIssues', () => {
     makeIssue({ id: '1', title: 'Login bug', status: 'open', type: 'bug', priority: 'p0', labels: ['frontend'], assignee: 'alice' }),
     makeIssue({ id: '2', title: 'Add tests', status: 'in_progress', type: 'task', priority: 'p2', labels: ['backend'], assignee: 'bob' }),
     makeIssue({ id: '3', title: 'Old feature', status: 'closed', type: 'feature', priority: 'p3' }),
-    makeIssue({ id: '4', title: 'Tombstone', status: 'tombstone' as any, type: 'task', priority: 'p2' }),
   ]
 
-  it('excludes closed and tombstone by default (no status filter)', () => {
+  it('excludes closed by default (no status filter)', () => {
     const result = filterIssues(issues, noFilters, noExclusions)
     expect(result.map(i => i.id)).toEqual(['1', '2'])
   })

@@ -84,15 +84,13 @@ export function useEpicExpand() {
  */
 function notifyStatusTransitions(oldIssues: Issue[], newIssues: Issue[]) {
   const { success: notifySuccess } = useNotification()
-  const oldStatusMap = new Map(oldIssues.map(i => [i.id, { status: i.status, title: i.title }]))
+  const oldStatusMap = new Map(oldIssues.map(i => [i.id, { status: i.status }]))
 
   for (const issue of newIssues) {
     const old = oldStatusMap.get(issue.id)
     if (old && old.status !== issue.status) {
       if (issue.status === 'closed') {
         notifySuccess(`Issue ${issue.id} closed`, issue.title)
-      } else if (issue.status === 'tombstone') {
-        notifySuccess(`Issue ${issue.id} deleted`, old.title)
       } else if (old.status === 'closed') {
         notifySuccess(`Issue ${issue.id} reopened`, issue.title)
       }

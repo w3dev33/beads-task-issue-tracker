@@ -31,14 +31,14 @@ describe('computeStatsFromIssues', () => {
     expect(stats.byPriority.p0).toBe(0)
   })
 
-  it('counts total excluding tombstone', () => {
+  it('counts total across all issues', () => {
     const issues = [
       makeIssue({ id: '1', status: 'open' }),
       makeIssue({ id: '2', status: 'closed' }),
-      makeIssue({ id: '3', status: 'tombstone' as any }),
+      makeIssue({ id: '3', status: 'deferred' }),
     ]
     const stats = computeStatsFromIssues(issues)
-    expect(stats.total).toBe(2)
+    expect(stats.total).toBe(3)
   })
 
   it('groups open, deferred, pinned, hooked as "open"', () => {
@@ -112,14 +112,14 @@ describe('computeStatsFromIssues', () => {
     expect(stats.byPriority.p4).toBe(1)
   })
 
-  it('excludes tombstone from type and priority counts', () => {
+  it('includes closed issues in type and priority counts', () => {
     const issues = [
-      makeIssue({ id: '1', status: 'tombstone' as any, type: 'bug', priority: 'p0' }),
+      makeIssue({ id: '1', status: 'closed', type: 'bug', priority: 'p0' }),
       makeIssue({ id: '2', status: 'open', type: 'bug', priority: 'p0' }),
     ]
     const stats = computeStatsFromIssues(issues)
-    expect(stats.byType.bug).toBe(1)
-    expect(stats.byPriority.p0).toBe(1)
+    expect(stats.byType.bug).toBe(2)
+    expect(stats.byPriority.p0).toBe(2)
   })
 
   it('handles mixed realistic data', () => {
@@ -129,7 +129,6 @@ describe('computeStatsFromIssues', () => {
       makeIssue({ id: '3', status: 'blocked', type: 'feature', priority: 'p1' }),
       makeIssue({ id: '4', status: 'closed', type: 'task', priority: 'p3' }),
       makeIssue({ id: '5', status: 'deferred', type: 'chore', priority: 'p4' }),
-      makeIssue({ id: '6', status: 'tombstone' as any, type: 'bug', priority: 'p0' }),
     ]
     const stats = computeStatsFromIssues(issues)
     expect(stats.total).toBe(5)

@@ -104,7 +104,6 @@ const statusOrder: Record<IssueStatus, number> = {
   deferred: 4,
   pinned: 5,
   hooked: 6,
-  tombstone: 7,
 }
 
 const priorityOrder: Record<IssuePriority, number> = {

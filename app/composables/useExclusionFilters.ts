@@ -17,8 +17,14 @@ const defaultExclusions: ExclusionFilters = {
   assignee: [],
 }
 
+const validStatuses: IssueStatus[] = ['open', 'in_progress', 'blocked', 'closed', 'deferred', 'pinned', 'hooked']
+
 export function useExclusionFilters() {
   const exclusions = useProjectStorage<ExclusionFilters>('exclusionFilters', defaultExclusions)
+
+  if (import.meta.client) {
+    exclusions.value.status = exclusions.value.status.filter(status => validStatuses.includes(status))
+  }
 
   const toggleStatus = (status: IssueStatus) => {
     const index = exclusions.value.status.indexOf(status)

@@ -582,7 +582,7 @@ fn normalize_issue_type(issue_type: &str) -> String {
 }
 
 fn normalize_issue_status(status: &str) -> String {
-    let valid_statuses = ["open", "in_progress", "blocked", "closed", "deferred", "tombstone", "pinned", "hooked"];
+    let valid_statuses = ["open", "in_progress", "blocked", "closed", "deferred", "pinned", "hooked"];
     if valid_statuses.contains(&status) {
         status.to_string()
     } else {

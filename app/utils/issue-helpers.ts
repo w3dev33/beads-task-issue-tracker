@@ -61,12 +61,12 @@ export function pruneClosedBlockers(issues: Issue[]): void {
  * Determine whether an issue should appear in blocked views.
  *
  * Supports both explicit blocked status and dependency-based blockers
- * (`blockedBy`) while ignoring closed/tombstone issues.
+ * (`blockedBy`) while ignoring closed issues.
  */
 export function isIssueBlocked(issue: Pick<Issue, 'status' | 'blockedBy'>): boolean {
   if (issue.status === 'blocked') return true
   if (!issue.blockedBy?.length) return false
-  return issue.status !== 'closed' && issue.status !== 'tombstone'
+  return issue.status !== 'closed'
 }
 
 /**
@@ -251,7 +251,7 @@ export function filterIssues(
     )
   }
 
-  // Status filter (default: exclude closed + tombstone)
+  // Status filter (default: exclude closed)
   if (filters.status.length > 0) {
     const includeBlocked = filters.status.includes('blocked')
     result = result.filter((issue) => {
@@ -259,7 +259,7 @@ export function filterIssues(
       return filters.status.includes(issue.status)
     })
   } else {
-    result = result.filter((issue) => issue.status !== 'closed' && issue.status !== 'tombstone')
+    result = result.filter((issue) => issue.status !== 'closed')
   }
 
   if (filters.type.length > 0) {
@@ -392,7 +392,7 @@ export function groupIssues(
 
 /**
  * Compute dashboard stats from an issues array.
- * Excludes tombstone issues. Groups open/deferred/pinned/hooked as "open".
+ * Groups open/deferred/pinned/hooked as "open".
  */
 export function computeStatsFromIssues(issues: Issue[]): DashboardStats {
   const stats: DashboardStats = {
@@ -406,10 +406,7 @@ export function computeStatsFromIssues(issues: Issue[]): DashboardStats {
     byPriority: { p0: 0, p1: 0, p2: 0, p3: 0, p4: 0 },
   }
 
-  const activeIssues = issues.filter((issue) => issue.status !== 'tombstone')
-  stats.total = activeIssues.length
-
-  for (const issue of activeIssues) {
+  for (const issue of issues) {
     if (isIssueBlocked(issue)) {
       stats.blocked++
     } else {
@@ -437,6 +434,8 @@ export function computeStatsFromIssues(issues: Issue[]): DashboardStats {
       stats.byPriority[issue.priority]++
     }
   }
+
+  stats.total = issues.length
 
   return stats
 }

@@ -1410,7 +1410,7 @@ watch(
             <ul class="list-disc list-inside text-sm space-y-1 ml-2">
               <li>A new Dolt database will be created (<code class="text-xs">bd init</code>)</li>
               <li>Your issues will be imported from the JSONL backup file (<code class="text-xs">bd import</code>)</li>
-              <li>None of your issues will be lost — only previously deleted issues (tombstones) are skipped</li>
+              <li>None of your active issues will be lost during migration</li>
             </ul>
             <p v-if="migrateError" class="text-destructive text-sm">
               Error: {{ migrateError }}

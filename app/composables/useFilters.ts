@@ -10,14 +10,17 @@ const defaultFilters: FilterState = {
   labels: [],
 }
 
+const validStatuses: IssueStatus[] = ['open', 'in_progress', 'blocked', 'closed', 'deferred', 'pinned', 'hooked']
+
 export function useFilters() {
   const filters = useProjectStorage<FilterState>('filters', defaultFilters)
 
-  // Clear search, labels and assignee on init (should not persist across page loads)
+  // Clear transient filters on init and drop statuses from old persisted schemas.
   if (import.meta.client) {
     filters.value.search = ''
     filters.value.labels = []
     filters.value.assignee = []
+    filters.value.status = filters.value.status.filter(status => validStatuses.includes(status))
   }
 
   const toggleStatus = (status: IssueStatus) => {
