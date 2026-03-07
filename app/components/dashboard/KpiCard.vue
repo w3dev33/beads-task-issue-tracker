@@ -54,7 +54,7 @@ const neonTitleStyle = computed(() => {
 
 <template>
   <button
-    class="px-2.5 py-1.5 rounded-md text-left transition-colors"
+    class="px-2.5 py-1.5 rounded-md text-left transition-colors shrink-0"
     :class="[
       active ? 'ring-2 ring-primary' : '',
       isNeon
