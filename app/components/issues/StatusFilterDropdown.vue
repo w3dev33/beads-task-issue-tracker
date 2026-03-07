@@ -68,7 +68,7 @@ const isSelected = (status: IssueStatus) => props.selectedStatuses.includes(stat
       <DropdownMenuCheckboxItem
         v-for="opt in statusOptions"
         :key="opt.value"
-        :checked="isSelected(opt.value)"
+        :model-value="isSelected(opt.value)"
         class="text-xs cursor-pointer"
         @select.prevent="$emit('toggle', opt.value)"
       >

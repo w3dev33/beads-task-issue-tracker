@@ -65,7 +65,7 @@ const isSelected = (priority: IssuePriority) => props.selectedPriorities.include
       <DropdownMenuCheckboxItem
         v-for="opt in priorityOptions"
         :key="opt.value"
-        :checked="isSelected(opt.value)"
+        :model-value="isSelected(opt.value)"
         class="text-xs cursor-pointer"
         @select.prevent="$emit('toggle', opt.value)"
       >
