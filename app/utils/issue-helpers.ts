@@ -262,15 +262,13 @@ export function filterIssues(
     )
   }
 
-  // Status filter (default: WORKFLOW view)
+  // Status filter (default: show all)
   if (filters.status.length > 0) {
     const includeBlocked = filters.status.includes('blocked')
     result = result.filter((issue) => {
       if (includeBlocked && isIssueBlocked(issue)) return true
       return filters.status.includes(issue.status)
     })
-  } else {
-    result = result.filter((issue) => isIssueWorkflow(issue))
   }
 
   if (filters.type.length > 0) {

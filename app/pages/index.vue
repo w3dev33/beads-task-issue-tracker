@@ -772,8 +772,8 @@ const matchesStatusFilters = (selected: IssueStatus[], expected: IssueStatus[]) 
 
 const activeKpiFilter = computed<KpiFilter | null>(() => {
   const statusFilters = filters.value.status
-  if (statusFilters.length === 0 || matchesStatusFilters(statusFilters, workflowStatusFilters)) return 'workflow'
-  if (matchesStatusFilters(statusFilters, allStatusFilters)) return 'total'
+  if (statusFilters.length === 0 || matchesStatusFilters(statusFilters, allStatusFilters)) return 'total'
+  if (matchesStatusFilters(statusFilters, workflowStatusFilters)) return 'workflow'
   if (statusFilters.length === 1 && statusFilters[0] === 'open') return 'open'
   if (statusFilters.length === 1 && statusFilters[0] === 'in_progress') return 'in_progress'
   if (statusFilters.length === 1 && statusFilters[0] === 'blocked') return 'blocked'
@@ -785,7 +785,6 @@ const handleKpiClick = (kpi: KpiFilter) => {
     setStatusFilter([...workflowStatusFilters])
   } else if (kpi === 'total') {
     clearFilters()
-    setStatusFilter(allStatusFilters)
   } else if (kpi === 'open') {
     setStatusFilter(['open'])
   } else if (kpi === 'in_progress') {
