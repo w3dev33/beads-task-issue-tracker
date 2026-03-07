@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { Issue, UpdateIssuePayload } from '~/types/issue'
+import { isIssueBlocked } from '~/utils/issue-helpers'
 
 // Layout components
 import AppHeader from '~/components/layout/AppHeader.vue'
@@ -731,6 +732,11 @@ const inProgressIssues = computed(() => {
   return issues.value.filter(issue => issue.status === 'in_progress')
 })
 
+// Blocked issues for dashboard sidebar (explicit blocked status + dependency-blocked)
+const blockedIssues = computed(() => {
+  return issues.value.filter(issue => isIssueBlocked(issue))
+})
+
 // Pinned issues
 const { pinnedIssueIds, pinnedSortMode, isPinned, togglePin, reorderPinned, toggleSortMode: togglePinnedSort, getPinnedIssues } = usePinnedIssues()
 const pinnedIssuesList = computed(() => getPinnedIssues(issues.value))
@@ -874,6 +880,7 @@ watch(
               :stats="stats"
               :ready-issues="readyIssues"
               :in-progress-issues="inProgressIssues"
+              :blocked-issues="blockedIssues"
               :pinned-issues="pinnedIssuesList"
               :pinned-sort-mode="pinnedSortMode"
               :active-kpi-filter="activeKpiFilter"
@@ -1108,6 +1115,7 @@ watch(
             :stats="stats"
             :ready-issues="readyIssues"
             :in-progress-issues="inProgressIssues"
+            :blocked-issues="blockedIssues"
             :pinned-issues="pinnedIssuesList"
             :pinned-sort-mode="pinnedSortMode"
             :kpi-grid-cols="2"

@@ -289,6 +289,17 @@ describe('filterIssues', () => {
     expect(result.map(i => i.id)).toEqual(['3'])
   })
 
+  it('includes dependency-blocked issues in blocked status filter', () => {
+    const dependencyBlocked = makeIssue({ id: '5', status: 'open', blockedBy: ['1'] })
+    const explicitlyBlocked = makeIssue({ id: '6', status: 'blocked' })
+    const result = filterIssues(
+      [...issues, dependencyBlocked, explicitlyBlocked],
+      { ...noFilters, status: ['blocked'] },
+      noExclusions,
+    )
+    expect(result.map(i => i.id)).toEqual(['5', '6'])
+  })
+
   it('filters by type', () => {
     const result = filterIssues(issues, { ...noFilters, type: ['bug'] }, noExclusions)
     expect(result.map(i => i.id)).toEqual(['1'])
@@ -328,6 +339,16 @@ describe('filterIssues', () => {
   it('applies exclusion filters', () => {
     const result = filterIssues(issues, noFilters, { ...noExclusions, priority: ['p0'] })
     expect(result.map(i => i.id)).toEqual(['2'])
+  })
+
+  it('status exclusion for blocked removes dependency-blocked issues', () => {
+    const dependencyBlocked = makeIssue({ id: '5', status: 'open', blockedBy: ['1'] })
+    const result = filterIssues(
+      [...issues, dependencyBlocked],
+      noFilters,
+      { ...noExclusions, status: ['blocked'] },
+    )
+    expect(result.map(i => i.id)).toEqual(['1', '2'])
   })
 
   it('excludes by label', () => {

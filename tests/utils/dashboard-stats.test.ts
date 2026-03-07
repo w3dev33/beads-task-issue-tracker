@@ -68,6 +68,16 @@ describe('computeStatsFromIssues', () => {
     expect(stats.blocked).toBe(1)
   })
 
+  it('counts open issues with blockers as blocked', () => {
+    const issues = [
+      makeIssue({ id: '1', status: 'open', blockedBy: ['2'] }),
+      makeIssue({ id: '2', status: 'open' }),
+    ]
+    const stats = computeStatsFromIssues(issues)
+    expect(stats.blocked).toBe(1)
+    expect(stats.open).toBe(1)
+  })
+
   it('counts closed separately', () => {
     const issues = [makeIssue({ status: 'closed' })]
     const stats = computeStatsFromIssues(issues)

@@ -21,6 +21,7 @@ const props = withDefaults(defineProps<{
   stats: DashboardStats | null
   readyIssues: Issue[]
   inProgressIssues: Issue[]
+  blockedIssues: Issue[]
   pinnedIssues: Issue[]
   pinnedSortMode?: PinnedSortMode
   kpiGridCols?: 2 | 4
@@ -46,6 +47,7 @@ const emit = defineEmits<{
 // Collapsible state (per-project, singleton)
 const isChartsCollapsed = useProjectStorage('chartsCollapsed', true)
 const isInProgressCollapsed = useProjectStorage('inProgressCollapsed', true)
+const isBlockedCollapsed = useProjectStorage('blockedCollapsed', true)
 const isPinnedCollapsed = useProjectStorage('pinnedCollapsed', false)
 const isReadyCollapsed = useProjectStorage('readyCollapsed', true)
 </script>
@@ -105,6 +107,30 @@ const isReadyCollapsed = useProjectStorage('readyCollapsed', true)
       </button>
       <div v-show="!isInProgressCollapsed" class="pl-5">
         <QuickList :issues="inProgressIssues" @select="emit('select-issue', $event)" />
+      </div>
+    </div>
+
+    <!-- Collapsible Blocked Section -->
+    <div v-if="blockedIssues.length > 0" class="space-y-2">
+      <button
+        class="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors w-full"
+        @click="isBlockedCollapsed = !isBlockedCollapsed"
+      >
+        <svg
+          class="w-3 h-3 transition-transform"
+          :class="{ '-rotate-90': isBlockedCollapsed }"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+        >
+          <polyline points="6 9 12 15 18 9" />
+        </svg>
+        <span class="uppercase tracking-wide">Blocked</span>
+        <span class="text-[10px] ml-auto">({{ blockedIssues.length }})</span>
+      </button>
+      <div v-show="!isBlockedCollapsed" class="pl-5">
+        <QuickList :issues="blockedIssues" @select="emit('select-issue', $event)" />
       </div>
     </div>
 

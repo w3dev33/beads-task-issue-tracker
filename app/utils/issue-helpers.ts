@@ -58,6 +58,18 @@ export function pruneClosedBlockers(issues: Issue[]): void {
 }
 
 /**
+ * Determine whether an issue should appear in blocked views.
+ *
+ * Supports both explicit blocked status and dependency-based blockers
+ * (`blockedBy`) while ignoring closed/tombstone issues.
+ */
+export function isIssueBlocked(issue: Pick<Issue, 'status' | 'blockedBy'>): boolean {
+  if (issue.status === 'blocked') return true
+  if (!issue.blockedBy?.length) return false
+  return issue.status !== 'closed' && issue.status !== 'tombstone'
+}
+
+/**
  * Natural sort comparison for IDs (handles multi-digit numbers correctly).
  * e.g., "40b.2" < "40b.10" instead of "40b.10" < "40b.2"
  */
@@ -241,7 +253,11 @@ export function filterIssues(
 
   // Status filter (default: exclude closed + tombstone)
   if (filters.status.length > 0) {
-    result = result.filter((issue) => filters.status.includes(issue.status))
+    const includeBlocked = filters.status.includes('blocked')
+    result = result.filter((issue) => {
+      if (includeBlocked && isIssueBlocked(issue)) return true
+      return filters.status.includes(issue.status)
+    })
   } else {
     result = result.filter((issue) => issue.status !== 'closed' && issue.status !== 'tombstone')
   }
@@ -269,7 +285,11 @@ export function filterIssues(
 
   // Exclusion filters
   if (exclusions.status.length > 0) {
-    result = result.filter(issue => !exclusions.status.includes(issue.status))
+    const excludeBlocked = exclusions.status.includes('blocked')
+    result = result.filter((issue) => {
+      if (excludeBlocked && isIssueBlocked(issue)) return false
+      return !exclusions.status.includes(issue.status)
+    })
   }
   if (exclusions.priority.length > 0) {
     result = result.filter(issue => !exclusions.priority.includes(issue.priority))
@@ -390,22 +410,23 @@ export function computeStatsFromIssues(issues: Issue[]): DashboardStats {
   stats.total = activeIssues.length
 
   for (const issue of activeIssues) {
-    switch (issue.status) {
-      case 'open':
-      case 'deferred':
-      case 'pinned':
-      case 'hooked':
-        stats.open++
-        break
-      case 'in_progress':
-        stats.inProgress++
-        break
-      case 'blocked':
-        stats.blocked++
-        break
-      case 'closed':
-        stats.closed++
-        break
+    if (isIssueBlocked(issue)) {
+      stats.blocked++
+    } else {
+      switch (issue.status) {
+        case 'open':
+        case 'deferred':
+        case 'pinned':
+        case 'hooked':
+          stats.open++
+          break
+        case 'in_progress':
+          stats.inProgress++
+          break
+        case 'closed':
+          stats.closed++
+          break
+      }
     }
 
     if (issue.type in stats.byType) {
