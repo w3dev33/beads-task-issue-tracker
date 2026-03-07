@@ -763,7 +763,7 @@ const handleRemoveLabelFilter = (label: string) => {
 // KPI filter handlers
 type KpiFilter = 'total' | 'open' | 'in_progress' | 'blocked' | 'workflow'
 const allStatusFilters: IssueStatus[] = ['open', 'in_progress', 'blocked', 'closed', 'deferred', 'pinned', 'hooked']
-const workflowStatusFilters: IssueStatus[] = ['open', 'in_progress', 'deferred', 'pinned', 'hooked']
+const workflowStatusFilters = workflowStatuses
 
 const matchesStatusFilters = (selected: IssueStatus[], expected: IssueStatus[]) => {
   if (selected.length !== expected.length) return false
@@ -772,7 +772,7 @@ const matchesStatusFilters = (selected: IssueStatus[], expected: IssueStatus[]) 
 
 const activeKpiFilter = computed<KpiFilter | null>(() => {
   const statusFilters = filters.value.status
-  if (statusFilters.length === 0 || matchesStatusFilters(statusFilters, workflowStatusFilters)) return 'workflow'
+  if (matchesStatusFilters(statusFilters, workflowStatusFilters)) return 'workflow'
   if (matchesStatusFilters(statusFilters, allStatusFilters)) return 'total'
   if (statusFilters.length === 1 && statusFilters[0] === 'open') return 'open'
   if (statusFilters.length === 1 && statusFilters[0] === 'in_progress') return 'in_progress'
@@ -782,8 +782,7 @@ const activeKpiFilter = computed<KpiFilter | null>(() => {
 
 const handleKpiClick = (kpi: KpiFilter) => {
   if (kpi === 'workflow') {
-    // Empty status filter maps to WORKFLOW in filterIssues.
-    setStatusFilter([])
+    setStatusFilter([...workflowStatusFilters])
   } else if (kpi === 'total') {
     clearFilters()
     setStatusFilter(allStatusFilters)
@@ -873,10 +872,10 @@ watch(
 
             <div v-if="stats" class="space-y-4 mt-6">
               <div class="grid grid-cols-5 gap-1.5">
+                <KpiCard title="Workflow" :value="stats.workflow" color="var(--color-status-deferred)" :active="activeKpiFilter === 'workflow'" @click="handleKpiClick('workflow')" />
                 <KpiCard title="Open" :value="stats.open" color="var(--color-status-open)" :active="activeKpiFilter === 'open'" @click="handleKpiClick('open')" />
                 <KpiCard title="In Progress" :value="stats.inProgress" color="var(--color-status-in-progress)" :active="activeKpiFilter === 'in_progress'" @click="handleKpiClick('in_progress')" />
                 <KpiCard title="Blocked" :value="stats.blocked" color="var(--color-status-blocked)" :active="activeKpiFilter === 'blocked'" @click="handleKpiClick('blocked')" />
-                <KpiCard title="Workflow" :value="stats.workflow" color="var(--color-status-deferred)" :active="activeKpiFilter === 'workflow'" @click="handleKpiClick('workflow')" />
                 <KpiCard title="Total" :value="stats.total" :active="activeKpiFilter === 'total'" @click="handleKpiClick('total')" />
             </div>
             </div>

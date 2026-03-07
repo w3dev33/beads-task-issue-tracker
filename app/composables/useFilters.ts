@@ -1,6 +1,8 @@
 import type { FilterState, IssueStatus, IssueType, IssuePriority } from '~/types/issue'
 import { useProjectStorage } from '~/composables/useProjectStorage'
 
+export const workflowStatuses: IssueStatus[] = ['open', 'in_progress', 'deferred', 'pinned', 'hooked']
+
 const defaultFilters: FilterState = {
   status: [],
   type: [],
@@ -19,7 +21,7 @@ export function useFilters() {
     filters.value.labels = []
     filters.value.assignee = []
     // Always reset to the default WORKFLOW view on load/refresh.
-    filters.value.status = []
+    filters.value.status = [...workflowStatuses]
   }
 
   const toggleStatus = (status: IssueStatus) => {
