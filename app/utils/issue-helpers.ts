@@ -30,6 +30,34 @@ export function deduplicateIssues(issues: Issue[]): Issue[] {
 }
 
 /**
+ * Remove closed issue IDs from dependency references.
+ *
+ * `bd list/show` can return stale `blockedBy`/`blocks` links after a blocker is
+ * closed. Pruning them here keeps status-column blocker indicators accurate.
+ */
+export function pruneClosedBlockers(issues: Issue[]): void {
+  const closedIds = new Set(
+    issues
+      .filter(issue => issue.status === 'closed')
+      .map(issue => issue.id),
+  )
+
+  if (closedIds.size === 0) return
+
+  for (const issue of issues) {
+    if (issue.blockedBy?.length) {
+      const activeBlockers = issue.blockedBy.filter(id => !closedIds.has(id))
+      issue.blockedBy = activeBlockers.length ? activeBlockers : undefined
+    }
+
+    if (issue.blocks?.length) {
+      const activeBlockedIssues = issue.blocks.filter(id => !closedIds.has(id))
+      issue.blocks = activeBlockedIssues.length ? activeBlockedIssues : undefined
+    }
+  }
+}
+
+/**
  * Natural sort comparison for IDs (handles multi-digit numbers correctly).
  * e.g., "40b.2" < "40b.10" instead of "40b.10" < "40b.2"
  */

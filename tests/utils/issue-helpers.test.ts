@@ -8,6 +8,7 @@ import {
   sortIssues,
   filterIssues,
   groupIssues,
+  pruneClosedBlockers,
   computeReadyIssues,
   statusOrder,
   priorityOrder,
@@ -410,6 +411,48 @@ describe('groupIssues', () => {
 
     const result = groupIssues(all, all)
     expect(result[0]!.children.map(c => c.id)).toEqual(['e.1', 'e.2', 'e.3'])
+  })
+})
+
+// ---------------------------------------------------------------------------
+// pruneClosedBlockers
+// ---------------------------------------------------------------------------
+describe('pruneClosedBlockers', () => {
+  it('removes closed blockers from blockedBy and blocks', () => {
+    const issues = [
+      makeIssue({ id: 'open-1', status: 'open', blockedBy: ['closed-1', 'open-2'] }),
+      makeIssue({ id: 'open-2', status: 'open', blocks: ['open-1', 'closed-1'] }),
+      makeIssue({ id: 'closed-1', status: 'closed' }),
+    ]
+
+    pruneClosedBlockers(issues)
+
+    expect(issues[0]!.blockedBy).toEqual(['open-2'])
+    expect(issues[1]!.blocks).toEqual(['open-1'])
+  })
+
+  it('clears dependency arrays when all references are closed', () => {
+    const issues = [
+      makeIssue({ id: 'open-1', status: 'open', blockedBy: ['closed-1'] }),
+      makeIssue({ id: 'open-2', status: 'open', blocks: ['closed-1'] }),
+      makeIssue({ id: 'closed-1', status: 'closed' }),
+    ]
+
+    pruneClosedBlockers(issues)
+
+    expect(issues[0]!.blockedBy).toBeUndefined()
+    expect(issues[1]!.blocks).toBeUndefined()
+  })
+
+  it('keeps unknown blocker IDs untouched', () => {
+    const issues = [
+      makeIssue({ id: 'open-1', status: 'open', blockedBy: ['missing-1'] }),
+      makeIssue({ id: 'open-2', status: 'open' }),
+    ]
+
+    pruneClosedBlockers(issues)
+
+    expect(issues[0]!.blockedBy).toEqual(['missing-1'])
   })
 })
 
