@@ -362,9 +362,19 @@ describe('filterIssues', () => {
     expect(result.map(i => i.id)).toEqual(['1'])
   })
 
-  it('search bypasses all other filters (includes closed)', () => {
+  it('search respects active filters (excludes closed by default)', () => {
     const result = filterIssues(issues, { ...noFilters, search: 'old feature' }, noExclusions)
+    expect(result).toEqual([])
+  })
+
+  it('search combined with status filter returns matching results', () => {
+    const result = filterIssues(issues, { ...noFilters, status: ['closed'], search: 'old feature' }, noExclusions)
     expect(result.map(i => i.id)).toEqual(['3'])
+  })
+
+  it('search combined with type filter narrows results', () => {
+    const result = filterIssues(issues, { ...noFilters, search: 'Login', type: ['task'] }, noExclusions)
+    expect(result).toEqual([])
   })
 
   it('search matches title, id, and description', () => {

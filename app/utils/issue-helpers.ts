@@ -250,11 +250,11 @@ export function filterIssues(
 ): Issue[] {
   let result = issues
 
-  // Search bypasses all other filters
+  // Text search filter
   const searchTerm = filters.search?.trim()
   if (searchTerm) {
     const search = searchTerm.toLowerCase()
-    return result.filter(
+    result = result.filter(
       (issue) =>
         issue.title.toLowerCase().includes(search) ||
         issue.id.toLowerCase().includes(search) ||
