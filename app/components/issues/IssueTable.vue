@@ -1,0 +1,1002 @@
+<script setup lang="ts">
+import type { Issue, IssueStatus, IssuePriority, IssueType } from '~/types/issue'
+import type { ColumnConfig } from '~/types/issue'
+import type { IssueGroup } from '~/composables/useIssues'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '~/components/ui/table'
+import TypeBadge from '~/components/issues/TypeBadge.vue'
+import StatusBadge from '~/components/issues/StatusBadge.vue'
+import PriorityBadge from '~/components/issues/PriorityBadge.vue'
+import LabelBadge from '~/components/issues/LabelBadge.vue'
+import { Button } from '~/components/ui/button'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '~/components/ui/tooltip'
+import { Ban } from 'lucide-vue-next'
+import { useKeyboardNavigation } from '~/composables/useKeyboardNavigation'
+
+const props = defineProps<{
+  issues: Issue[]
+  groupedIssues?: IssueGroup[]
+  columns: ColumnConfig[]
+  selectedId?: string | null
+  multiSelectMode?: boolean
+  selectedIds?: string[]
+  hasMore?: boolean
+  totalCount?: number
+  externalSortColumn?: string | null
+  externalSortDirection?: 'asc' | 'desc'
+  newlyAddedIds?: Set<string>
+  pinnedIds?: string[]
+}>()
+
+const emit = defineEmits<{
+  select: [issue: Issue]
+  edit: [issue: Issue]
+  deselect: []
+  'update:selectedIds': [ids: string[]]
+  loadMore: []
+  sort: [field: string | null, direction: 'asc' | 'desc']
+  'toggle-pin': [issueId: string]
+}>()
+
+const pinnedSet = computed(() => new Set(props.pinnedIds ?? []))
+
+// Index of the first non-pinned group (for visual separator)
+const pinnedSeparatorIndex = computed(() => {
+  if (!props.groupedIssues || pinnedSet.value.size === 0) return -1
+  for (let i = 0; i < props.groupedIssues.length; i++) {
+    const group = props.groupedIssues[i]!
+    const groupId = group.epic?.id || group.children[0]?.id
+    if (groupId && !pinnedSet.value.has(groupId)) return i
+  }
+  return -1 // all pinned, no separator needed
+})
+
+// Sorting state - sync with external (composable) state if provided
+type SortDirection = 'asc' | 'desc'
+const internalSortColumn = ref<string | null>('updatedAt')
+const internalSortDirection = ref<SortDirection>('desc')
+
+// Use external sort state if provided, otherwise use internal
+const sortColumn = computed(() => props.externalSortColumn !== undefined ? props.externalSortColumn : internalSortColumn.value)
+const sortDirection = computed(() => props.externalSortDirection !== undefined ? props.externalSortDirection : internalSortDirection.value)
+
+
+const toggleSort = (columnId: string) => {
+  let newDirection: SortDirection = 'asc'
+  let newColumn: string | null = columnId
+
+  if (sortColumn.value === columnId) {
+    // Cycle: asc -> desc -> null -> asc -> ...
+    if (sortDirection.value === 'asc') {
+      newDirection = 'desc'
+    } else {
+      // Was desc, clear sort
+      newColumn = null
+      newDirection = 'asc'
+    }
+  }
+
+  // Always emit sort event (including null to clear)
+  emit('sort', newColumn, newDirection)
+
+  // Update internal state as fallback
+  internalSortColumn.value = newColumn
+  internalSortDirection.value = newDirection
+}
+
+// Sort order for status and priority
+// in_progress first (active work), then open (ready to start), then blocked, then closed
+const statusOrder: Record<IssueStatus, number> = {
+  in_progress: 0,
+  open: 1,
+  blocked: 2,
+  closed: 3,
+  deferred: 4,
+  pinned: 5,
+  hooked: 6,
+  tombstone: 7,
+}
+
+const priorityOrder: Record<IssuePriority, number> = {
+  p0: 0,
+  p1: 1,
+  p2: 2,
+  p3: 3,
+  p4: 4,
+}
+
+const typeOrder: Record<IssueType, number> = {
+  bug: 0,
+  feature: 1,
+  task: 2,
+  epic: 3,
+  chore: 4,
+}
+
+// Natural sort comparison for IDs (handles multi-digit numbers correctly)
+// e.g., "40b.2" < "40b.10" instead of "40b.10" < "40b.2"
+const naturalCompare = (a: string, b: string): number => {
+  const aParts = a.split(/(\d+)/)
+  const bParts = b.split(/(\d+)/)
+
+  for (let i = 0; i < Math.max(aParts.length, bParts.length); i++) {
+    const aPart = aParts[i] || ''
+    const bPart = bParts[i] || ''
+
+    // Check if both parts are numeric
+    const aNum = parseInt(aPart, 10)
+    const bNum = parseInt(bPart, 10)
+
+    if (!isNaN(aNum) && !isNaN(bNum)) {
+      if (aNum !== bNum) return aNum - bNum
+    } else {
+      // String comparison
+      if (aPart < bPart) return -1
+      if (aPart > bPart) return 1
+    }
+  }
+  return 0
+}
+
+const sortedIssues = computed(() => {
+  // When external sort is provided, data is already sorted by the composable
+  if (props.externalSortColumn !== undefined) {
+    return props.issues
+  }
+
+  if (!sortColumn.value) return props.issues
+
+  const col = sortColumn.value
+  const dir = sortDirection.value === 'asc' ? 1 : -1
+
+  return [...props.issues].sort((a, b) => {
+    let aVal: string | number | null = null
+    let bVal: string | number | null = null
+
+    switch (col) {
+      case 'pinned':
+        aVal = pinnedSet.value.has(a.id) ? 0 : 1
+        bVal = pinnedSet.value.has(b.id) ? 0 : 1
+        break
+      case 'id':
+        // Use natural sort for IDs
+        return naturalCompare(a.id.toLowerCase(), b.id.toLowerCase()) * dir
+      case 'status':
+        aVal = statusOrder[a.status] ?? 99
+        bVal = statusOrder[b.status] ?? 99
+        break
+      case 'priority':
+        aVal = priorityOrder[a.priority] ?? 99
+        bVal = priorityOrder[b.priority] ?? 99
+        break
+      case 'type':
+        aVal = typeOrder[a.type] ?? 99
+        bVal = typeOrder[b.type] ?? 99
+        break
+      case 'labels':
+        // Sort by first label alphabetically, issues without labels at the end
+        aVal = a.labels?.length ? a.labels[0]!.toLowerCase() : '\uffff'
+        bVal = b.labels?.length ? b.labels[0]!.toLowerCase() : '\uffff'
+        break
+      case 'createdAt':
+      case 'updatedAt':
+        aVal = a[col] ? new Date(a[col]).getTime() : 0
+        bVal = b[col] ? new Date(b[col]).getTime() : 0
+        break
+      default:
+        aVal = String(a[col as keyof Issue] ?? '').toLowerCase()
+        bVal = String(b[col as keyof Issue] ?? '').toLowerCase()
+    }
+
+    if (aVal < bVal) return -1 * dir
+    if (aVal > bVal) return 1 * dir
+    return 0
+  })
+})
+
+// Epic expand/collapse state (from dedicated composable, avoids creating
+// duplicate computed properties and watchers from full useIssues())
+const { isEpicExpanded, toggleEpicExpand } = useEpicExpand()
+
+const isExpanded = (epicId: string) => isEpicExpanded(epicId)
+
+const toggleExpand = (epicId: string, event: Event) => {
+  event.stopPropagation()
+  toggleEpicExpand(epicId)
+}
+
+// Check if we should use hierarchical display
+const useHierarchicalDisplay = computed(() => {
+  return props.groupedIssues && props.groupedIssues.length > 0
+})
+
+const isSelected = (id: string) => props.selectedIds?.includes(id) ?? false
+const isNewlyAdded = (id: string) => props.newlyAddedIds?.has(id) ?? false
+
+const toggleSelect = (id: string) => {
+  const current = props.selectedIds ?? []
+  if (isSelected(id)) {
+    emit('update:selectedIds', current.filter(i => i !== id))
+  } else {
+    emit('update:selectedIds', [...current, id])
+  }
+}
+
+const toggleSelectAll = () => {
+  const current = props.selectedIds ?? []
+  if (current.length === props.issues.length) {
+    emit('update:selectedIds', [])
+  } else {
+    emit('update:selectedIds', props.issues.map(i => i.id))
+  }
+}
+
+const isAllSelected = computed(() => {
+  return props.issues.length > 0 && (props.selectedIds?.length ?? 0) === props.issues.length
+})
+
+const isSomeSelected = computed(() => {
+  const len = props.selectedIds?.length ?? 0
+  return len > 0 && len < props.issues.length
+})
+
+const visibleColumns = computed(() =>
+  props.columns.filter((col) => col.visible)
+)
+
+// Get short display ID: extract the key suffix (last segment after final hyphen)
+// e.g., "task-issue-tracker-demo-22g" → "22g", "beads-demo-5tg.2" → "5tg.2"
+const getShortId = (id: string) => {
+  // Split off the .index suffix if present (e.g., "22g.1" → base "...22g", suffix ".1")
+  const dotIndex = id.indexOf('.')
+  const baseId = dotIndex > 0 ? id.slice(0, dotIndex) : id
+  const indexSuffix = dotIndex > 0 ? id.slice(dotIndex) : ''
+
+  const lastHyphen = baseId.lastIndexOf('-')
+  if (lastHyphen > 0) {
+    return baseId.slice(lastHyphen + 1) + indexSuffix
+  }
+  return id
+}
+
+const formatDate = (dateStr: string) => {
+  if (!dateStr) return '-'
+  const date = new Date(dateStr)
+  return date.toLocaleDateString(undefined, {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  })
+}
+
+const formatTime = (dateStr: string) => {
+  if (!dateStr) return ''
+  const date = new Date(dateStr)
+  return date.toLocaleTimeString(undefined, {
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}
+
+// Epic border colors for visual grouping (left and right)
+const epicBorderColors = [
+  { left: 'border-l-purple-500', right: 'border-r-purple-500' },
+  { left: 'border-l-orange-500', right: 'border-r-orange-500' },
+  { left: 'border-l-pink-500', right: 'border-r-pink-500' },
+  { left: 'border-l-cyan-500', right: 'border-r-cyan-500' },
+  { left: 'border-l-yellow-500', right: 'border-r-yellow-500' },
+  { left: 'border-l-amber-500', right: 'border-r-amber-500' },
+  { left: 'border-l-violet-500', right: 'border-r-violet-500' },
+  { left: 'border-l-teal-500', right: 'border-r-teal-500' },
+]
+
+const getEpicBorderColors = (index: number): { left: string; right: string } => {
+  return epicBorderColors[index % epicBorderColors.length]!
+}
+
+function getIssueField(issue: Issue, field: string): string {
+  return String((issue as unknown as Record<string, unknown>)[field] ?? '-')
+}
+
+// Scroll to the selected row when selectedId changes (e.g. from dashboard QuickList)
+watch(() => props.selectedId, (id) => {
+  if (!id) return
+  nextTick(() => {
+    const row = document.querySelector(`[data-issue-id="${CSS.escape(id)}"]`)
+    row?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+  })
+})
+
+// Keyboard navigation
+const flatVisibleIds = computed(() => {
+  if (useHierarchicalDisplay.value && props.groupedIssues) {
+    const ids: string[] = []
+    for (const group of props.groupedIssues) {
+      if (group.epic) {
+        ids.push(group.epic.id)
+        if (isExpanded(group.epic.id)) {
+          for (const child of group.children) {
+            ids.push(child.id)
+          }
+        }
+      } else {
+        for (const child of group.children) {
+          ids.push(child.id)
+        }
+      }
+    }
+    return ids
+  }
+  return sortedIssues.value.map(i => i.id)
+})
+
+const issueMap = computed(() => {
+  const map = new Map<string, Issue>()
+  for (const issue of props.issues) map.set(issue.id, issue)
+  if (props.groupedIssues) {
+    for (const group of props.groupedIssues) {
+      if (group.epic) map.set(group.epic.id, group.epic)
+      for (const child of group.children) map.set(child.id, child)
+    }
+  }
+  return map
+})
+
+const { focusedId, setFocused, handleKeydown, isFocused } = useKeyboardNavigation({
+  itemIds: flatVisibleIds,
+  onSelect: (id) => {
+    const issue = issueMap.value.get(id)
+    if (issue) emit('select', issue)
+  },
+  onAction: (id) => {
+    emit('toggle-pin', id)
+  },
+})
+</script>
+
+<template>
+  <div class="h-full rounded border border-border overflow-auto outline-none" tabindex="0" @keydown="handleKeydown" @click.self="$emit('deselect')">
+    <Table @click.self="$emit('deselect')">
+      <TableHeader>
+        <TableRow class="bg-secondary/30 hover:bg-secondary/30">
+          <TableHead v-if="multiSelectMode" class="w-10 px-2 !py-1.5">
+            <button
+              class="flex items-center justify-center w-4 h-4 rounded border transition-colors"
+              :class="isAllSelected
+                ? 'bg-primary border-primary text-primary-foreground'
+                : isSomeSelected
+                  ? 'bg-primary/50 border-primary text-primary-foreground'
+                  : 'border-muted-foreground/30 hover:border-muted-foreground'"
+              @click="toggleSelectAll"
+            >
+              <svg v-if="isAllSelected || isSomeSelected" class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+                <polyline v-if="isAllSelected" points="20 6 9 17 4 12" />
+                <line v-else x1="5" y1="12" x2="19" y2="12" />
+              </svg>
+            </button>
+          </TableHead>
+          <TableHead
+            v-for="col in visibleColumns"
+            :key="col.id"
+            class="font-medium"
+            :class="[
+              { 'cursor-pointer select-none hover:bg-secondary/50': col.sortable },
+              col.id === 'id' ? 'pl-7' : '',
+              col.id === 'pinned' ? 'w-8 !px-1 text-center' : ''
+            ]"
+            @click="col.sortable && toggleSort(col.id)"
+          >
+            <div class="flex items-center gap-1">
+              <template v-if="col.id === 'pinned'">
+                <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M9 4v6l-2 4h10l-2-4V4" /><line x1="12" y1="16" x2="12" y2="21" /><line x1="8" y1="4" x2="16" y2="4" />
+                </svg>
+              </template>
+              <span v-else>{{ col.label }}</span>
+              <template v-if="col.sortable">
+                <svg
+                  v-if="sortColumn === col.id"
+                  class="w-3 h-3 text-primary"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                >
+                  <path v-if="sortDirection === 'asc'" d="M12 19V5M5 12l7-7 7 7" />
+                  <path v-else d="M12 5v14M5 12l7 7 7-7" />
+                </svg>
+                <svg
+                  v-else
+                  class="w-3 h-3 text-muted-foreground/40"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                >
+                  <path d="M7 15l5 5 5-5M7 9l5-5 5 5" />
+                </svg>
+              </template>
+            </div>
+          </TableHead>
+        </TableRow>
+      </TableHeader>
+
+      <TableBody>
+        <!-- Empty state -->
+        <TableRow
+          v-if="(useHierarchicalDisplay ? groupedIssues?.length === 0 : sortedIssues.length === 0)"
+          class="hover:bg-transparent"
+        >
+          <TableCell
+            :colspan="visibleColumns.length + (multiSelectMode ? 1 : 0)"
+            class="h-24 text-center text-muted-foreground"
+          >
+            No tasks / issues found
+          </TableCell>
+        </TableRow>
+
+        <!-- Hierarchical display with grouped issues -->
+        <template v-if="useHierarchicalDisplay">
+          <template v-for="(group, groupIndex) in groupedIssues" :key="group.epic?.id || group.children[0]?.id">
+            <!-- Pinned / non-pinned separator -->
+            <TableRow
+              v-if="groupIndex === pinnedSeparatorIndex && pinnedSeparatorIndex > 0"
+              class="hover:bg-transparent pointer-events-none"
+            >
+              <TableCell :colspan="(multiSelectMode ? 1 : 0) + columns.length" class="!p-0 h-3 bg-transparent">
+                <div class="h-[2px] bg-primary/80" />
+              </TableCell>
+            </TableRow>
+            <!-- Epic row with expand/collapse -->
+            <template v-if="group.epic">
+              <TableRow
+                :data-issue-id="group.epic.id"
+                class="cursor-pointer bg-muted/40"
+                :class="[
+                  multiSelectMode
+                    ? (isSelected(group.epic.id) ? 'bg-accent/50 hover:bg-accent/70' : 'hover:bg-muted/50')
+                    : (selectedId === group.epic.id ? 'bg-accent/50 hover:bg-accent/70' : 'hover:bg-muted/50'),
+                  group.childCount > 0 ? ['border-l-4', 'border-r-4', getEpicBorderColors(groupIndex).left, getEpicBorderColors(groupIndex).right] : '',
+                  !isExpanded(group.epic.id) && group.childCount > 0 && (group.epic.status === 'in_progress' || !!group.inProgressChild) ? 'border-b-0' : '',
+                  isNewlyAdded(group.epic.id) ? 'issue-highlight-new' : '',
+                  isFocused(group.epic.id) ? 'bg-primary/10 ring-1 ring-inset ring-primary/40' : ''
+                ]"
+                @click="setFocused(group.epic.id); multiSelectMode ? toggleSelect(group.epic.id) : $emit('select', group.epic)"
+                @dblclick="!multiSelectMode && $emit('edit', group.epic)"
+              >
+                <TableCell v-if="multiSelectMode" class="w-10 px-2 !py-1.5">
+                  <button
+                    class="flex items-center justify-center w-4 h-4 rounded border transition-colors"
+                    :class="isSelected(group.epic.id)
+                      ? 'bg-primary border-primary text-primary-foreground'
+                      : 'border-muted-foreground/30 hover:border-muted-foreground'"
+                    @click.stop="toggleSelect(group.epic.id)"
+                  >
+                    <svg v-if="isSelected(group.epic.id)" class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+                      <polyline points="20 6 9 17 4 12" />
+                    </svg>
+                  </button>
+                </TableCell>
+                <TableCell v-for="col in visibleColumns" :key="col.id" class="!py-1.5" :class="[col.id === 'title' ? 'whitespace-normal max-w-md' : '', col.id === 'pinned' ? 'w-8 !px-1 text-center' : '']">
+                  <template v-if="col.id === 'pinned'">
+                    <button
+                      class="flex items-center justify-center w-full transition-colors"
+                      :class="pinnedSet.has(group.epic!.id) ? 'text-amber-500' : 'text-muted-foreground/30 hover:text-amber-400'"
+                      @click.stop="emit('toggle-pin', group.epic!.id)"
+                    >
+                      <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" :fill="pinnedSet.has(group.epic!.id) ? 'currentColor' : 'none'" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M9 4v6l-2 4h10l-2-4V4" /><line x1="12" y1="16" x2="12" y2="21" /><line x1="8" y1="4" x2="16" y2="4" />
+                      </svg>
+                    </button>
+                  </template>
+
+                  <template v-else-if="col.id === 'id'">
+                    <div class="flex items-center gap-2">
+                      <!-- Expand/collapse chevron button -->
+                      <button
+                        v-if="group.childCount > 0"
+                        class="flex items-center justify-center w-5 h-5 rounded border border-border bg-background hover:bg-muted hover:border-muted-foreground/50 transition-colors shrink-0"
+                        @click="toggleExpand(group.epic!.id, $event)"
+                      >
+                        <svg
+                          class="w-3 h-3 text-muted-foreground transition-transform"
+                          :class="{ 'rotate-90': isExpanded(group.epic!.id) }"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          stroke-width="2"
+                        >
+                          <polyline points="9 18 15 12 9 6" />
+                        </svg>
+                      </button>
+                      <!-- Spacer when no chevron to align IDs -->
+                      <div v-else class="w-5 shrink-0" />
+                      <CopyableId :value="group.epic.id" :display-value="getShortId(group.epic.id)" />
+                    </div>
+                  </template>
+
+                  <template v-else-if="col.id === 'type'">
+                    <div class="flex items-center gap-1.5">
+                      <TypeBadge :type="group.epic.type" size="sm" />
+                      <!-- Child count badge with tooltip -->
+                      <Tooltip v-if="group.childCount > 0">
+                        <TooltipTrigger as-child>
+                          <span class="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded-full cursor-help">
+                            {{ group.closedChildCount }}/{{ group.childCount }}
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>{{ group.closedChildCount }} closed / {{ group.childCount }} {{ group.childCount === 1 ? 'child' : 'children' }}</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </div>
+                  </template>
+
+                  <template v-else-if="col.id === 'title'">
+                    <span class="text-xs font-medium line-clamp-2 break-words">{{ group.epic.title }}</span>
+                  </template>
+
+                  <template v-else-if="col.id === 'status'">
+                    <div class="flex items-center gap-1">
+                      <StatusBadge :status="group.epic.status" size="sm" />
+                      <Tooltip v-if="group.epic.blockedBy?.length">
+                        <TooltipTrigger as-child>
+                          <Ban class="w-3 h-3 text-red-400" />
+                        </TooltipTrigger>
+                        <TooltipContent side="top">
+                          <p class="text-xs">Blocked by {{ group.epic.blockedBy.join(', ') }}</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </div>
+                  </template>
+
+                  <template v-else-if="col.id === 'priority'">
+                    <PriorityBadge :priority="group.epic.priority" size="sm" />
+                  </template>
+
+                  <template v-else-if="col.id === 'labels'">
+                    <div v-if="group.epic.labels?.length" class="flex flex-wrap gap-1">
+                      <LabelBadge
+                        v-for="label in group.epic.labels"
+                        :key="label"
+                        :label="label"
+                        size="sm"
+                      />
+                    </div>
+                    <span v-else class="text-xs text-muted-foreground">-</span>
+                  </template>
+
+                  <template v-else-if="col.id === 'assignee'">
+                    <span class="text-xs">{{ group.epic.assignee || '-' }}</span>
+                  </template>
+
+                  <template v-else-if="col.id === 'createdAt'">
+                    <div class="flex flex-col">
+                      <span class="text-xs text-muted-foreground">{{ formatDate(group.epic.createdAt) }}</span>
+                      <span class="text-[10px] text-muted-foreground/70">{{ formatTime(group.epic.createdAt) }}</span>
+                    </div>
+                  </template>
+
+                  <template v-else-if="col.id === 'updatedAt'">
+                    <div class="flex flex-col">
+                      <span class="text-xs text-muted-foreground">{{ formatDate(group.epic.updatedAt) }}</span>
+                      <span class="text-[10px] text-muted-foreground/70">{{ formatTime(group.epic.updatedAt) }}</span>
+                    </div>
+                  </template>
+
+                  <template v-else-if="col.id === 'commentCount'">
+                    <span v-if="group.epic.commentCount" class="text-xs text-muted-foreground">{{ group.epic.commentCount }}</span>
+                    <span v-else class="text-xs text-muted-foreground">-</span>
+                  </template>
+
+                  <template v-else>
+                    <span class="text-xs">{{ getIssueField(group.epic, col.id) }}</span>
+                  </template>
+                </TableCell>
+              </TableRow>
+
+              <!-- Progress bar row (collapsed epics only) -->
+              <TableRow
+                v-if="!isExpanded(group.epic.id) && group.childCount > 0 && (group.epic.status === 'in_progress' || !!group.inProgressChild)"
+                class="border-l-4 border-r-4 border-t-0 bg-muted/40 hover:bg-muted/40"
+                :class="[getEpicBorderColors(groupIndex).left, getEpicBorderColors(groupIndex).right]"
+              >
+                <TableCell v-if="multiSelectMode" class="!py-1 !px-0" />
+                <!-- Progress bar + percentage spanning ID + Type columns -->
+                <TableCell :colspan="Math.min(2, visibleColumns.length)" class="!py-1 !px-3">
+                  <div class="flex items-center gap-2">
+                    <div class="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
+                      <div
+                        class="h-full rounded-full transition-all bg-[var(--color-status-in-progress)]"
+                        :style="{ width: Math.round(group.closedChildCount / group.childCount * 100) + '%' }"
+                      />
+                    </div>
+                    <span class="text-[10px] text-muted-foreground font-medium shrink-0">{{ Math.round(group.closedChildCount / group.childCount * 100) }}%</span>
+                  </div>
+                </TableCell>
+                <!-- In-progress child aligned under Title column -->
+                <TableCell v-if="visibleColumns.length > 2" :colspan="visibleColumns.length - 2" class="!py-1 !px-3">
+                  <div v-if="group.inProgressChild" class="flex items-center gap-1.5 text-[10px] text-muted-foreground min-w-0">
+                    <span class="text-primary">▸</span>
+                    <span class="font-mono font-medium" :style="{ color: `var(--color-priority-${group.inProgressChild.priority})` }">{{ getShortId(group.inProgressChild.id) }}</span>
+                    <span class="truncate">{{ group.inProgressChild.title }}</span>
+                  </div>
+                </TableCell>
+              </TableRow>
+
+              <!-- Child rows (when expanded) -->
+              <template v-if="isExpanded(group.epic.id)">
+                <TableRow
+                  v-for="child in group.children"
+                  :key="child.id"
+                  :data-issue-id="child.id"
+                  class="cursor-pointer border-l-4 border-r-4"
+                  :class="[
+                    getEpicBorderColors(groupIndex).left,
+                    getEpicBorderColors(groupIndex).right,
+                    multiSelectMode
+                      ? (isSelected(child.id) ? 'bg-accent/50 hover:bg-accent/70' : 'hover:bg-muted/50')
+                      : (selectedId === child.id ? 'bg-accent/50 hover:bg-accent/70' : 'hover:bg-muted/50'),
+                    isNewlyAdded(child.id) ? 'issue-highlight-new' : '',
+                    isFocused(child.id) ? 'bg-primary/10 ring-1 ring-inset ring-primary/40' : ''
+                  ]"
+                  @click="setFocused(child.id); multiSelectMode ? toggleSelect(child.id) : $emit('select', child)"
+                  @dblclick="!multiSelectMode && $emit('edit', child)"
+                >
+                  <TableCell v-if="multiSelectMode" class="w-10 px-2 !py-1.5">
+                    <button
+                      class="flex items-center justify-center w-4 h-4 rounded border transition-colors"
+                      :class="isSelected(child.id)
+                        ? 'bg-primary border-primary text-primary-foreground'
+                        : 'border-muted-foreground/30 hover:border-muted-foreground'"
+                      @click.stop="toggleSelect(child.id)"
+                    >
+                      <svg v-if="isSelected(child.id)" class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+                        <polyline points="20 6 9 17 4 12" />
+                      </svg>
+                    </button>
+                  </TableCell>
+                  <TableCell v-for="col in visibleColumns" :key="col.id" class="!py-1.5" :class="[col.id === 'title' ? 'whitespace-normal max-w-md' : '', col.id === 'pinned' ? 'w-8 !px-1 text-center' : '']">
+                    <template v-if="col.id === 'pinned'">
+                      <button
+                        class="flex items-center justify-center w-full transition-colors"
+                        :class="pinnedSet.has(child.id) ? 'text-amber-500' : 'text-muted-foreground/30 hover:text-amber-400'"
+                        @click.stop="emit('toggle-pin', child.id)"
+                      >
+                        <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" :fill="pinnedSet.has(child.id) ? 'currentColor' : 'none'" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                          <path d="M9 4v6l-2 4h10l-2-4V4" /><line x1="12" y1="16" x2="12" y2="21" /><line x1="8" y1="4" x2="16" y2="4" />
+                        </svg>
+                      </button>
+                    </template>
+
+                    <template v-else-if="col.id === 'id'">
+                      <div class="pl-10">
+                        <CopyableId :value="child.id" :display-value="getShortId(child.id)" />
+                      </div>
+                    </template>
+
+                    <template v-else-if="col.id === 'type'">
+                      <TypeBadge :type="child.type" size="sm" />
+                    </template>
+
+                    <template v-else-if="col.id === 'title'">
+                      <span class="text-xs font-medium line-clamp-2 break-words">{{ child.title }}</span>
+                    </template>
+
+                    <template v-else-if="col.id === 'status'">
+                      <div class="flex items-center gap-1">
+                        <StatusBadge :status="child.status" size="sm" />
+                        <Tooltip v-if="child.blockedBy?.length">
+                          <TooltipTrigger as-child>
+                            <Ban class="w-3 h-3 text-red-400" />
+                          </TooltipTrigger>
+                          <TooltipContent side="top">
+                            <p class="text-xs">Blocked by {{ child.blockedBy.join(', ') }}</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </div>
+                    </template>
+
+                    <template v-else-if="col.id === 'priority'">
+                      <PriorityBadge :priority="child.priority" size="sm" />
+                    </template>
+
+                    <template v-else-if="col.id === 'labels'">
+                      <div v-if="child.labels?.length" class="flex flex-wrap gap-1">
+                        <LabelBadge
+                          v-for="label in child.labels"
+                          :key="label"
+                          :label="label"
+                          size="sm"
+                        />
+                      </div>
+                      <span v-else class="text-xs text-muted-foreground">-</span>
+                    </template>
+
+                    <template v-else-if="col.id === 'assignee'">
+                      <span class="text-xs">{{ child.assignee || '-' }}</span>
+                    </template>
+
+                    <template v-else-if="col.id === 'createdAt'">
+                      <div class="flex flex-col">
+                        <span class="text-xs text-muted-foreground">{{ formatDate(child.createdAt) }}</span>
+                        <span class="text-[10px] text-muted-foreground/70">{{ formatTime(child.createdAt) }}</span>
+                      </div>
+                    </template>
+
+                    <template v-else-if="col.id === 'updatedAt'">
+                      <div class="flex flex-col">
+                        <span class="text-xs text-muted-foreground">{{ formatDate(child.updatedAt) }}</span>
+                        <span class="text-[10px] text-muted-foreground/70">{{ formatTime(child.updatedAt) }}</span>
+                      </div>
+                    </template>
+
+                    <template v-else-if="col.id === 'commentCount'">
+                      <span v-if="child.commentCount" class="text-xs text-muted-foreground">{{ child.commentCount }}</span>
+                      <span v-else class="text-xs text-muted-foreground">-</span>
+                    </template>
+
+                    <template v-else>
+                      <span class="text-xs">{{ getIssueField(child, col.id) }}</span>
+                    </template>
+                  </TableCell>
+                </TableRow>
+              </template>
+            </template>
+
+            <!-- Non-epic issues (orphans or regular issues) -->
+            <template v-else>
+              <TableRow
+                v-for="issue in group.children"
+                :key="issue.id"
+                :data-issue-id="issue.id"
+                class="cursor-pointer"
+                :class="[
+                  multiSelectMode
+                    ? (isSelected(issue.id) ? 'bg-accent/50 hover:bg-accent/70' : 'hover:bg-muted/50')
+                    : (selectedId === issue.id ? 'bg-accent/50 hover:bg-accent/70' : 'hover:bg-muted/50'),
+                  isNewlyAdded(issue.id) ? 'issue-highlight-new' : '',
+                  isFocused(issue.id) ? 'bg-primary/10 ring-1 ring-inset ring-primary/40' : ''
+                ]"
+                @click="setFocused(issue.id); multiSelectMode ? toggleSelect(issue.id) : $emit('select', issue)"
+                @dblclick="!multiSelectMode && $emit('edit', issue)"
+              >
+                <TableCell v-if="multiSelectMode" class="w-10 px-2 !py-1.5">
+                  <button
+                    class="flex items-center justify-center w-4 h-4 rounded border transition-colors"
+                    :class="isSelected(issue.id)
+                      ? 'bg-primary border-primary text-primary-foreground'
+                      : 'border-muted-foreground/30 hover:border-muted-foreground'"
+                    @click.stop="toggleSelect(issue.id)"
+                  >
+                    <svg v-if="isSelected(issue.id)" class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+                      <polyline points="20 6 9 17 4 12" />
+                    </svg>
+                  </button>
+                </TableCell>
+                <TableCell v-for="col in visibleColumns" :key="col.id" class="!py-1.5" :class="[col.id === 'title' ? 'whitespace-normal max-w-md' : '', col.id === 'pinned' ? 'w-8 !px-1 text-center' : '']">
+                  <template v-if="col.id === 'pinned'">
+                    <button
+                      class="flex items-center justify-center w-full transition-colors"
+                      :class="pinnedSet.has(issue.id) ? 'text-amber-500' : 'text-muted-foreground/30 hover:text-amber-400'"
+                      @click.stop="emit('toggle-pin', issue.id)"
+                    >
+                      <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" :fill="pinnedSet.has(issue.id) ? 'currentColor' : 'none'" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M9 4v6l-2 4h10l-2-4V4" /><line x1="12" y1="16" x2="12" y2="21" /><line x1="8" y1="4" x2="16" y2="4" />
+                      </svg>
+                    </button>
+                  </template>
+
+                  <template v-else-if="col.id === 'id'">
+                    <div class="pl-7">
+                      <CopyableId :value="issue.id" :display-value="getShortId(issue.id)" />
+                    </div>
+                  </template>
+
+                  <template v-else-if="col.id === 'type'">
+                    <TypeBadge :type="issue.type" size="sm" />
+                  </template>
+
+                  <template v-else-if="col.id === 'title'">
+                    <span class="text-xs font-medium line-clamp-2 break-words">{{ issue.title }}</span>
+                  </template>
+
+                  <template v-else-if="col.id === 'status'">
+                    <div class="flex items-center gap-1">
+                      <StatusBadge :status="issue.status" size="sm" />
+                      <Tooltip v-if="issue.blockedBy?.length">
+                        <TooltipTrigger as-child>
+                          <Ban class="w-3 h-3 text-red-400" />
+                        </TooltipTrigger>
+                        <TooltipContent side="top">
+                          <p class="text-xs">Blocked by {{ issue.blockedBy.join(', ') }}</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </div>
+                  </template>
+
+                  <template v-else-if="col.id === 'priority'">
+                    <PriorityBadge :priority="issue.priority" size="sm" />
+                  </template>
+
+                  <template v-else-if="col.id === 'labels'">
+                    <div v-if="issue.labels?.length" class="flex flex-wrap gap-1">
+                      <LabelBadge
+                        v-for="label in issue.labels"
+                        :key="label"
+                        :label="label"
+                        size="sm"
+                      />
+                    </div>
+                    <span v-else class="text-xs text-muted-foreground">-</span>
+                  </template>
+
+                  <template v-else-if="col.id === 'assignee'">
+                    <span class="text-xs">{{ issue.assignee || '-' }}</span>
+                  </template>
+
+                  <template v-else-if="col.id === 'createdAt'">
+                    <div class="flex flex-col">
+                      <span class="text-xs text-muted-foreground">{{ formatDate(issue.createdAt) }}</span>
+                      <span class="text-[10px] text-muted-foreground/70">{{ formatTime(issue.createdAt) }}</span>
+                    </div>
+                  </template>
+
+                  <template v-else-if="col.id === 'updatedAt'">
+                    <div class="flex flex-col">
+                      <span class="text-xs text-muted-foreground">{{ formatDate(issue.updatedAt) }}</span>
+                      <span class="text-[10px] text-muted-foreground/70">{{ formatTime(issue.updatedAt) }}</span>
+                    </div>
+                  </template>
+
+                  <template v-else-if="col.id === 'commentCount'">
+                    <span v-if="issue.commentCount" class="text-xs text-muted-foreground">{{ issue.commentCount }}</span>
+                    <span v-else class="text-xs text-muted-foreground">-</span>
+                  </template>
+
+                  <template v-else>
+                    <span class="text-xs">{{ getIssueField(issue, col.id) }}</span>
+                  </template>
+                </TableCell>
+              </TableRow>
+            </template>
+          </template>
+        </template>
+
+        <!-- Flat display (fallback when no grouped issues) -->
+        <template v-else>
+          <TableRow
+            v-for="issue in sortedIssues"
+            :key="issue.id"
+            :data-issue-id="issue.id"
+            class="cursor-pointer"
+            :class="[
+              multiSelectMode
+                ? (isSelected(issue.id) ? 'bg-accent/50 hover:bg-accent/70' : 'hover:bg-muted/50')
+                : (selectedId === issue.id ? 'bg-accent/50 hover:bg-accent/70' : 'hover:bg-muted/50'),
+              isNewlyAdded(issue.id) ? 'issue-highlight-new' : '',
+              isFocused(issue.id) ? 'bg-primary/10 ring-1 ring-inset ring-primary/40' : ''
+            ]"
+            @click="setFocused(issue.id); multiSelectMode ? toggleSelect(issue.id) : $emit('select', issue)"
+            @dblclick="!multiSelectMode && $emit('edit', issue)"
+          >
+            <TableCell v-if="multiSelectMode" class="w-10 px-2 !py-1.5">
+              <button
+                class="flex items-center justify-center w-4 h-4 rounded border transition-colors"
+                :class="isSelected(issue.id)
+                  ? 'bg-primary border-primary text-primary-foreground'
+                  : 'border-muted-foreground/30 hover:border-muted-foreground'"
+                @click.stop="toggleSelect(issue.id)"
+              >
+                <svg v-if="isSelected(issue.id)" class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+                  <polyline points="20 6 9 17 4 12" />
+                </svg>
+              </button>
+            </TableCell>
+            <TableCell v-for="col in visibleColumns" :key="col.id" class="!py-1.5" :class="[col.id === 'title' ? 'whitespace-normal max-w-md' : '', col.id === 'pinned' ? 'w-8 !px-1 text-center' : '']">
+              <template v-if="col.id === 'pinned'">
+                <button
+                  class="flex items-center justify-center w-full transition-colors"
+                  :class="pinnedSet.has(issue.id) ? 'text-amber-500' : 'text-muted-foreground/30 hover:text-amber-400'"
+                  @click.stop="emit('toggle-pin', issue.id)"
+                >
+                  <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" :fill="pinnedSet.has(issue.id) ? 'currentColor' : 'none'" stroke="currentColor" stroke-width="2">
+                    <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+                  </svg>
+                </button>
+              </template>
+
+              <template v-else-if="col.id === 'id'">
+                <div class="pl-7">
+                  <CopyableId :value="issue.id" :display-value="getShortId(issue.id)" />
+                </div>
+              </template>
+
+              <template v-else-if="col.id === 'type'">
+                <TypeBadge :type="issue.type" size="sm" />
+              </template>
+
+              <template v-else-if="col.id === 'title'">
+                <span class="text-xs font-medium line-clamp-2 break-words">{{ issue.title }}</span>
+              </template>
+
+              <template v-else-if="col.id === 'status'">
+                <div class="flex items-center gap-1">
+                  <StatusBadge :status="issue.status" size="sm" />
+                  <Tooltip v-if="issue.blockedBy?.length">
+                    <TooltipTrigger as-child>
+                      <Ban class="w-3 h-3 text-red-400" />
+                    </TooltipTrigger>
+                    <TooltipContent side="top">
+                      <p class="text-xs">Blocked by {{ issue.blockedBy.join(', ') }}</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </div>
+              </template>
+
+              <template v-else-if="col.id === 'priority'">
+                <PriorityBadge :priority="issue.priority" size="sm" />
+              </template>
+
+              <template v-else-if="col.id === 'labels'">
+                <div v-if="issue.labels?.length" class="flex flex-wrap gap-1">
+                  <LabelBadge
+                    v-for="label in issue.labels"
+                    :key="label"
+                    :label="label"
+                    size="sm"
+                  />
+                </div>
+                <span v-else class="text-xs text-muted-foreground">-</span>
+              </template>
+
+              <template v-else-if="col.id === 'assignee'">
+                <span class="text-xs">{{ issue.assignee || '-' }}</span>
+              </template>
+
+              <template v-else-if="col.id === 'createdAt'">
+                <div class="flex flex-col">
+                  <span class="text-xs text-muted-foreground">{{ formatDate(issue.createdAt) }}</span>
+                  <span class="text-[10px] text-muted-foreground/70">{{ formatTime(issue.createdAt) }}</span>
+                </div>
+              </template>
+
+              <template v-else-if="col.id === 'updatedAt'">
+                <div class="flex flex-col">
+                  <span class="text-xs text-muted-foreground">{{ formatDate(issue.updatedAt) }}</span>
+                  <span class="text-[10px] text-muted-foreground/70">{{ formatTime(issue.updatedAt) }}</span>
+                </div>
+              </template>
+
+              <template v-else-if="col.id === 'commentCount'">
+                <span v-if="issue.commentCount" class="text-xs text-muted-foreground">{{ issue.commentCount }}</span>
+                <span v-else class="text-xs text-muted-foreground">-</span>
+              </template>
+
+              <template v-else>
+                <span class="text-xs">{{ getIssueField(issue, col.id) }}</span>
+              </template>
+            </TableCell>
+          </TableRow>
+        </template>
+      </TableBody>
+    </Table>
+
+    <!-- Load More Button -->
+    <div v-if="hasMore" class="flex justify-center py-4 border-t border-border">
+      <Button variant="outline" size="sm" @click="emit('loadMore')">
+        Load more ({{ (totalCount ?? 0) - issues.length }} remaining)
+      </Button>
+    </div>
+  </div>
+</template>

@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
+  <!-- Background with rounded corners -->
+  <rect width="512" height="512" rx="80" fill="#1e293b"/>
+
+  <!-- Scaled and centered logo (original viewBox 0 0 24 24, scaled and centered) -->
+  <g transform="translate(52, 60) scale(17)">
+    <!-- Curved lines from center to center (circles drawn on top will hide the ends) -->
+    <!-- Arc vert → rouge -->
+    <path d="M 4 5 Q 3 12 12 18" stroke="#64748b" stroke-width="2" fill="none"/>
+    <!-- Arc rouge → jaune -->
+    <path d="M 12 18 Q 21 12 20 5" stroke="#64748b" stroke-width="2" fill="none"/>
+    <!-- Arc jaune → vert -->
+    <path d="M 20 5 Q 12 1 4 5" stroke="#64748b" stroke-width="2" fill="none"/>
+
+    <!-- Colored circles -->
+    <circle cx="4" cy="5" r="3" fill="#22c55e"/>
+    <circle cx="20" cy="5" r="3" fill="#eab308"/>
+    <circle cx="12" cy="18" r="3" fill="#ef4444"/>
+  </g>
+</svg>

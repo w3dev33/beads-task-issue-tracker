@@ -1,0 +1,101 @@
+<script setup lang="ts">
+import { ref, onMounted, computed } from 'vue'
+import { X } from 'lucide-vue-next'
+import { readImageFile } from '~/utils/open-url'
+import { isUrl } from '~/utils/markdown'
+
+const props = withDefaults(defineProps<{
+  src: string
+  alt: string
+  showRemove?: boolean
+}>(), {
+  showRemove: true,
+})
+
+const emit = defineEmits<{
+  click: []
+  remove: []
+}>()
+
+const imageDataUrl = ref<string | null>(null)
+const isLoading = ref(true)
+const hasError = ref(false)
+
+// Check if src is a URL (http/https)
+const isRemoteUrl = computed(() => isUrl(props.src))
+
+onMounted(async () => {
+  // For URLs, use directly without loading via backend
+  if (isRemoteUrl.value) {
+    imageDataUrl.value = props.src
+    isLoading.value = false
+    return
+  }
+
+  await loadImage()
+})
+
+const loadImage = async () => {
+  // src is already an absolute path (resolved by useAttachments)
+  const fullPath = props.src
+  try {
+    const imageData = await readImageFile(fullPath)
+    if (imageData) {
+      imageDataUrl.value = `data:${imageData.mimeType};base64,${imageData.base64}`
+    } else {
+      hasError.value = true
+    }
+  } catch {
+    hasError.value = true
+  }
+  isLoading.value = false
+}
+
+const handleRemove = (event: Event) => {
+  event.stopPropagation()
+  emit('remove')
+}
+
+// Handle image load error for remote URLs
+const handleImageError = () => {
+  if (isRemoteUrl.value) {
+    hasError.value = true
+  }
+}
+</script>
+
+<template>
+  <div
+    class="relative inline-block cursor-pointer group"
+    @click="emit('click')"
+  >
+    <!-- Remove button (appears on hover) -->
+    <button
+      v-if="showRemove"
+      type="button"
+      class="absolute -top-2 -right-2 z-10 w-6 h-6 rounded-full bg-destructive text-destructive-foreground opacity-0 group-hover:opacity-100 hover:bg-destructive/80 active:scale-90 transition-all flex items-center justify-center shadow-md"
+      @click="handleRemove"
+    >
+      <X class="w-4 h-4" />
+    </button>
+
+    <!-- Loading state -->
+    <div v-if="isLoading" class="w-[180px] h-[108px] bg-muted rounded-lg flex items-center justify-center">
+      <span class="text-sm text-muted-foreground">Loading...</span>
+    </div>
+
+    <!-- Error state -->
+    <div v-else-if="hasError" class="w-[180px] h-[108px] bg-destructive/10 rounded-lg flex items-center justify-center">
+      <span class="text-sm text-destructive">Error loading image</span>
+    </div>
+
+    <!-- Image -->
+    <img
+      v-else
+      :src="imageDataUrl!"
+      :alt="alt"
+      class="w-[180px] h-auto rounded-lg border-2 border-border hover:border-primary transition-colors"
+      @error="handleImageError"
+    />
+  </div>
+</template>

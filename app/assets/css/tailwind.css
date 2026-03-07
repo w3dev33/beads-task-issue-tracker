@@ -1,0 +1,880 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  /* Status colors */
+  --color-status-open: #3b82f6;
+  --color-status-in-progress: #15803d;
+  --color-status-blocked: #ef4444;
+  --color-status-closed: #6b7280;
+
+  /* Type colors */
+  --color-type-bug: #ef4444;
+  --color-type-task: #3b82f6;
+  --color-type-feature: #8b5cf6;
+  --color-type-epic: #4338ca;
+  --color-type-chore: #6b7280;
+
+  /* Priority colors */
+  --color-priority-p0: #ef4444;
+  --color-priority-p1: #ef4444;
+  --color-priority-p2: #f59e0b;
+  --color-priority-p3: #b8860b;
+  --color-priority-p4: #6b7280;
+}
+
+/* ── Badge CSS variables (default = classic theme) ──────────────────────────── */
+:root {
+  /* Status badges */
+  --badge-status-open: #3b82f6;
+  --badge-status-open-deep: #1e3a5f;
+  --badge-status-open-glow: transparent;
+  --badge-status-in-progress: #15803d;
+  --badge-status-in-progress-deep: #052e16;
+  --badge-status-in-progress-glow: transparent;
+  --badge-status-blocked: #ef4444;
+  --badge-status-blocked-deep: #7f1d1d;
+  --badge-status-blocked-glow: transparent;
+  --badge-status-closed: #6b7280;
+  --badge-status-closed-deep: #1f2937;
+  --badge-status-closed-glow: transparent;
+  --badge-status-deferred: #f59e0b;
+  --badge-status-deferred-deep: #78350f;
+  --badge-status-deferred-glow: transparent;
+  --badge-status-tombstone: #78716c;
+  --badge-status-tombstone-deep: #44403c;
+  --badge-status-tombstone-glow: transparent;
+  --badge-status-pinned: #a855f7;
+  --badge-status-pinned-deep: #581c87;
+  --badge-status-pinned-glow: transparent;
+  --badge-status-hooked: #06b6d4;
+  --badge-status-hooked-deep: #164e63;
+  --badge-status-hooked-glow: transparent;
+
+  /* Type badges */
+  --badge-type-bug: #ef4444;
+  --badge-type-bug-deep: #7f1d1d;
+  --badge-type-bug-glow: transparent;
+  --badge-type-task: #3b82f6;
+  --badge-type-task-deep: #1e3a5f;
+  --badge-type-task-glow: transparent;
+  --badge-type-feature: #8b5cf6;
+  --badge-type-feature-deep: #3b0764;
+  --badge-type-feature-glow: transparent;
+  --badge-type-epic: #6366f1;
+  --badge-type-epic-deep: #312e81;
+  --badge-type-epic-glow: transparent;
+  --badge-type-chore: #6b7280;
+  --badge-type-chore-deep: #1f2937;
+  --badge-type-chore-glow: transparent;
+
+  /* Priority badges */
+  --badge-priority-p0: #ef4444;
+  --badge-priority-p0-deep: #7f1d1d;
+  --badge-priority-p0-glow: transparent;
+  --badge-priority-p1: #ef4444;
+  --badge-priority-p1-deep: #7f1d1d;
+  --badge-priority-p1-glow: transparent;
+  --badge-priority-p2: #f59e0b;
+  --badge-priority-p2-deep: #78350f;
+  --badge-priority-p2-glow: transparent;
+  --badge-priority-p3: #b8860b;
+  --badge-priority-p3-deep: #6b4f08;
+  --badge-priority-p3-glow: transparent;
+  --badge-priority-p4: #6b7280;
+  --badge-priority-p4-deep: #1f2937;
+  --badge-priority-p4-glow: transparent;
+}
+
+/* ── Neon theme ─────────────────────────────────────────────────────────────── */
+[data-theme="neon"] {
+  /* Status badges */
+  --badge-status-open: #00d4ff;
+  --badge-status-open-deep: #0099cc;
+  --badge-status-open-glow: rgba(0, 212, 255, 0.4);
+  --badge-status-in-progress: #00ff87;
+  --badge-status-in-progress-deep: #00cc6a;
+  --badge-status-in-progress-glow: rgba(0, 255, 135, 0.4);
+  --badge-status-blocked: #ff3366;
+  --badge-status-blocked-deep: #cc1a4a;
+  --badge-status-blocked-glow: rgba(255, 51, 102, 0.4);
+  --badge-status-closed: #8892a0;
+  --badge-status-closed-deep: #5a6270;
+  --badge-status-closed-glow: transparent;
+  --badge-status-deferred: #ffaa00;
+  --badge-status-deferred-deep: #cc8800;
+  --badge-status-deferred-glow: rgba(255, 170, 0, 0.4);
+  --badge-status-tombstone: #78716c;
+  --badge-status-tombstone-deep: #44403c;
+  --badge-status-tombstone-glow: transparent;
+  --badge-status-pinned: #bf5fff;
+  --badge-status-pinned-deep: #9933cc;
+  --badge-status-pinned-glow: rgba(191, 95, 255, 0.4);
+  --badge-status-hooked: #00e5ff;
+  --badge-status-hooked-deep: #00b8cc;
+  --badge-status-hooked-glow: rgba(0, 229, 255, 0.4);
+
+  /* Type badges */
+  --badge-type-bug: #ff3366;
+  --badge-type-bug-deep: #cc1a4a;
+  --badge-type-bug-glow: rgba(255, 51, 102, 0.4);
+  --badge-type-task: #3399ff;
+  --badge-type-task-deep: #1a6bcc;
+  --badge-type-task-glow: rgba(51, 153, 255, 0.4);
+  --badge-type-feature: #bf5fff;
+  --badge-type-feature-deep: #9933cc;
+  --badge-type-feature-glow: rgba(191, 95, 255, 0.4);
+  --badge-type-epic: #818cf8;
+  --badge-type-epic-deep: #6366f1;
+  --badge-type-epic-glow: rgba(129, 140, 248, 0.4);
+  --badge-type-chore: #8892a0;
+  --badge-type-chore-deep: #5a6270;
+  --badge-type-chore-glow: transparent;
+
+  /* Priority badges */
+  --badge-priority-p0: #ff3366;
+  --badge-priority-p0-deep: #cc1a4a;
+  --badge-priority-p0-glow: rgba(255, 51, 102, 0.4);
+  --badge-priority-p1: #ff3366;
+  --badge-priority-p1-deep: #cc1a4a;
+  --badge-priority-p1-glow: rgba(255, 51, 102, 0.4);
+  --badge-priority-p2: #ffaa00;
+  --badge-priority-p2-deep: #cc8800;
+  --badge-priority-p2-glow: rgba(255, 170, 0, 0.4);
+  --badge-priority-p3: #e0a500;
+  --badge-priority-p3-deep: #b8860b;
+  --badge-priority-p3-glow: rgba(224, 165, 0, 0.4);
+  --badge-priority-p4: #8892a0;
+  --badge-priority-p4-deep: #5a6270;
+  --badge-priority-p4-glow: transparent;
+
+  /* Status/Type/Priority theme colors for KPI cards, charts, etc. */
+  --color-status-open: #00d4ff;
+  --color-status-in-progress: #00ff87;
+  --color-status-blocked: #ff3366;
+  --color-status-closed: #8892a0;
+
+  --color-type-bug: #ff3366;
+  --color-type-task: #3399ff;
+  --color-type-feature: #bf5fff;
+  --color-type-epic: #818cf8;
+  --color-type-chore: #8892a0;
+
+  --color-priority-p0: #ff3366;
+  --color-priority-p1: #ff3366;
+  --color-priority-p2: #ffaa00;
+  --color-priority-p3: #fbbf24;
+  --color-priority-p4: #8892a0;
+
+  /* UI overrides — deep dark with neon accents */
+  --background: #0a0a0f;
+  --foreground: #e0e0e8;
+  --card: #111118;
+  --card-foreground: #e0e0e8;
+  --popover: #111118;
+  --popover-foreground: #e0e0e8;
+  --primary: #00d4ff;
+  --primary-foreground: #0a0a0f;
+  --secondary: #1a1a2e;
+  --secondary-foreground: #e0e0e8;
+  --muted: #14141f;
+  --muted-foreground: #6a6a80;
+  --accent: #1a1a3a;
+  --accent-foreground: #e0e0e8;
+  --destructive: #ff3366;
+  --border: #1e1e3a;
+  --input: #1e1e3a;
+  --ring: #00d4ff;
+  --chart-1: #00d4ff;
+  --chart-2: #00ff87;
+  --chart-3: #ffaa00;
+  --chart-4: #bf5fff;
+  --chart-5: #ff3366;
+  --sidebar: #0e0e16;
+  --sidebar-foreground: #e0e0e8;
+  --sidebar-primary: #00d4ff;
+  --sidebar-primary-foreground: #0a0a0f;
+  --sidebar-accent: #1a1a3a;
+  --sidebar-accent-foreground: #e0e0e8;
+  --sidebar-border: #1e1e3a;
+  --sidebar-ring: #00d4ff;
+}
+
+/* ── Gradient badge shared styles ───────────────────────────────────────────── */
+.badge-gradient {
+  padding: 0.188rem 0.5rem !important;
+  border: none !important;
+  transition: box-shadow 0.2s ease;
+}
+
+/* Type gradients */
+.bg-type-bug-gradient {
+  background: linear-gradient(135deg, var(--badge-type-bug), var(--badge-type-bug-deep));
+  box-shadow: 0 0 8px var(--badge-type-bug-glow), 0 0 2px var(--badge-type-bug-glow);
+}
+
+.bg-type-task-gradient {
+  background: linear-gradient(135deg, var(--badge-type-task), var(--badge-type-task-deep));
+  box-shadow: 0 0 8px var(--badge-type-task-glow), 0 0 2px var(--badge-type-task-glow);
+}
+
+.bg-type-feature-gradient {
+  background: linear-gradient(135deg, var(--badge-type-feature), var(--badge-type-feature-deep));
+  box-shadow: 0 0 8px var(--badge-type-feature-glow), 0 0 2px var(--badge-type-feature-glow);
+}
+
+.bg-type-epic-gradient {
+  background: linear-gradient(135deg, var(--badge-type-epic), var(--badge-type-epic-deep));
+  box-shadow: 0 0 8px var(--badge-type-epic-glow), 0 0 2px var(--badge-type-epic-glow);
+}
+
+.bg-type-chore-gradient {
+  background: linear-gradient(135deg, var(--badge-type-chore), var(--badge-type-chore-deep));
+  box-shadow: 0 0 8px var(--badge-type-chore-glow), 0 0 2px var(--badge-type-chore-glow);
+}
+
+/* Status gradients */
+.bg-status-open-gradient {
+  background: linear-gradient(135deg, var(--badge-status-open), var(--badge-status-open-deep));
+  box-shadow: 0 0 8px var(--badge-status-open-glow), 0 0 2px var(--badge-status-open-glow);
+}
+
+.bg-status-in-progress-gradient {
+  background: linear-gradient(135deg, var(--badge-status-in-progress), var(--badge-status-in-progress-deep));
+  box-shadow: 0 0 8px var(--badge-status-in-progress-glow), 0 0 2px var(--badge-status-in-progress-glow);
+}
+
+.bg-status-blocked-gradient {
+  background: linear-gradient(135deg, var(--badge-status-blocked), var(--badge-status-blocked-deep));
+  box-shadow: 0 0 8px var(--badge-status-blocked-glow), 0 0 2px var(--badge-status-blocked-glow);
+}
+
+.bg-status-closed-gradient {
+  background: linear-gradient(135deg, var(--badge-status-closed), var(--badge-status-closed-deep));
+  box-shadow: 0 0 8px var(--badge-status-closed-glow), 0 0 2px var(--badge-status-closed-glow);
+}
+
+.bg-status-deferred-gradient {
+  background: linear-gradient(135deg, var(--badge-status-deferred), var(--badge-status-deferred-deep));
+  box-shadow: 0 0 8px var(--badge-status-deferred-glow), 0 0 2px var(--badge-status-deferred-glow);
+}
+
+.bg-status-tombstone-gradient {
+  background: linear-gradient(135deg, var(--badge-status-tombstone), var(--badge-status-tombstone-deep));
+  box-shadow: 0 0 8px var(--badge-status-tombstone-glow), 0 0 2px var(--badge-status-tombstone-glow);
+}
+
+.bg-status-pinned-gradient {
+  background: linear-gradient(135deg, var(--badge-status-pinned), var(--badge-status-pinned-deep));
+  box-shadow: 0 0 8px var(--badge-status-pinned-glow), 0 0 2px var(--badge-status-pinned-glow);
+}
+
+.bg-status-hooked-gradient {
+  background: linear-gradient(135deg, var(--badge-status-hooked), var(--badge-status-hooked-deep));
+  box-shadow: 0 0 8px var(--badge-status-hooked-glow), 0 0 2px var(--badge-status-hooked-glow);
+}
+
+/* Priority gradients */
+.bg-priority-p0-gradient {
+  background: linear-gradient(135deg, var(--badge-priority-p0), var(--badge-priority-p0-deep));
+  box-shadow: 0 0 8px var(--badge-priority-p0-glow), 0 0 2px var(--badge-priority-p0-glow);
+}
+
+.bg-priority-p1-gradient {
+  background: linear-gradient(135deg, var(--badge-priority-p1), var(--badge-priority-p1-deep));
+  box-shadow: 0 0 8px var(--badge-priority-p1-glow), 0 0 2px var(--badge-priority-p1-glow);
+}
+
+.bg-priority-p2-gradient {
+  background: linear-gradient(135deg, var(--badge-priority-p2), var(--badge-priority-p2-deep));
+  box-shadow: 0 0 8px var(--badge-priority-p2-glow), 0 0 2px var(--badge-priority-p2-glow);
+}
+
+.bg-priority-p3-gradient {
+  background: linear-gradient(135deg, var(--badge-priority-p3), var(--badge-priority-p3-deep));
+  box-shadow: 0 0 8px var(--badge-priority-p3-glow), 0 0 2px var(--badge-priority-p3-glow);
+}
+
+.bg-priority-p4-gradient {
+  background: linear-gradient(135deg, var(--badge-priority-p4), var(--badge-priority-p4-deep));
+  box-shadow: 0 0 8px var(--badge-priority-p4-glow), 0 0 2px var(--badge-priority-p4-glow);
+}
+
+/* Base radius */
+:root {
+  --radius: 0.375rem;
+}
+
+/* Light mode - VSCode light theme */
+:root {
+  --background: #ffffff;
+  --foreground: #1e1e1e;
+  --card: #f3f3f3;
+  --card-foreground: #1e1e1e;
+  --popover: #ffffff;
+  --popover-foreground: #1e1e1e;
+  --primary: #0066b8;
+  --primary-foreground: #ffffff;
+  --secondary: #e5e5e5;
+  --secondary-foreground: #1e1e1e;
+  --muted: #f0f0f0;
+  --muted-foreground: #6e6e6e;
+  --accent: #cce5ff;
+  --accent-foreground: #1e1e1e;
+  --destructive: #d32f2f;
+  --border: #d4d4d4;
+  --input: #d4d4d4;
+  --ring: #0066b8;
+  --chart-1: #3b82f6;
+  --chart-2: #22c55e;
+  --chart-3: #f59e0b;
+  --chart-4: #8b5cf6;
+  --chart-5: #ef4444;
+  --sidebar: #f3f3f3;
+  --sidebar-foreground: #1e1e1e;
+  --sidebar-primary: #0066b8;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #e4e6f1;
+  --sidebar-accent-foreground: #1e1e1e;
+  --sidebar-border: #d4d4d4;
+  --sidebar-ring: #0066b8;
+  color-scheme: light;
+}
+
+/* Dark mode - VSCode dark theme */
+.dark {
+  --background: #1e1e1e;
+  --foreground: #d4d4d4;
+  --card: #252526;
+  --card-foreground: #d4d4d4;
+  --popover: #252526;
+  --popover-foreground: #d4d4d4;
+  --primary: #0e639c;
+  --primary-foreground: #ffffff;
+  --secondary: #3c3c3c;
+  --secondary-foreground: #d4d4d4;
+  --muted: #2d2d2d;
+  --muted-foreground: #808080;
+  --accent: #094771;
+  --accent-foreground: #d4d4d4;
+  --destructive: #f14c4c;
+  --border: #3c3c3c;
+  --input: #3c3c3c;
+  --ring: #0e639c;
+  --chart-1: #3b82f6;
+  --chart-2: #22c55e;
+  --chart-3: #f59e0b;
+  --chart-4: #8b5cf6;
+  --chart-5: #ef4444;
+  --sidebar: #252526;
+  --sidebar-foreground: #d4d4d4;
+  --sidebar-primary: #0e639c;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #37373d;
+  --sidebar-accent-foreground: #d4d4d4;
+  --sidebar-border: #3c3c3c;
+  --sidebar-ring: #0e639c;
+  color-scheme: dark;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--background);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--secondary);
+  border-radius: 5px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--muted-foreground);
+}
+
+/* ── Light: flat badges (no gradient) ────────────────────────────────────────── */
+[data-theme="light"] .bg-status-open-gradient { background: var(--badge-status-open); }
+[data-theme="light"] .bg-status-in-progress-gradient { background: var(--badge-status-in-progress); }
+[data-theme="light"] .bg-status-blocked-gradient { background: var(--badge-status-blocked); }
+[data-theme="light"] .bg-status-closed-gradient { background: var(--badge-status-closed); }
+[data-theme="light"] .bg-status-deferred-gradient { background: var(--badge-status-deferred); }
+[data-theme="light"] .bg-status-tombstone-gradient { background: var(--badge-status-tombstone); }
+[data-theme="light"] .bg-status-pinned-gradient { background: var(--badge-status-pinned); }
+[data-theme="light"] .bg-status-hooked-gradient { background: var(--badge-status-hooked); }
+[data-theme="light"] .bg-type-bug-gradient { background: var(--badge-type-bug); }
+[data-theme="light"] .bg-type-task-gradient { background: var(--badge-type-task); }
+[data-theme="light"] .bg-type-feature-gradient { background: var(--badge-type-feature); }
+[data-theme="light"] .bg-type-epic-gradient { background: var(--badge-type-epic); }
+[data-theme="light"] .bg-type-chore-gradient { background: var(--badge-type-chore); }
+[data-theme="light"] .bg-priority-p0-gradient { background: var(--badge-priority-p0); }
+[data-theme="light"] .bg-priority-p1-gradient { background: var(--badge-priority-p1); }
+[data-theme="light"] .bg-priority-p2-gradient { background: var(--badge-priority-p2); }
+[data-theme="light"] .bg-priority-p3-gradient { background: var(--badge-priority-p3); }
+[data-theme="light"] .bg-priority-p4-gradient { background: var(--badge-priority-p4); }
+
+/* ── Dark Flat: solid color badges (no gradient) ────────────────────────────── */
+[data-theme="flat"] .bg-status-open-gradient { background: var(--badge-status-open); }
+[data-theme="flat"] .bg-status-in-progress-gradient { background: var(--badge-status-in-progress); }
+[data-theme="flat"] .bg-status-blocked-gradient { background: var(--badge-status-blocked); }
+[data-theme="flat"] .bg-status-closed-gradient { background: var(--badge-status-closed); }
+[data-theme="flat"] .bg-status-deferred-gradient { background: var(--badge-status-deferred); }
+[data-theme="flat"] .bg-status-tombstone-gradient { background: var(--badge-status-tombstone); }
+[data-theme="flat"] .bg-status-pinned-gradient { background: var(--badge-status-pinned); }
+[data-theme="flat"] .bg-status-hooked-gradient { background: var(--badge-status-hooked); }
+[data-theme="flat"] .bg-type-bug-gradient { background: var(--badge-type-bug); }
+[data-theme="flat"] .bg-type-task-gradient { background: var(--badge-type-task); }
+[data-theme="flat"] .bg-type-feature-gradient { background: var(--badge-type-feature); }
+[data-theme="flat"] .bg-type-epic-gradient { background: var(--badge-type-epic); }
+[data-theme="flat"] .bg-type-chore-gradient { background: var(--badge-type-chore); }
+[data-theme="flat"] .bg-priority-p0-gradient { background: var(--badge-priority-p0); }
+[data-theme="flat"] .bg-priority-p1-gradient { background: var(--badge-priority-p1); }
+[data-theme="flat"] .bg-priority-p2-gradient { background: var(--badge-priority-p2); }
+[data-theme="flat"] .bg-priority-p3-gradient { background: var(--badge-priority-p3); }
+[data-theme="flat"] .bg-priority-p4-gradient { background: var(--badge-priority-p4); }
+
+
+/* ── Neon theme UI enhancements ─────────────────────────────────────────────── */
+[data-theme="neon"] header {
+  border-bottom-color: rgba(0, 212, 255, 0.15);
+  box-shadow: 0 1px 12px rgba(0, 212, 255, 0.06);
+}
+
+[data-theme="neon"] table tbody tr:hover td {
+  background: rgba(0, 212, 255, 0.04);
+}
+
+[data-theme="neon"] input:focus,
+[data-theme="neon"] select:focus,
+[data-theme="neon"] textarea:focus {
+  box-shadow: 0 0 0 1px rgba(0, 212, 255, 0.3), 0 0 8px rgba(0, 212, 255, 0.1);
+}
+
+/* ── Neon badge overrides: transparent bg + colored text + colored border ──── */
+[data-theme="neon"] .badge-gradient {
+  border: 1px solid !important;
+}
+
+/* Status badges — neon style */
+[data-theme="neon"] .bg-status-open-gradient {
+  background: rgba(0, 212, 255, 0.12) !important;
+  color: #00d4ff !important;
+  border-color: rgba(0, 212, 255, 0.5) !important;
+  box-shadow: inset 0 0 12px rgba(0, 212, 255, 0.1), 0 0 8px rgba(0, 212, 255, 0.15);
+}
+[data-theme="neon"] .bg-status-in-progress-gradient {
+  background: rgba(0, 255, 135, 0.12) !important;
+  color: #00ff87 !important;
+  border-color: rgba(0, 255, 135, 0.5) !important;
+  box-shadow: inset 0 0 12px rgba(0, 255, 135, 0.1), 0 0 8px rgba(0, 255, 135, 0.15);
+}
+[data-theme="neon"] .bg-status-blocked-gradient {
+  background: rgba(255, 51, 102, 0.12) !important;
+  color: #ff3366 !important;
+  border-color: rgba(255, 51, 102, 0.5) !important;
+  box-shadow: inset 0 0 12px rgba(255, 51, 102, 0.1), 0 0 8px rgba(255, 51, 102, 0.15);
+}
+[data-theme="neon"] .bg-status-closed-gradient {
+  background: rgba(136, 146, 160, 0.1) !important;
+  color: #8892a0 !important;
+  border-color: rgba(136, 146, 160, 0.35) !important;
+  box-shadow: none;
+}
+[data-theme="neon"] .bg-status-deferred-gradient {
+  background: rgba(255, 170, 0, 0.12) !important;
+  color: #ffaa00 !important;
+  border-color: rgba(255, 170, 0, 0.5) !important;
+  box-shadow: inset 0 0 12px rgba(255, 170, 0, 0.1), 0 0 8px rgba(255, 170, 0, 0.15);
+}
+[data-theme="neon"] .bg-status-tombstone-gradient {
+  background: rgba(120, 113, 108, 0.1) !important;
+  color: #78716c !important;
+  border-color: rgba(120, 113, 108, 0.35) !important;
+  box-shadow: none;
+}
+[data-theme="neon"] .bg-status-pinned-gradient {
+  background: rgba(191, 95, 255, 0.12) !important;
+  color: #bf5fff !important;
+  border-color: rgba(191, 95, 255, 0.5) !important;
+  box-shadow: inset 0 0 12px rgba(191, 95, 255, 0.1), 0 0 8px rgba(191, 95, 255, 0.15);
+}
+[data-theme="neon"] .bg-status-hooked-gradient {
+  background: rgba(0, 229, 255, 0.12) !important;
+  color: #00e5ff !important;
+  border-color: rgba(0, 229, 255, 0.5) !important;
+  box-shadow: inset 0 0 12px rgba(0, 229, 255, 0.1), 0 0 8px rgba(0, 229, 255, 0.15);
+}
+
+/* Type badges — neon style */
+[data-theme="neon"] .bg-type-bug-gradient {
+  background: rgba(255, 51, 102, 0.12) !important;
+  color: #ff3366 !important;
+  border-color: rgba(255, 51, 102, 0.5) !important;
+  box-shadow: inset 0 0 12px rgba(255, 51, 102, 0.1), 0 0 8px rgba(255, 51, 102, 0.15);
+}
+[data-theme="neon"] .bg-type-task-gradient {
+  background: rgba(51, 153, 255, 0.12) !important;
+  color: #3399ff !important;
+  border-color: rgba(51, 153, 255, 0.5) !important;
+  box-shadow: inset 0 0 12px rgba(51, 153, 255, 0.1), 0 0 8px rgba(51, 153, 255, 0.15);
+}
+[data-theme="neon"] .bg-type-feature-gradient {
+  background: rgba(191, 95, 255, 0.12) !important;
+  color: #bf5fff !important;
+  border-color: rgba(191, 95, 255, 0.5) !important;
+  box-shadow: inset 0 0 12px rgba(191, 95, 255, 0.1), 0 0 8px rgba(191, 95, 255, 0.15);
+}
+[data-theme="neon"] .bg-type-epic-gradient {
+  background: rgba(129, 140, 248, 0.12) !important;
+  color: #818cf8 !important;
+  border-color: rgba(129, 140, 248, 0.5) !important;
+  box-shadow: inset 0 0 12px rgba(129, 140, 248, 0.1), 0 0 8px rgba(129, 140, 248, 0.15);
+}
+[data-theme="neon"] .bg-type-chore-gradient {
+  background: rgba(136, 146, 160, 0.1) !important;
+  color: #8892a0 !important;
+  border-color: rgba(136, 146, 160, 0.35) !important;
+  box-shadow: none;
+}
+
+/* Priority badges — neon style */
+[data-theme="neon"] .bg-priority-p0-gradient {
+  background: rgba(255, 51, 102, 0.12) !important;
+  color: #ff3366 !important;
+  border-color: rgba(255, 51, 102, 0.5) !important;
+  box-shadow: inset 0 0 12px rgba(255, 51, 102, 0.1), 0 0 8px rgba(255, 51, 102, 0.15);
+}
+[data-theme="neon"] .bg-priority-p1-gradient {
+  background: rgba(255, 51, 102, 0.12) !important;
+  color: #ff3366 !important;
+  border-color: rgba(255, 51, 102, 0.5) !important;
+  box-shadow: inset 0 0 12px rgba(255, 51, 102, 0.1), 0 0 8px rgba(255, 51, 102, 0.15);
+}
+[data-theme="neon"] .bg-priority-p2-gradient {
+  background: rgba(255, 170, 0, 0.12) !important;
+  color: #ffaa00 !important;
+  border-color: rgba(255, 170, 0, 0.5) !important;
+  box-shadow: inset 0 0 12px rgba(255, 170, 0, 0.1), 0 0 8px rgba(255, 170, 0, 0.15);
+}
+[data-theme="neon"] .bg-priority-p3-gradient {
+  background: rgba(224, 165, 0, 0.12) !important;
+  color: #e0a500 !important;
+  border-color: rgba(224, 165, 0, 0.5) !important;
+  box-shadow: inset 0 0 12px rgba(224, 165, 0, 0.1), 0 0 8px rgba(224, 165, 0, 0.15);
+}
+[data-theme="neon"] .bg-priority-p4-gradient {
+  background: rgba(136, 146, 160, 0.1) !important;
+  color: #8892a0 !important;
+  border-color: rgba(136, 146, 160, 0.35) !important;
+  box-shadow: none;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+/* Electron window drag regions (macOS titleBarStyle: hiddenInset) */
+.app-drag-region {
+  -webkit-app-region: drag;
+}
+
+.app-no-drag {
+  -webkit-app-region: no-drag;
+}
+
+/* ──────────────────────────────────────────────────────────────────────────────
+   Markdown base styles — shared by all markdown renderers
+   Use with modifier classes: .compact (issue previews) or .reader (full viewer)
+   ────────────────────────────────────────────────────────────────────────────── */
+
+.markdown-base a {
+  color: #60a5fa;
+  @apply hover:underline cursor-pointer;
+}
+
+.markdown-base strong,
+.markdown-base b {
+  @apply font-semibold;
+  color: #334155;
+}
+
+.dark .markdown-base strong,
+.dark .markdown-base b {
+  color: #cbd5e1;
+}
+
+.markdown-base em,
+.markdown-base i {
+  @apply italic;
+}
+
+.markdown-base ul {
+  @apply list-disc;
+}
+
+.markdown-base ol {
+  @apply list-decimal;
+}
+
+.markdown-base code {
+  @apply bg-muted px-1 py-0.5 rounded font-mono;
+  font-size: 0.9em;
+}
+
+.markdown-base pre code {
+  @apply bg-transparent p-0;
+}
+
+.markdown-base table {
+  @apply w-full my-2 border-collapse text-[inherit];
+}
+
+.markdown-base th {
+  @apply text-left font-semibold px-2 py-1.5 border border-border bg-muted/50;
+}
+
+.markdown-base td {
+  @apply px-2 py-1.5 border border-border;
+}
+
+.markdown-base tr:hover td {
+  @apply bg-muted/30;
+}
+
+/* ── Compact variant (IssuePreview, LinkifiedText, PrerequisitesCard) ──────── */
+
+.markdown-base.compact p {
+  @apply my-1 first:mt-0 last:mb-0;
+}
+
+.markdown-base.compact ul,
+.markdown-base.compact ol {
+  @apply my-1 pl-4;
+}
+
+.markdown-base.compact li {
+  @apply my-0.5;
+}
+
+.markdown-base.compact pre {
+  @apply bg-muted p-2 rounded my-1 overflow-x-auto;
+}
+
+.markdown-base.compact blockquote {
+  @apply border-l-2 border-muted-foreground/30 pl-3 my-1 italic text-muted-foreground;
+}
+
+.markdown-base.compact h1,
+.markdown-base.compact h2,
+.markdown-base.compact h3,
+.markdown-base.compact h4,
+.markdown-base.compact h5,
+.markdown-base.compact h6 {
+  @apply font-semibold mt-2 mb-1 first:mt-0;
+}
+
+.markdown-base.compact h1 {
+  @apply text-lg;
+  color: #93b4e0;
+}
+
+.markdown-base.compact h2 {
+  @apply text-base;
+  color: #7da8c9;
+}
+
+.markdown-base.compact h3 {
+  @apply text-sm;
+  color: #7db89e;
+}
+
+.markdown-base.compact h4 {
+  @apply text-sm;
+  color: #a599c4;
+}
+
+.markdown-base.compact h5,
+.markdown-base.compact h6 {
+  @apply text-sm;
+}
+
+.markdown-base.compact hr {
+  @apply my-2 border-muted;
+}
+
+/* ── Reader variant (MarkdownPreviewDialog — full document viewer) ─────────── */
+/* Inspired by GitHub/Obsidian: generous spacing, colored headers, clear hierarchy */
+
+.markdown-base.reader {
+  @apply text-base leading-7 text-foreground;
+}
+
+.markdown-base.reader p {
+  @apply my-3 first:mt-0 last:mb-0;
+}
+
+.markdown-base.reader ul,
+.markdown-base.reader ol {
+  @apply my-3 pl-6;
+}
+
+.markdown-base.reader li {
+  @apply my-1.5;
+}
+
+.markdown-base.reader code {
+  @apply bg-muted px-1.5 py-0.5 rounded font-mono text-[0.85em];
+}
+
+.markdown-base.reader pre {
+  @apply bg-muted p-4 rounded-lg my-4 overflow-x-auto text-sm leading-7;
+}
+
+.markdown-base.reader blockquote {
+  @apply border-l-3 border-sky-500/40 pl-4 my-4 italic text-muted-foreground;
+}
+
+.markdown-base.reader h1,
+.markdown-base.reader h2,
+.markdown-base.reader h3,
+.markdown-base.reader h4,
+.markdown-base.reader h5,
+.markdown-base.reader h6 {
+  @apply font-bold leading-tight first:mt-0;
+}
+
+.markdown-base.reader h1 {
+  @apply text-2xl mt-8 mb-4 pb-2 border-b border-border;
+  color: #93b4e0;
+}
+
+.markdown-base.reader h2 {
+  @apply text-xl mt-7 mb-3 pb-1.5 border-b border-border/50;
+  color: #7da8c9;
+}
+
+.markdown-base.reader h3 {
+  @apply text-lg mt-6 mb-2;
+  color: #7db89e;
+}
+
+.markdown-base.reader h4 {
+  @apply text-base mt-5 mb-2;
+  color: #a599c4;
+}
+
+.markdown-base.reader h5 {
+  @apply text-sm mt-4 mb-1.5;
+  color: #b0a0b8;
+}
+
+.markdown-base.reader h6 {
+  @apply text-sm mt-4 mb-1.5 text-muted-foreground;
+}
+
+.markdown-base.reader hr {
+  @apply my-6 border-border;
+}
+
+.markdown-base.reader table {
+  @apply w-full my-4 border-collapse text-sm;
+}
+
+.markdown-base.reader th {
+  @apply text-left font-semibold px-3 py-2 border border-border bg-muted/50;
+}
+
+.markdown-base.reader td {
+  @apply px-3 py-2 border border-border;
+}
+
+/* Search highlights in markdown modal */
+mark.search-highlight {
+  background-color: rgba(250, 204, 21, 0.4);
+  color: inherit;
+  border-radius: 2px;
+  padding: 0 1px;
+}
+
+mark.search-highlight-current {
+  background-color: rgba(249, 115, 22, 0.6);
+  color: inherit;
+  outline: 2px solid rgb(249, 115, 22);
+  outline-offset: 0px;
+  border-radius: 2px;
+}
+
+/* Search bar slide transition */
+.search-slide-enter-active,
+.search-slide-leave-active {
+  transition: all 0.15s ease-out;
+  overflow: hidden;
+}
+.search-slide-enter-from,
+.search-slide-leave-to {
+  opacity: 0;
+  max-height: 0;
+  margin-bottom: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
+/* Flash animation for newly added issues */
+@keyframes issue-highlight-flash {
+  0%   { background-color: color-mix(in srgb, var(--color-status-open) 35%, transparent); }
+  15%  { background-color: color-mix(in srgb, var(--color-status-open) 35%, transparent); }
+  100% { background-color: transparent; }
+}
+.issue-highlight-new {
+  animation: issue-highlight-flash 3s ease-out forwards;
+}

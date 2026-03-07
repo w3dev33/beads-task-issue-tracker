@@ -1,0 +1,909 @@
+<script setup lang="ts">
+import { ImageIcon, FileText, Plus, X } from 'lucide-vue-next'
+import type { Issue } from '~/types/issue'
+import { Badge } from '~/components/ui/badge'
+import { Button } from '~/components/ui/button'
+import { LinkifiedText } from '~/components/ui/linkified-text'
+import LabelBadge from '~/components/issues/LabelBadge.vue'
+import StatusBadge from '~/components/issues/StatusBadge.vue'
+import PriorityBadge from '~/components/issues/PriorityBadge.vue'
+import ImageThumbnail from '~/components/ui/image-preview/ImageThumbnail.vue'
+import { extractNonImageRefs, isUrl } from '~/utils/markdown'
+import type { AttachmentFile } from '~/composables/useAttachments'
+
+const { currentTheme } = useTheme()
+const isNeon = computed(() => currentTheme.value.id === 'neon')
+
+const props = defineProps<{
+  issue: Issue
+  readonly?: boolean
+  availableIssues?: Array<{ id: string; title: string; priority?: string; status?: string }>
+}>()
+
+const { openGallery } = useImagePreview()
+const { openMarkdownGallery } = useMarkdownPreview()
+const { listAttachments } = useAttachments()
+
+// Filesystem-based attachments (async, loaded per issue)
+const attachedImages = ref<AttachmentFile[]>([])
+const attachedMarkdown = ref<AttachmentFile[]>([])
+
+const loadAttachments = async () => {
+  if (!props.issue?.id) return
+  const result = await listAttachments(props.issue.id)
+  attachedImages.value = result.images
+  attachedMarkdown.value = result.markdown
+}
+
+// Reload when issue changes (watch the whole object so fetchIssue triggers reload)
+watch(() => props.issue, () => loadAttachments(), { immediate: true })
+
+// Total attachment count (images + markdown)
+const totalAttachments = computed(() => attachedImages.value.length + attachedMarkdown.value.length)
+
+// Extract non-image external references (URLs, IDs) — only real refs now
+const nonImageRefs = computed(() => extractNonImageRefs(props.issue.externalRef))
+
+// Prepare images with full paths for gallery
+const preparedImages = computed(() =>
+  attachedImages.value.map(img => ({
+    path: img.path,
+    alt: img.filename,
+  })),
+)
+
+const handleImageClick = async (file: AttachmentFile) => {
+  const clickedIndex = preparedImages.value.findIndex(img => img.path === file.path)
+  openGallery(preparedImages.value, clickedIndex >= 0 ? clickedIndex : 0)
+}
+
+// Prepare markdown files with full paths for gallery
+const preparedMarkdown = computed(() =>
+  attachedMarkdown.value.map(md => ({
+    path: md.path,
+    alt: md.filename,
+  })),
+)
+
+const handleMarkdownClick = (file: AttachmentFile) => {
+  const clickedIndex = preparedMarkdown.value.findIndex(md => md.path === file.path)
+  openMarkdownGallery(preparedMarkdown.value, clickedIndex >= 0 ? clickedIndex : 0)
+}
+
+const attachFile = async () => {
+  const { open } = await import('@tauri-apps/plugin-dialog')
+  const selected = await open({
+    multiple: true,
+    filters: [
+      { name: 'All supported files', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp', 'md', 'markdown'] },
+      { name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp'] },
+      { name: 'Markdown', extensions: ['md', 'markdown'] },
+    ],
+  })
+  if (selected && selected.length > 0) {
+    emit('attach-image', selected)
+  }
+}
+
+const emit = defineEmits<{
+  'navigate-to-issue': [id: string]
+  'attach-image': [paths: string[]]
+  'detach-image': [path: string]
+  'create-child': [parentId: string]
+  'open-add-blocker': [issueId: string]
+  'remove-dependency': [issueId: string, blockerId: string]
+  'open-add-relation': [issueId: string]
+  'remove-relation': [sourceId: string, targetId: string]
+}>()
+
+// Natural sort comparison for IDs (handles multi-digit numbers correctly)
+const naturalCompare = (a: string, b: string): number => {
+  const aParts = a.split(/(\d+)/)
+  const bParts = b.split(/(\d+)/)
+
+  for (let i = 0; i < Math.max(aParts.length, bParts.length); i++) {
+    const aPart = aParts[i] || ''
+    const bPart = bParts[i] || ''
+
+    const aNum = parseInt(aPart, 10)
+    const bNum = parseInt(bPart, 10)
+
+    if (!isNaN(aNum) && !isNaN(bNum)) {
+      if (aNum !== bNum) return aNum - bNum
+    } else {
+      if (aPart !== bPart) return aPart.localeCompare(bPart)
+    }
+  }
+  return 0
+}
+
+// Get short ID by removing the project prefix (e.g., "beads-demo-5tg.2" → "5tg.2")
+const getShortId = (id: string) => {
+  const lastHyphen = id.lastIndexOf('-')
+  if (lastHyphen > 0) {
+    return id.slice(lastHyphen + 1) || id
+  }
+  return id
+}
+
+// Sorted children using natural sort (1, 2, 3, ... 10 instead of 1, 10, 2, 3)
+const sortedChildren = computed(() => {
+  if (!props.issue.children?.length) return []
+  return [...props.issue.children].sort((a, b) =>
+    naturalCompare(a.id.toLowerCase(), b.id.toLowerCase())
+  )
+})
+
+// Sorted dependencies using natural sort
+const sortedBlockedBy = computed(() => {
+  if (!props.issue.blockedBy?.length) return []
+  return [...props.issue.blockedBy].sort((a, b) => naturalCompare(a.toLowerCase(), b.toLowerCase()))
+})
+
+const sortedBlocks = computed(() => {
+  if (!props.issue.blocks?.length) return []
+  return [...props.issue.blocks].sort((a, b) => naturalCompare(a.toLowerCase(), b.toLowerCase()))
+})
+
+// Lookup issue title from availableIssues
+const getIssueTitle = (id: string) => {
+  return props.availableIssues?.find(i => i.id === id)?.title
+}
+
+const depBorderColor = (id: string) => {
+  const issue = props.availableIssues?.find(i => i.id === id)
+  if (!issue?.priority) return 'border-muted-foreground/50'
+  const colors: Record<string, string> = {
+    p0: 'border-[#ef4444]',
+    p1: 'border-[#ef4444]',
+    p2: 'border-[#f59e0b]',
+    p3: 'border-[#b8860b]',
+    p4: 'border-[#6b7280]',
+  }
+  return colors[issue.priority] || 'border-muted-foreground/50'
+}
+
+const depTextColor = (priority?: string) => {
+  if (!priority) return 'text-sky-400'
+  if (isNeon.value) {
+    const neonColors: Record<string, string> = {
+      p0: 'text-[#ff3366]',
+      p1: 'text-[#ff3366]',
+      p2: 'text-[#ffaa00]',
+      p3: 'text-[#e0a500]',
+      p4: 'text-[#8892a0]',
+    }
+    return neonColors[priority] || 'text-[#00d4ff]'
+  }
+  const colors: Record<string, string> = {
+    p0: 'text-[#ef4444]',
+    p1: 'text-[#ef4444]',
+    p2: 'text-[#f59e0b]',
+    p3: 'text-[#b8860b]',
+    p4: 'text-[#6b7280]',
+  }
+  return colors[priority] || 'text-sky-400'
+}
+
+// Neon inline style for dep/relation items: transparent bg + inset glow, no border
+const depNeonStyle = (priority?: string) => {
+  if (!isNeon.value) return {}
+  const colorMap: Record<string, string> = {
+    p0: '255, 51, 102',
+    p1: '255, 51, 102',
+    p2: '255, 170, 0',
+    p3: '224, 165, 0',
+    p4: '136, 146, 160',
+  }
+  const rgb = (priority && colorMap[priority]) || '0, 212, 255'
+  return {
+    background: `rgba(${rgb}, 0.08)`,
+    border: 'none',
+    boxShadow: `inset 0 0 10px rgba(${rgb}, 0.06)`,
+  }
+}
+
+const handleRemoveDependency = (id: string, section: 'blockedBy' | 'blocks') => {
+  if (section === 'blockedBy') {
+    // Current issue is blocked by `id` → remove dep(currentIssue, id)
+    emit('remove-dependency', props.issue.id, id)
+  } else {
+    // Current issue blocks `id` → remove dep(id, currentIssue)
+    emit('remove-dependency', id, props.issue.id)
+  }
+}
+
+const handleRemoveRelation = (targetId: string, direction: string) => {
+  if (direction === 'dependent') {
+    // targetId depends on current issue → bd dep remove <targetId> <currentIssue>
+    emit('remove-relation', targetId, props.issue.id)
+  } else {
+    // Current issue depends on targetId → bd dep remove <currentIssue> <targetId>
+    emit('remove-relation', props.issue.id, targetId)
+  }
+}
+
+// Collapsible section states (persisted per project, all open by default)
+interface PreviewCollapsedState {
+  attachments: boolean
+  description: boolean
+  parent: boolean
+  children: boolean
+  details: boolean
+  dependencies: boolean
+  relations: boolean
+  externalRef: boolean
+  estimate: boolean
+  designNotes: boolean
+  acceptanceCriteria: boolean
+  workingNotes: boolean
+  metadata: boolean
+  specId: boolean
+}
+
+const defaultCollapsedState: PreviewCollapsedState = {
+  attachments: true,
+  description: true,
+  parent: true,
+  children: true,
+  details: true,
+  dependencies: true,
+  relations: true,
+  externalRef: true,
+  estimate: true,
+  designNotes: true,
+  acceptanceCriteria: true,
+  workingNotes: true,
+  metadata: true,
+  specId: true,
+}
+
+const previewSections = useProjectStorage<PreviewCollapsedState>('previewSections', defaultCollapsedState)
+
+// Toggle functions for each section
+const toggleSection = (section: keyof PreviewCollapsedState) => {
+  const newValue = {
+    ...previewSections.value,
+    [section]: !previewSections.value[section],
+  }
+  previewSections.value = newValue
+  // Explicitly save since watcher doesn't trigger reliably
+  saveProjectValue('previewSections', newValue)
+}
+
+// Direct getters for template (no computed writable - better reactivity)
+const isAttachmentsOpen = computed(() => previewSections.value.attachments)
+const isDescriptionOpen = computed(() => previewSections.value.description)
+const isParentOpen = computed(() => previewSections.value.parent)
+const isChildrenOpen = computed(() => previewSections.value.children)
+const isDetailsOpen = computed(() => previewSections.value.details)
+const isDependenciesOpen = computed(() => previewSections.value.dependencies)
+const isRelationsOpen = computed(() => previewSections.value.relations)
+const isExternalRefOpen = computed(() => previewSections.value.externalRef)
+const isEstimateOpen = computed(() => previewSections.value.estimate)
+const isDesignNotesOpen = computed(() => previewSections.value.designNotes)
+const isAcceptanceCriteriaOpen = computed(() => previewSections.value.acceptanceCriteria)
+const isWorkingNotesOpen = computed(() => previewSections.value.workingNotes)
+const isMetadataOpen = computed(() => previewSections.value.metadata)
+const isSpecIdOpen = computed(() => previewSections.value.specId)
+
+// Relations helpers
+const relationTypeLabels: Record<string, string> = {
+  'relates-to': 'Relates To',
+  'related': 'Related',
+  'discovered-from': 'Discovered From',
+  'duplicates': 'Duplicates',
+  'supersedes': 'Supersedes',
+  'caused-by': 'Caused By',
+}
+
+const getRelationLabel = (type: string): string => {
+  return relationTypeLabels[type] || type.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
+}
+
+const hasRelations = computed(() => (props.issue.relations?.length ?? 0) > 0)
+
+const groupedRelations = computed(() => {
+  if (!props.issue.relations?.length) return []
+  const groups = new Map<string, typeof props.issue.relations>()
+  for (const rel of props.issue.relations) {
+    const existing = groups.get(rel.relationType) || []
+    existing.push(rel)
+    groups.set(rel.relationType, existing)
+  }
+  return Array.from(groups.entries()).map(([type, items]) => ({
+    type,
+    label: getRelationLabel(type),
+    items: [...items].sort((a, b) => naturalCompare(a.id.toLowerCase(), b.id.toLowerCase())),
+  }))
+})
+
+const relationBorderColor = (rel: { id: string; priority: string }) => {
+  // Use rel.priority if available, otherwise lookup from availableIssues
+  const priority = rel.priority || props.availableIssues?.find(i => i.id === rel.id)?.priority
+  if (!priority) return 'border-muted-foreground/50'
+  const colors: Record<string, string> = {
+    p0: 'border-[#ef4444]',
+    p1: 'border-[#ef4444]',
+    p2: 'border-[#f59e0b]',
+    p3: 'border-[#b8860b]',
+    p4: 'border-[#6b7280]',
+  }
+  return colors[priority] || 'border-muted-foreground/50'
+}
+
+const formatMetadata = (raw: string): string => {
+  try {
+    return JSON.stringify(JSON.parse(raw), null, 2)
+  } catch {
+    return raw
+  }
+}
+
+const formatDate = (dateStr: string) => {
+  if (!dateStr) return '-'
+  const date = new Date(dateStr)
+  return date.toLocaleDateString(undefined, {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}
+
+const formatEstimate = (minutes: number) => {
+  if (minutes < 60) return `${minutes}m`
+  const hours = Math.floor(minutes / 60)
+  const mins = minutes % 60
+  return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`
+}
+</script>
+
+<template>
+  <div class="space-y-3">
+    <!-- Attachments Section (images from externalRef) -->
+    <div>
+      <div class="flex items-center justify-between">
+        <button
+          class="flex items-center gap-1.5 text-left group"
+          @click="toggleSection('attachments')"
+        >
+          <svg
+            class="w-3 h-3 text-muted-foreground transition-transform"
+            :class="{ '-rotate-90': !isAttachmentsOpen }"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <polyline points="6 9 12 15 18 9" />
+          </svg>
+          <h4 class="text-[10px] font-medium text-muted-foreground uppercase tracking-wide group-hover:text-foreground transition-colors">
+            Attachments
+            <span v-if="totalAttachments > 0" class="text-muted-foreground">({{ totalAttachments }})</span>
+          </h4>
+        </button>
+        <Button
+          v-if="!readonly"
+          type="button"
+          variant="outline"
+          size="sm"
+          class="h-5 px-1.5 text-[10px] hover:bg-sky-500/20 hover:border-sky-500 hover:text-sky-400 active:scale-95 active:bg-sky-500/30 transition-all"
+          @click="attachFile"
+        >
+          <ImageIcon class="w-3 h-3 mr-1" />
+          Attach
+        </Button>
+      </div>
+      <div v-show="isAttachmentsOpen" class="mt-2 pl-4.5">
+        <div v-if="totalAttachments > 0" class="space-y-3">
+          <!-- Image thumbnails -->
+          <div v-if="attachedImages.length > 0" class="flex flex-wrap gap-4">
+            <ImageThumbnail
+              v-for="img in attachedImages"
+              :key="img.filename"
+              :src="img.path"
+              :alt="img.filename"
+              :show-remove="!readonly"
+              @click="handleImageClick(img)"
+              @remove="emit('detach-image', img.filename)"
+            />
+          </div>
+          <!-- Markdown file list -->
+          <div v-if="attachedMarkdown.length > 0" class="space-y-1">
+            <div
+              v-for="md in attachedMarkdown"
+              :key="md.filename"
+              class="flex items-center gap-2 group/md"
+            >
+              <button
+                class="flex items-center gap-1.5 text-xs text-sky-400 hover:text-sky-300 hover:underline transition-colors min-w-0"
+                @click="handleMarkdownClick(md)"
+              >
+                <FileText class="w-3.5 h-3.5 shrink-0" />
+                <span class="truncate">{{ md.filename }}</span>
+              </button>
+              <button
+                v-if="!readonly"
+                type="button"
+                class="opacity-0 group-hover/md:opacity-100 text-destructive hover:text-destructive/80 transition-all shrink-0"
+                @click="emit('detach-image', md.filename)"
+              >
+                <X class="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+        </div>
+        <p v-else class="text-xs text-muted-foreground">No attachments</p>
+      </div>
+    </div>
+
+    <!-- Description Section -->
+    <div>
+      <button
+        class="flex items-center gap-1.5 w-full text-left group"
+        @click="toggleSection('description')"
+      >
+        <svg
+          class="w-3 h-3 text-muted-foreground transition-transform"
+          :class="{ '-rotate-90': !isDescriptionOpen }"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+        >
+          <polyline points="6 9 12 15 18 9" />
+        </svg>
+        <h4 class="text-[10px] font-medium text-muted-foreground uppercase tracking-wide group-hover:text-foreground transition-colors">Description</h4>
+      </button>
+      <div v-show="isDescriptionOpen" class="mt-1 pl-4.5">
+        <div class="text-xs"><LinkifiedText :text="issue.description" fallback="No description provided." /></div>
+      </div>
+    </div>
+
+    <!-- Parent Section (only if exists) -->
+    <div v-if="issue.parent">
+      <button
+        class="flex items-center gap-1.5 w-full text-left group"
+        @click="toggleSection('parent')"
+      >
+        <svg
+          class="w-3 h-3 text-muted-foreground transition-transform"
+          :class="{ '-rotate-90': !isParentOpen }"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+        >
+          <polyline points="6 9 12 15 18 9" />
+        </svg>
+        <h4 class="text-[10px] font-medium text-muted-foreground uppercase tracking-wide group-hover:text-foreground transition-colors">Parent</h4>
+      </button>
+      <div v-show="isParentOpen" class="mt-1 pl-4.5">
+        <div
+          class="flex items-center justify-between gap-2 py-1 cursor-pointer hover:bg-muted/50 rounded px-1 -mx-1"
+          @click="emit('navigate-to-issue', issue.parent.id)"
+        >
+          <div class="flex items-center gap-2 min-w-0">
+            <span class="text-xs text-sky-400 hover:underline font-mono shrink-0">{{ issue.parent.id }}</span>
+            <span class="text-xs truncate">{{ issue.parent.title }}</span>
+          </div>
+          <div class="flex items-center gap-1 shrink-0">
+            <StatusBadge :status="issue.parent.status" size="sm" />
+            <PriorityBadge :priority="issue.parent.priority" size="sm" />
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Children Section (for epics, always show; for others, only if has children) -->
+    <div v-if="issue.type === 'epic' || issue.children?.length">
+      <div class="flex items-center justify-between">
+        <button
+          class="flex items-center gap-1.5 text-left group"
+          @click="toggleSection('children')"
+        >
+          <svg
+            class="w-3 h-3 text-muted-foreground transition-transform"
+            :class="{ '-rotate-90': !isChildrenOpen }"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <polyline points="6 9 12 15 18 9" />
+          </svg>
+          <h4 class="text-[10px] font-medium text-muted-foreground uppercase tracking-wide group-hover:text-foreground transition-colors">Children</h4>
+          <span v-if="issue.children?.length" class="text-[10px] text-muted-foreground">({{ issue.children.length }})</span>
+        </button>
+        <Button
+          v-if="issue.type === 'epic' && !readonly"
+          type="button"
+          variant="outline"
+          size="sm"
+          class="h-5 px-1.5 text-[10px] hover:bg-sky-500/20 hover:border-sky-500 hover:text-sky-400 active:scale-95 active:bg-sky-500/30 transition-all"
+          @click="emit('create-child', issue.id)"
+        >
+          <Plus class="w-3 h-3 mr-1" />
+          Create child
+        </Button>
+      </div>
+      <div v-show="isChildrenOpen" class="mt-1 pl-4.5 space-y-0.5">
+        <template v-if="sortedChildren.length">
+          <div
+            v-for="child in sortedChildren"
+            :key="child.id"
+            class="flex items-center justify-between gap-2 py-1 cursor-pointer hover:bg-muted/50 rounded px-1 -mx-1"
+            @click="emit('navigate-to-issue', child.id)"
+          >
+            <div class="flex items-center gap-2 min-w-0">
+              <span class="text-xs text-sky-400 hover:underline font-mono shrink-0">{{ getShortId(child.id) }}</span>
+              <span class="text-xs truncate">{{ child.title }}</span>
+            </div>
+            <div class="flex items-center gap-1 shrink-0">
+              <StatusBadge :status="child.status" size="sm" />
+              <PriorityBadge :priority="child.priority" size="sm" />
+            </div>
+          </div>
+        </template>
+        <p v-else class="text-xs text-muted-foreground">No children yet</p>
+      </div>
+    </div>
+
+    <!-- External Reference Section (only if exists) -->
+    <div v-if="nonImageRefs.length > 0">
+      <button
+        class="flex items-center gap-1.5 w-full text-left group"
+        @click="toggleSection('externalRef')"
+      >
+        <svg
+          class="w-3 h-3 text-muted-foreground transition-transform"
+          :class="{ '-rotate-90': !isExternalRefOpen }"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+        >
+          <polyline points="6 9 12 15 18 9" />
+        </svg>
+        <h4 class="text-[10px] font-medium text-muted-foreground uppercase tracking-wide group-hover:text-foreground transition-colors">
+          External Reference
+          <span class="text-muted-foreground">({{ nonImageRefs.length }})</span>
+        </h4>
+      </button>
+      <div v-show="isExternalRefOpen" class="mt-1 pl-4.5 space-y-1">
+        <p v-for="(ref, index) in nonImageRefs" :key="index" class="text-xs break-all">
+          <LinkifiedText :text="ref" />
+        </p>
+      </div>
+    </div>
+
+    <!-- Details Section (Assignee, Labels, Dates) -->
+    <div>
+      <button
+        class="flex items-center gap-1.5 w-full text-left group"
+        @click="toggleSection('details')"
+      >
+        <svg
+          class="w-3 h-3 text-muted-foreground transition-transform"
+          :class="{ '-rotate-90': !isDetailsOpen }"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+        >
+          <polyline points="6 9 12 15 18 9" />
+        </svg>
+        <h4 class="text-[10px] font-medium text-muted-foreground uppercase tracking-wide group-hover:text-foreground transition-colors">Details</h4>
+      </button>
+      <div v-show="isDetailsOpen" class="mt-1 pl-4.5">
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <h5 class="text-[10px] font-medium text-sky-400 uppercase tracking-wide mb-0.5">Assignee</h5>
+            <p class="text-xs">{{ issue.assignee || 'Unassigned' }}</p>
+          </div>
+
+          <div>
+            <h5 class="text-[10px] font-medium text-sky-400 uppercase tracking-wide mb-0.5">Labels</h5>
+            <div v-if="issue.labels?.length" class="flex flex-wrap gap-1">
+              <LabelBadge v-for="label in issue.labels" :key="label" :label="label" size="sm" />
+            </div>
+            <p v-else class="text-xs text-muted-foreground">No labels</p>
+          </div>
+
+          <div>
+            <h5 class="text-[10px] font-medium text-sky-400 uppercase tracking-wide mb-0.5">Created</h5>
+            <p class="text-xs">{{ formatDate(issue.createdAt) }}</p>
+          </div>
+
+          <div>
+            <h5 class="text-[10px] font-medium text-sky-400 uppercase tracking-wide mb-0.5">Updated</h5>
+            <p class="text-xs">{{ formatDate(issue.updatedAt) }}</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Dependencies Section (show when has deps OR editable) -->
+    <div v-if="issue.blockedBy?.length || issue.blocks?.length || !readonly">
+      <div class="flex items-center justify-between">
+        <button
+          class="flex items-center gap-1.5 text-left group"
+          @click="toggleSection('dependencies')"
+        >
+          <svg
+            class="w-3 h-3 text-muted-foreground transition-transform"
+            :class="{ '-rotate-90': !isDependenciesOpen }"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <polyline points="6 9 12 15 18 9" />
+          </svg>
+          <h4 class="text-[10px] font-medium text-muted-foreground uppercase tracking-wide group-hover:text-foreground transition-colors">Dependencies</h4>
+        </button>
+        <Button
+          v-if="!readonly"
+          type="button"
+          variant="outline"
+          size="sm"
+          class="h-5 px-1.5 text-[10px] hover:bg-sky-500/20 hover:border-sky-500 hover:text-sky-400 active:scale-95 active:bg-sky-500/30 transition-all"
+          @click="emit('open-add-blocker', issue.id)"
+        >
+          <Plus class="w-3 h-3 mr-1" />
+          Add blocker
+        </Button>
+      </div>
+      <div v-show="isDependenciesOpen" class="mt-1 pl-4.5 space-y-2">
+        <!-- Blocked By -->
+        <div v-if="issue.blockedBy?.length">
+          <h5 class="text-[10px] font-medium text-sky-400 uppercase tracking-wide mb-0.5">Blocked By</h5>
+          <div class="space-y-0.5">
+            <div
+              v-for="id in sortedBlockedBy"
+              :key="id"
+              class="group/dep flex items-center gap-2 py-1 cursor-pointer rounded px-2 -mx-1"
+              :class="isNeon ? 'hover:brightness-125' : 'bg-muted hover:bg-muted/80 border border-border/40'"
+              :style="depNeonStyle(availableIssues?.find(i => i.id === id)?.priority)"
+              @click="emit('navigate-to-issue', id)"
+            >
+              <span :class="['text-xs font-mono shrink-0 hover:underline', depTextColor(availableIssues?.find(i => i.id === id)?.priority)]">{{ getShortId(id) }}</span>
+              <span v-if="getIssueTitle(id)" :class="['text-xs truncate', isNeon ? depTextColor(availableIssues?.find(i => i.id === id)?.priority) + ' opacity-60' : 'text-muted-foreground']">{{ getIssueTitle(id) }}</span>
+              <span
+                v-if="!readonly"
+                class="ml-auto opacity-0 group-hover/dep:opacity-100 transition-opacity text-muted-foreground hover:text-destructive cursor-pointer shrink-0"
+                @click.stop="handleRemoveDependency(id, 'blockedBy')"
+              >
+                <X class="w-3 h-3" />
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Blocks -->
+        <div v-if="issue.blocks?.length">
+          <h5 class="text-[10px] font-medium text-sky-400 uppercase tracking-wide mb-0.5">Blocks</h5>
+          <div class="space-y-0.5">
+            <div
+              v-for="id in sortedBlocks"
+              :key="id"
+              class="group/dep flex items-center gap-2 py-1 cursor-pointer rounded px-2 -mx-1"
+              :class="isNeon ? 'hover:brightness-125' : 'bg-muted hover:bg-muted/80 border border-border/40'"
+              :style="depNeonStyle(availableIssues?.find(i => i.id === id)?.priority)"
+              @click="emit('navigate-to-issue', id)"
+            >
+              <span :class="['text-xs font-mono shrink-0 hover:underline', depTextColor(availableIssues?.find(i => i.id === id)?.priority)]">{{ getShortId(id) }}</span>
+              <span v-if="getIssueTitle(id)" :class="['text-xs truncate', isNeon ? depTextColor(availableIssues?.find(i => i.id === id)?.priority) + ' opacity-60' : 'text-muted-foreground']">{{ getIssueTitle(id) }}</span>
+              <span
+                v-if="!readonly"
+                class="ml-auto opacity-0 group-hover/dep:opacity-100 transition-opacity text-muted-foreground hover:text-destructive cursor-pointer shrink-0"
+                @click.stop="handleRemoveDependency(id, 'blocks')"
+              >
+                <X class="w-3 h-3" />
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Relations Section (non-blocking dependency types, always editable) -->
+    <div v-if="hasRelations || availableIssues?.length">
+      <div class="flex items-center justify-between">
+        <button
+          class="flex items-center gap-1.5 text-left group"
+          @click="toggleSection('relations')"
+        >
+          <svg
+            class="w-3 h-3 text-muted-foreground transition-transform"
+            :class="{ '-rotate-90': !isRelationsOpen }"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <polyline points="6 9 12 15 18 9" />
+          </svg>
+          <h4 class="text-[10px] font-medium text-muted-foreground uppercase tracking-wide group-hover:text-foreground transition-colors">
+            Relations
+            <span v-if="issue.relations?.length" class="text-muted-foreground">({{ issue.relations.length }})</span>
+          </h4>
+        </button>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          class="h-5 px-1.5 text-[10px] hover:bg-sky-500/20 hover:border-sky-500 hover:text-sky-400 active:scale-95 active:bg-sky-500/30 transition-all"
+          @click="emit('open-add-relation', issue.id)"
+        >
+          <Plus class="w-3 h-3 mr-1" />
+          Add relation
+        </Button>
+      </div>
+      <div v-show="isRelationsOpen" class="mt-1 pl-4.5 space-y-2">
+        <div v-for="group in groupedRelations" :key="group.type">
+          <h5 class="text-[10px] font-medium text-sky-400 uppercase tracking-wide mb-0.5">{{ group.label }}</h5>
+          <div class="space-y-0.5">
+            <div
+              v-for="rel in group.items"
+              :key="rel.id"
+              class="group/rel flex items-center gap-2 py-1 cursor-pointer rounded px-2 -mx-1"
+              :class="isNeon ? 'hover:brightness-125' : 'bg-muted hover:bg-muted/80 border border-border/40'"
+              :style="depNeonStyle(rel.priority || availableIssues?.find(i => i.id === rel.id)?.priority)"
+              @click="emit('navigate-to-issue', rel.id)"
+            >
+              <span :class="['text-xs font-mono shrink-0 hover:underline', depTextColor(rel.priority || availableIssues?.find(i => i.id === rel.id)?.priority)]">{{ getShortId(rel.id) }}</span>
+              <span v-if="rel.title || getIssueTitle(rel.id)" :class="['text-xs truncate', isNeon ? depTextColor(rel.priority || availableIssues?.find(i => i.id === rel.id)?.priority) + ' opacity-60' : 'text-muted-foreground']">{{ rel.title || getIssueTitle(rel.id) }}</span>
+              <span
+                class="ml-auto opacity-0 group-hover/rel:opacity-100 transition-opacity text-muted-foreground hover:text-destructive cursor-pointer shrink-0"
+                @click.stop="handleRemoveRelation(rel.id, rel.direction)"
+              >
+                <X class="w-3 h-3" />
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Estimate Section (only if exists) -->
+    <div v-if="issue.estimateMinutes">
+      <button
+        class="flex items-center gap-1.5 w-full text-left group"
+        @click="toggleSection('estimate')"
+      >
+        <svg
+          class="w-3 h-3 text-muted-foreground transition-transform"
+          :class="{ '-rotate-90': !isEstimateOpen }"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+        >
+          <polyline points="6 9 12 15 18 9" />
+        </svg>
+        <h4 class="text-[10px] font-medium text-muted-foreground uppercase tracking-wide group-hover:text-foreground transition-colors">Estimate</h4>
+      </button>
+      <div v-show="isEstimateOpen" class="mt-1 pl-4.5">
+        <p class="text-xs">{{ formatEstimate(issue.estimateMinutes) }}</p>
+      </div>
+    </div>
+
+    <!-- Design Notes Section (only if exists) -->
+    <div v-if="issue.designNotes">
+      <button
+        class="flex items-center gap-1.5 w-full text-left group"
+        @click="toggleSection('designNotes')"
+      >
+        <svg
+          class="w-3 h-3 text-muted-foreground transition-transform"
+          :class="{ '-rotate-90': !isDesignNotesOpen }"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+        >
+          <polyline points="6 9 12 15 18 9" />
+        </svg>
+        <h4 class="text-[10px] font-medium text-muted-foreground uppercase tracking-wide group-hover:text-foreground transition-colors">Design Notes</h4>
+      </button>
+      <div v-show="isDesignNotesOpen" class="mt-1 pl-4.5">
+        <div class="text-xs"><LinkifiedText :text="issue.designNotes" /></div>
+      </div>
+    </div>
+
+    <!-- Acceptance Criteria Section (only if exists) -->
+    <div v-if="issue.acceptanceCriteria">
+      <button
+        class="flex items-center gap-1.5 w-full text-left group"
+        @click="toggleSection('acceptanceCriteria')"
+      >
+        <svg
+          class="w-3 h-3 text-muted-foreground transition-transform"
+          :class="{ '-rotate-90': !isAcceptanceCriteriaOpen }"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+        >
+          <polyline points="6 9 12 15 18 9" />
+        </svg>
+        <h4 class="text-[10px] font-medium text-muted-foreground uppercase tracking-wide group-hover:text-foreground transition-colors">Acceptance Criteria</h4>
+      </button>
+      <div v-show="isAcceptanceCriteriaOpen" class="mt-1 pl-4.5">
+        <div class="text-xs"><LinkifiedText :text="issue.acceptanceCriteria" /></div>
+      </div>
+    </div>
+
+    <!-- Working Notes Section (only if exists) -->
+    <div v-if="issue.workingNotes">
+      <button
+        class="flex items-center gap-1.5 w-full text-left group"
+        @click="toggleSection('workingNotes')"
+      >
+        <svg
+          class="w-3 h-3 text-muted-foreground transition-transform"
+          :class="{ '-rotate-90': !isWorkingNotesOpen }"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+        >
+          <polyline points="6 9 12 15 18 9" />
+        </svg>
+        <h4 class="text-[10px] font-medium text-muted-foreground uppercase tracking-wide group-hover:text-foreground transition-colors">Working Notes</h4>
+      </button>
+      <div v-show="isWorkingNotesOpen" class="mt-1 pl-4.5">
+        <div class="text-xs"><LinkifiedText :text="issue.workingNotes" /></div>
+      </div>
+    </div>
+
+    <!-- Metadata Section (only if exists, read-only JSON) -->
+    <div v-if="issue.metadata">
+      <button
+        class="flex items-center gap-1.5 w-full text-left group"
+        @click="toggleSection('metadata')"
+      >
+        <svg
+          class="w-3 h-3 text-muted-foreground transition-transform"
+          :class="{ '-rotate-90': !isMetadataOpen }"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+        >
+          <polyline points="6 9 12 15 18 9" />
+        </svg>
+        <h4 class="text-[10px] font-medium text-muted-foreground uppercase tracking-wide group-hover:text-foreground transition-colors">Metadata</h4>
+      </button>
+      <div v-show="isMetadataOpen" class="mt-1 pl-4.5">
+        <pre class="text-xs bg-muted/50 rounded p-2 overflow-x-auto whitespace-pre-wrap break-words">{{ formatMetadata(issue.metadata) }}</pre>
+      </div>
+    </div>
+
+    <!-- Spec ID Section (only if exists) -->
+    <div v-if="issue.specId">
+      <button
+        class="flex items-center gap-1.5 w-full text-left group"
+        @click="toggleSection('specId')"
+      >
+        <svg
+          class="w-3 h-3 text-muted-foreground transition-transform"
+          :class="{ '-rotate-90': !isSpecIdOpen }"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+        >
+          <polyline points="6 9 12 15 18 9" />
+        </svg>
+        <h4 class="text-[10px] font-medium text-muted-foreground uppercase tracking-wide group-hover:text-foreground transition-colors">Spec ID</h4>
+      </button>
+      <div v-show="isSpecIdOpen" class="mt-1 pl-4.5">
+        <p class="text-xs font-mono">{{ issue.specId }}</p>
+      </div>
+    </div>
+  </div>
+</template>

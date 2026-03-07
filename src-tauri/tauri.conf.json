@@ -1,0 +1,46 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Beads Task-Issue Tracker",
+  "version": "1.24.2",
+  "identifier": "com.beads.manager",
+  "build": {
+    "frontendDist": "../.output/public",
+    "devUrl": "http://localhost:3133",
+    "beforeDevCommand": "pnpm nuxt dev --port 3133",
+    "beforeBuildCommand": "pnpm generate"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Beads Task-Issue Tracker",
+        "width": 1400,
+        "height": 900,
+        "minWidth": 800,
+        "minHeight": 600,
+        "resizable": true,
+        "fullscreen": false,
+        "decorations": true,
+        "titleBarStyle": "Overlay"
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self' ipc: http://ipc.localhost; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' asset: http://asset.localhost data: blob:; font-src 'self' data:; connect-src 'self' ipc: http://ipc.localhost http://localhost:* https://api.github.com"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "macOS": {
+      "minimumSystemVersion": "10.13",
+      "bundleVersion": "1"
+    },
+    "copyright": "\u00a9 2026 Laurent Chapin\nPowered by beads (Steve Yegge)\nVibe coded with Claude Code"
+  }
+}
