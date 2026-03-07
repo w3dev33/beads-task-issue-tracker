@@ -1,10 +1,16 @@
 <script setup lang="ts">
 import type { IssueStatus } from '~/types/issue'
 import { Badge } from '~/components/ui/badge'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '~/components/ui/tooltip'
 
 const props = defineProps<{
   status: IssueStatus
   size?: 'default' | 'sm'
+  blockedBy?: string[]
 }>()
 
 const { showBadgeIcons } = useTheme()
@@ -28,10 +34,26 @@ const statusIcons: Partial<Record<IssueStatus, string>> = {
 }
 
 const config = computed(() => statusConfig[props.status] || statusConfig.open)
+const showBlockedTooltip = computed(() => props.blockedBy?.length && props.status === 'blocked')
 </script>
 
 <template>
-  <Badge :class="[config.class, size === 'sm' ? 'text-[10px] px-1.5 py-0' : '']" variant="secondary">
+  <Tooltip v-if="showBlockedTooltip">
+    <TooltipTrigger as-child>
+      <Badge :class="[config.class, size === 'sm' ? 'text-[10px] px-1.5 py-0' : '']" variant="secondary">
+        <span v-if="showBadgeIcons && statusIcons[status]" class="inline-flex items-center mr-1">
+          <svg class="w-3 h-3" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round">
+            <path :d="statusIcons[status]" />
+          </svg>
+        </span>
+        {{ config.label }}
+      </Badge>
+    </TooltipTrigger>
+    <TooltipContent side="top">
+      <p class="text-xs">Blocked by {{ blockedBy!.join(', ') }}</p>
+    </TooltipContent>
+  </Tooltip>
+  <Badge v-else :class="[config.class, size === 'sm' ? 'text-[10px] px-1.5 py-0' : '']" variant="secondary">
     <span v-if="showBadgeIcons && statusIcons[status]" class="inline-flex items-center mr-1">
       <svg class="w-3 h-3" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round">
         <path :d="statusIcons[status]" />
