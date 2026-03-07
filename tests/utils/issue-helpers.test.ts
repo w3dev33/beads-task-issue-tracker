@@ -327,6 +327,16 @@ describe('filterIssues', () => {
     expect(result.map(i => i.id)).toEqual(['5', '6'])
   })
 
+  it('excludes dependency-blocked issues from open status filter', () => {
+    const dependencyBlocked = makeIssue({ id: '5', status: 'open', blockedBy: ['1'] })
+    const result = filterIssues(
+      [...issues, dependencyBlocked],
+      { ...noFilters, status: ['open'] },
+      noExclusions,
+    )
+    expect(result.map(i => i.id)).toEqual(['1'])
+  })
+
   it('filters by type', () => {
     const result = filterIssues(issues, { ...noFilters, type: ['bug'] }, noExclusions)
     expect(result.map(i => i.id)).toEqual(['1'])

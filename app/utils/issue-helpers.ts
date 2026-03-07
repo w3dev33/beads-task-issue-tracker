@@ -267,6 +267,8 @@ export function filterIssues(
     const includeBlocked = filters.status.includes('blocked')
     result = result.filter((issue) => {
       if (includeBlocked && isIssueBlocked(issue)) return true
+      // Exclude dependency-blocked issues when 'blocked' is not in the filter
+      if (!includeBlocked && isIssueBlocked(issue)) return false
       return filters.status.includes(issue.status)
     })
   }
