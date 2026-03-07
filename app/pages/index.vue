@@ -876,7 +876,7 @@ watch(
                 <KpiCard title="Open" :value="stats.open" color="var(--color-status-open)" :active="activeKpiFilter === 'open'" @click="handleKpiClick('open')" />
                 <KpiCard title="In Progress" :value="stats.inProgress" color="var(--color-status-in-progress)" :active="activeKpiFilter === 'in_progress'" @click="handleKpiClick('in_progress')" />
                 <KpiCard title="Blocked" :value="stats.blocked" color="var(--color-status-blocked)" :active="activeKpiFilter === 'blocked'" @click="handleKpiClick('blocked')" />
-                <KpiCard title="Total" :value="stats.total" :active="activeKpiFilter === 'total'" @click="handleKpiClick('total')" />
+                <KpiCard title="All" :value="stats.total" :active="activeKpiFilter === 'total'" @click="handleKpiClick('total')" />
             </div>
             </div>
 
