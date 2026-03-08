@@ -188,6 +188,45 @@ pnpm dev
 pnpm tauri:build
 ```
 
+### Nix / Home Manager
+
+This repository includes a `flake.nix` that exposes:
+
+- `packages.<system>.default`
+- `apps.<system>.default`
+- `homeManagerModules.default`
+
+Example `home-manager` wiring:
+
+```nix
+{
+  inputs = {
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+    home-manager.url = "github:nix-community/home-manager";
+    beads-gui.url = "path:/absolute/path/to/beads-gui";
+  };
+
+  outputs = { nixpkgs, home-manager, beads-gui, ... }: {
+    homeConfigurations.alex = home-manager.lib.homeManagerConfiguration {
+      pkgs = import nixpkgs { system = "x86_64-linux"; };
+      modules = [
+        beads-gui.homeManagerModules.default
+        {
+          programs.beads-gui.enable = true;
+        }
+      ];
+    };
+  };
+}
+```
+
+Direct usage:
+
+```bash
+nix build .#default
+nix run .#default
+```
+
 ## Tech Stack
 
 This application is built with modern web technologies, packaged as a native desktop app:
