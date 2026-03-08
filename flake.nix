@@ -84,13 +84,12 @@
                 export HOME="$PWD/.home"
                 export XDG_CACHE_HOME="$PWD/.cache"
                 export CARGO_TARGET_DIR="$PWD/target"
-                export CI=1
+                export CI=true
                 export npm_config_cache="$PWD/.npm-cache"
                 export npm_config_manage_package_manager_versions=false
 
                 pnpm config set manage-package-manager-versions false
-                pnpm generate
-                cargo build --manifest-path src-tauri/Cargo.toml --release
+                cargo tauri build --no-bundle --config src-tauri/tauri.conf.json
 
                 runHook postBuild
               '';
