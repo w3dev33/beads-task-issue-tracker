@@ -20,7 +20,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '~/components/ui/tooltip'
-import { Ban } from 'lucide-vue-next'
+import { isIssueBlocked } from '~/utils/issue-helpers'
 import { useKeyboardNavigation } from '~/composables/useKeyboardNavigation'
 
 const props = defineProps<{
@@ -104,7 +104,6 @@ const statusOrder: Record<IssueStatus, number> = {
   deferred: 4,
   pinned: 5,
   hooked: 6,
-  tombstone: 7,
 }
 
 const priorityOrder: Record<IssuePriority, number> = {
@@ -547,17 +546,7 @@ const { focusedId, setFocused, handleKeydown, isFocused } = useKeyboardNavigatio
                   </template>
 
                   <template v-else-if="col.id === 'status'">
-                    <div class="flex items-center gap-1">
-                      <StatusBadge :status="group.epic.status" size="sm" />
-                      <Tooltip v-if="group.epic.blockedBy?.length">
-                        <TooltipTrigger as-child>
-                          <Ban class="w-3 h-3 text-red-400" />
-                        </TooltipTrigger>
-                        <TooltipContent side="top">
-                          <p class="text-xs">Blocked by {{ group.epic.blockedBy.join(', ') }}</p>
-                        </TooltipContent>
-                      </Tooltip>
-                    </div>
+                    <StatusBadge :status="isIssueBlocked(group.epic) ? 'blocked' : group.epic.status" :blocked-by="group.epic.blockedBy" size="sm" />
                   </template>
 
                   <template v-else-if="col.id === 'priority'">
@@ -694,17 +683,7 @@ const { focusedId, setFocused, handleKeydown, isFocused } = useKeyboardNavigatio
                     </template>
 
                     <template v-else-if="col.id === 'status'">
-                      <div class="flex items-center gap-1">
-                        <StatusBadge :status="child.status" size="sm" />
-                        <Tooltip v-if="child.blockedBy?.length">
-                          <TooltipTrigger as-child>
-                            <Ban class="w-3 h-3 text-red-400" />
-                          </TooltipTrigger>
-                          <TooltipContent side="top">
-                            <p class="text-xs">Blocked by {{ child.blockedBy.join(', ') }}</p>
-                          </TooltipContent>
-                        </Tooltip>
-                      </div>
+                      <StatusBadge :status="isIssueBlocked(child) ? 'blocked' : child.status" :blocked-by="child.blockedBy" size="sm" />
                     </template>
 
                     <template v-else-if="col.id === 'priority'">
@@ -812,17 +791,7 @@ const { focusedId, setFocused, handleKeydown, isFocused } = useKeyboardNavigatio
                   </template>
 
                   <template v-else-if="col.id === 'status'">
-                    <div class="flex items-center gap-1">
-                      <StatusBadge :status="issue.status" size="sm" />
-                      <Tooltip v-if="issue.blockedBy?.length">
-                        <TooltipTrigger as-child>
-                          <Ban class="w-3 h-3 text-red-400" />
-                        </TooltipTrigger>
-                        <TooltipContent side="top">
-                          <p class="text-xs">Blocked by {{ issue.blockedBy.join(', ') }}</p>
-                        </TooltipContent>
-                      </Tooltip>
-                    </div>
+                    <StatusBadge :status="isIssueBlocked(issue) ? 'blocked' : issue.status" :blocked-by="issue.blockedBy" size="sm" />
                   </template>
 
                   <template v-else-if="col.id === 'priority'">
@@ -931,17 +900,7 @@ const { focusedId, setFocused, handleKeydown, isFocused } = useKeyboardNavigatio
               </template>
 
               <template v-else-if="col.id === 'status'">
-                <div class="flex items-center gap-1">
-                  <StatusBadge :status="issue.status" size="sm" />
-                  <Tooltip v-if="issue.blockedBy?.length">
-                    <TooltipTrigger as-child>
-                      <Ban class="w-3 h-3 text-red-400" />
-                    </TooltipTrigger>
-                    <TooltipContent side="top">
-                      <p class="text-xs">Blocked by {{ issue.blockedBy.join(', ') }}</p>
-                    </TooltipContent>
-                  </Tooltip>
-                </div>
+                <StatusBadge :status="isIssueBlocked(issue) ? 'blocked' : issue.status" :blocked-by="issue.blockedBy" size="sm" />
               </template>
 
               <template v-else-if="col.id === 'priority'">

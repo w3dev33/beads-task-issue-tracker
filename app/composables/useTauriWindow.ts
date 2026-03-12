@@ -1,4 +1,5 @@
 let windowModule: typeof import('@tauri-apps/api/window') | null = null
+let setTitlePermissionDeniedLogged = false
 
 // Pre-load the Tauri window module
 if (import.meta.client) {
@@ -12,13 +13,21 @@ if (import.meta.client) {
 export function useTauriWindow() {
   const startDragging = () => {
     if (windowModule) {
-      windowModule.getCurrentWindow().startDragging()
+      windowModule.getCurrentWindow().startDragging().catch(() => {
+        // Ignore drag failures in unsupported environments.
+      })
     }
   }
 
   const setWindowTitle = (title: string) => {
     if (windowModule) {
-      windowModule.getCurrentWindow().setTitle(title)
+      windowModule.getCurrentWindow().setTitle(title).catch((error) => {
+        // Some capability profiles may deny changing title; do not break app render.
+        if (!setTitlePermissionDeniedLogged) {
+          setTitlePermissionDeniedLogged = true
+          console.warn('Unable to set window title:', error)
+        }
+      })
     }
   }
 

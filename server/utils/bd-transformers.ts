@@ -23,6 +23,13 @@ interface BdRawIssue {
     content?: string
     created_at: string
   }>
+  dependencies?: Array<{
+    issue_id?: string
+    depends_on_id?: string
+    id?: string
+    type?: string
+    dependency_type?: string
+  }>
   dependency_count?: number
   dependent_count?: number
   external_ref?: string
@@ -61,7 +68,7 @@ export function normalizeIssueType(type: string): IssueType {
  * Validate and normalize issue status
  */
 export function normalizeIssueStatus(status: string): IssueStatus {
-  const validStatuses: IssueStatus[] = ['open', 'in_progress', 'blocked', 'closed']
+  const validStatuses: IssueStatus[] = ['open', 'in_progress', 'blocked', 'closed', 'deferred', 'pinned', 'hooked']
   return validStatuses.includes(status as IssueStatus) ? (status as IssueStatus) : 'open'
 }
 
@@ -69,6 +76,22 @@ export function normalizeIssueStatus(status: string): IssueStatus {
  * Transform raw bd CLI issue to Issue type interface
  */
 export function transformIssue(raw: BdRawIssue): Issue {
+  // Compute blockedBy from dependencies (mirroring Tauri/Rust logic)
+  const blockedBy = [...(raw.blocked_by || [])]
+  if (raw.dependencies) {
+    for (const dep of raw.dependencies) {
+      const depType = dep.dependency_type || dep.type
+      // bd show format: { id, dependency_type: "blocks" }
+      if (depType === 'blocks' && dep.id && !blockedBy.includes(dep.id)) {
+        blockedBy.push(dep.id)
+      }
+      // bd list format: { issue_id, depends_on_id, type: "blocks" }
+      if (depType === 'blocks' && dep.depends_on_id && !blockedBy.includes(dep.depends_on_id)) {
+        blockedBy.push(dep.depends_on_id)
+      }
+    }
+  }
+
   return {
     id: raw.id,
     title: raw.title,
@@ -87,7 +110,7 @@ export function transformIssue(raw: BdRawIssue): Issue {
       content: c.text || c.content || '',
       createdAt: c.created_at,
     })),
-    blockedBy: raw.blocked_by,
+    blockedBy: blockedBy.length > 0 ? blockedBy : undefined,
     blocks: raw.blocks,
     externalRef: raw.external_ref,
     estimateMinutes: raw.estimate,

@@ -65,7 +65,7 @@ The app uses a **native file watcher** on the `.beads` directory. When an AI age
 - **Gallery Navigation**: Browse multiple attached files with arrow keys or buttons
 
 ### Filtering & Display
-- **Extended Status Support**: All Beads statuses handled — `deferred`, `pinned`, `hooked`, and `tombstone` (deleted) issues filtered from default view
+- **Extended Status Support**: All active Beads statuses handled — `deferred`, `pinned`, and `hooked`
 - **Advanced Filters**: Multi-select filters by type, status, priority, labels, and assignee
 - **Exclusion Filters**: Hide specific issues by criteria (inverse filtering)
 - **Search**: Find issues by title, ID, or description

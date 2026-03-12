@@ -39,33 +39,6 @@ const hasFilters = computed(
   () => hasInclusionFilters.value || hasActiveExclusions.value
 )
 
-// Labels for status, priority, type exclusions
-const statusLabels: Record<IssueStatus, string> = {
-  open: 'Open',
-  in_progress: 'In Progress',
-  blocked: 'Blocked',
-  closed: 'Closed',
-  deferred: 'Deferred',
-  tombstone: 'Tombstone',
-  pinned: 'Pinned',
-  hooked: 'Hooked',
-}
-
-const priorityLabels: Record<IssuePriority, string> = {
-  p0: 'P0',
-  p1: 'P1',
-  p2: 'P2',
-  p3: 'P3',
-  p4: 'P4',
-}
-
-const typeLabels: Record<IssueType, string> = {
-  bug: 'Bug',
-  feature: 'Feature',
-  task: 'Task',
-  epic: 'Epic',
-  chore: 'Chore',
-}
 </script>
 
 <template>

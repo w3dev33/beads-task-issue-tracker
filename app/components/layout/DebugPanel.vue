@@ -5,6 +5,7 @@ import { openUrl } from '~/utils/open-url'
 
 const { isSyncing: isForceSyncing, forceSync, syncMessage, lastSyncSuccess } = useSyncStatus()
 const { beadsPath } = useBeadsPath()
+const { snapshot: diagSnapshot, reset: diagReset } = usePipelineDiagnostics()
 
 const props = defineProps<{
   isOpen: boolean
@@ -23,6 +24,10 @@ const isLoading = ref(false)
 const isVerbose = ref(false)
 const bdCliUpdate = ref<BdCliUpdateInfo | null>(null)
 let refreshInterval: ReturnType<typeof setInterval> | null = null
+
+const debugTab = ref<'logs' | 'pipeline'>('logs')
+const pipelineData = ref(diagSnapshot())
+let pipelineRefreshTimer: ReturnType<typeof setInterval> | null = null
 
 const logContainerRef = ref<HTMLDivElement | null>(null)
 const isUserAtBottom = ref(true)
@@ -210,13 +215,26 @@ watch(() => props.isOpen, async (isOpen) => {
     }
   } else {
     stopAutoRefresh()
+    if (pipelineRefreshTimer) { clearInterval(pipelineRefreshTimer); pipelineRefreshTimer = null }
     // Disable backend logging to save resources when panel is closed
     await setLoggingEnabled(false)
   }
 }, { immediate: true })
 
+watch(debugTab, (tab) => {
+  if (tab === 'pipeline') {
+    pipelineData.value = diagSnapshot()
+    if (!pipelineRefreshTimer) {
+      pipelineRefreshTimer = setInterval(() => { pipelineData.value = diagSnapshot() }, 2000)
+    }
+  } else {
+    if (pipelineRefreshTimer) { clearInterval(pipelineRefreshTimer); pipelineRefreshTimer = null }
+  }
+})
+
 onUnmounted(() => {
   stopAutoRefresh()
+  if (pipelineRefreshTimer) { clearInterval(pipelineRefreshTimer); pipelineRefreshTimer = null }
 })
 </script>
 
@@ -235,92 +253,120 @@ onUnmounted(() => {
     <!-- Header -->
     <div class="flex items-center justify-between gap-2 px-4 py-2 border-b border-border bg-muted/30">
       <div class="flex items-center gap-2">
-        <span class="text-sm font-medium">Debug Logs</span>
+        <!-- Tab toggle -->
+        <div class="flex rounded-md border border-border overflow-hidden">
+          <button
+            class="px-2 py-0.5 text-xs font-medium transition-colors"
+            :class="debugTab === 'logs' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'"
+            @click="debugTab = 'logs'"
+          >Logs</button>
+          <button
+            class="px-2 py-0.5 text-xs font-medium transition-colors"
+            :class="debugTab === 'pipeline' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'"
+            @click="debugTab = 'pipeline'"
+          >Pipeline</button>
+        </div>
 
-        <Button
-          variant="outline"
-          size="sm"
-          class="h-7 px-2"
-          :class="isAutoRefresh ? 'border-green-500 text-green-500' : ''"
-          @click="toggleAutoRefresh"
-        >
-          <svg
-            class="w-3.5 h-3.5 mr-1"
-            :class="{ 'animate-spin': isAutoRefresh }"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
+        <!-- Log tab buttons -->
+        <template v-if="debugTab === 'logs'">
+          <Button
+            variant="outline"
+            size="sm"
+            class="h-7 px-2"
+            :class="isAutoRefresh ? 'border-green-500 text-green-500' : ''"
+            @click="toggleAutoRefresh"
           >
-            <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8" />
-            <path d="M21 3v5h-5" />
-          </svg>
-          {{ isAutoRefresh ? 'Live' : 'Paused' }}
-        </Button>
+            <svg
+              class="w-3.5 h-3.5 mr-1"
+              :class="{ 'animate-spin': isAutoRefresh }"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8" />
+              <path d="M21 3v5h-5" />
+            </svg>
+            {{ isAutoRefresh ? 'Live' : 'Paused' }}
+          </Button>
 
-        <Button variant="outline" size="sm" class="h-7 px-2" :disabled="isAutoRefresh" @click="fetchLogs">
-          Refresh
-        </Button>
+          <Button variant="outline" size="sm" class="h-7 px-2" :disabled="isAutoRefresh" @click="fetchLogs">
+            Refresh
+          </Button>
 
-        <Button variant="outline" size="sm" class="h-7 px-2" @click="scrollToBottom">
-          Bottom
-        </Button>
+          <Button variant="outline" size="sm" class="h-7 px-2" @click="scrollToBottom">
+            Bottom
+          </Button>
 
-        <Button
-          variant="outline"
-          size="sm"
-          class="h-7 px-2"
-          :class="isVerbose ? 'border-amber-500 text-amber-500' : ''"
-          @click="toggleVerbose"
-        >
-          Verbose {{ isVerbose ? 'ON' : 'OFF' }}
-        </Button>
-
-        <Button
-          variant="outline"
-          size="sm"
-          class="h-7 px-2 text-destructive border-destructive/50 hover:bg-destructive hover:text-destructive-foreground"
-          :disabled="isLoading"
-          @click="handleClearLogs"
-        >
-          Clear
-        </Button>
-
-        <Button
-          v-if="logs"
-          variant="outline"
-          size="sm"
-          class="h-7 px-2"
-          @click="exportLogs"
-        >
-          Export
-        </Button>
-        <span v-if="exportedPath" class="text-xs text-green-500 truncate max-w-[300px]" :title="exportedPath">{{ exportedPath }}</span>
-
-        <div class="w-px h-4 bg-border mx-2" />
-
-        <Button
-          variant="outline"
-          size="sm"
-          class="h-7 px-2"
-          :class="isForceSyncing ? 'border-primary text-primary' : ''"
-          :disabled="isForceSyncing"
-          @click="forceSync"
-        >
-          <svg
-            :class="['w-3.5 h-3.5 mr-1', isForceSyncing ? 'animate-pulse' : '']"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
+          <Button
+            variant="outline"
+            size="sm"
+            class="h-7 px-2"
+            :class="isVerbose ? 'border-amber-500 text-amber-500' : ''"
+            @click="toggleVerbose"
           >
-            <path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242" />
-            <path d="M12 12v9" />
-            <path d="m8 17 4 4 4-4" />
-          </svg>
-          {{ isForceSyncing ? 'Syncing...' : 'Force Sync' }}
-        </Button>
-        <span v-if="syncMessage && lastSyncSuccess" class="text-green-500 text-xs ml-1">{{ syncMessage }}</span>
+            Verbose {{ isVerbose ? 'ON' : 'OFF' }}
+          </Button>
+
+          <Button
+            variant="outline"
+            size="sm"
+            class="h-7 px-2 text-destructive border-destructive/50 hover:bg-destructive hover:text-destructive-foreground"
+            :disabled="isLoading"
+            @click="handleClearLogs"
+          >
+            Clear
+          </Button>
+
+          <Button
+            v-if="logs"
+            variant="outline"
+            size="sm"
+            class="h-7 px-2"
+            @click="exportLogs"
+          >
+            Export
+          </Button>
+          <span v-if="exportedPath" class="text-xs text-green-500 truncate max-w-[300px]" :title="exportedPath">{{ exportedPath }}</span>
+
+          <div class="w-px h-4 bg-border mx-2" />
+
+          <Button
+            variant="outline"
+            size="sm"
+            class="h-7 px-2"
+            :class="isForceSyncing ? 'border-primary text-primary' : ''"
+            :disabled="isForceSyncing"
+            @click="forceSync"
+          >
+            <svg
+              :class="['w-3.5 h-3.5 mr-1', isForceSyncing ? 'animate-pulse' : '']"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242" />
+              <path d="M12 12v9" />
+              <path d="m8 17 4 4 4-4" />
+            </svg>
+            {{ isForceSyncing ? 'Syncing...' : 'Force Sync' }}
+          </Button>
+          <span v-if="syncMessage && lastSyncSuccess" class="text-green-500 text-xs ml-1">{{ syncMessage }}</span>
+        </template>
+
+        <!-- Pipeline tab buttons -->
+        <template v-if="debugTab === 'pipeline'">
+          <Button
+            variant="outline"
+            size="sm"
+            class="h-7 px-2 text-destructive border-destructive/50 hover:bg-destructive hover:text-destructive-foreground"
+            @click="diagReset(); pipelineData = diagSnapshot()"
+          >
+            Reset
+          </Button>
+          <span class="text-xs text-muted-foreground">Uptime {{ pipelineData.uptimeSeconds }}s · Auto-refresh 2s</span>
+        </template>
       </div>
 
       <div class="flex items-center gap-2">
@@ -369,9 +415,52 @@ onUnmounted(() => {
     </div>
 
     <!-- Log content -->
-    <div ref="logContainerRef" class="flex-1 overflow-auto bg-muted/10" @scroll="onScroll">
+    <div v-if="debugTab === 'logs'" ref="logContainerRef" class="flex-1 overflow-auto bg-muted/10" @scroll="onScroll">
       <pre v-if="logs" class="p-3 text-[11px] font-mono whitespace-pre-wrap break-all leading-relaxed" v-html="colorizedLogs"></pre>
       <pre v-else class="p-3 text-[11px] font-mono text-muted-foreground">No logs yet...</pre>
+    </div>
+
+    <!-- Pipeline diagnostics -->
+    <div v-else class="flex-1 overflow-auto bg-muted/10 p-4">
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs font-mono">
+        <!-- Watcher -->
+        <div class="space-y-1.5">
+          <div class="text-sm font-semibold text-foreground mb-2">Watcher</div>
+          <div class="flex justify-between"><span class="text-muted-foreground">Triggers</span><span>{{ pipelineData.counters.watcherTriggers }}</span></div>
+          <div class="flex justify-between"><span class="text-muted-foreground">Cooldown skips</span><span>{{ pipelineData.counters.watcherCooldownSkips }}</span></div>
+          <div class="flex justify-between"><span class="text-muted-foreground">Debounces</span><span>{{ pipelineData.counters.watcherDebounces }}</span></div>
+          <div class="flex justify-between"><span class="text-muted-foreground">Reruns</span><span>{{ pipelineData.counters.watcherReruns }}</span></div>
+        </div>
+
+        <!-- Scheduler -->
+        <div class="space-y-1.5">
+          <div class="text-sm font-semibold text-foreground mb-2">Scheduler</div>
+          <div class="flex justify-between"><span class="text-muted-foreground">Requests</span><span>{{ pipelineData.counters.pollRequests }}</span></div>
+          <div class="flex justify-between"><span class="text-muted-foreground">Executed</span><span class="text-green-500">{{ pipelineData.counters.pollExecuted }}</span></div>
+          <div class="flex justify-between"><span class="text-muted-foreground">Deferred</span><span class="text-amber-500">{{ pipelineData.counters.pollDeferred }}</span></div>
+          <div class="flex justify-between"><span class="text-muted-foreground">Skipped</span><span class="text-red-400">{{ pipelineData.counters.pollSkipped }}</span></div>
+          <div class="flex justify-between"><span class="text-muted-foreground">Immediate</span><span>{{ pipelineData.counters.pollImmediateRequests }}</span></div>
+        </div>
+
+        <!-- Poll execution -->
+        <div class="space-y-1.5">
+          <div class="text-sm font-semibold text-foreground mb-2">Poll execution</div>
+          <div class="flex justify-between"><span class="text-muted-foreground">Started</span><span>{{ pipelineData.counters.pollStarted }}</span></div>
+          <div class="flex justify-between"><span class="text-muted-foreground">Finished</span><span>{{ pipelineData.counters.pollFinished }}</span></div>
+          <div class="flex justify-between"><span class="text-muted-foreground">Errors</span><span :class="pipelineData.counters.pollErrors > 0 ? 'text-red-500' : ''">{{ pipelineData.counters.pollErrors }}</span></div>
+          <div class="flex justify-between"><span class="text-muted-foreground">Last ms</span><span>{{ pipelineData.counters.pollLastMs }}</span></div>
+          <div class="flex justify-between"><span class="text-muted-foreground">Avg ms</span><span>{{ pipelineData.pollAvgMs }}</span></div>
+          <div class="flex justify-between"><span class="text-muted-foreground">Max ms</span><span :class="pipelineData.counters.pollMaxMs > 2000 ? 'text-red-500' : pipelineData.counters.pollMaxMs > 500 ? 'text-amber-500' : ''">{{ pipelineData.counters.pollMaxMs }}</span></div>
+        </div>
+
+        <!-- Mtime check -->
+        <div class="space-y-1.5">
+          <div class="text-sm font-semibold text-foreground mb-2">Mtime check</div>
+          <div class="flex justify-between"><span class="text-muted-foreground">Checks</span><span>{{ pipelineData.counters.mtimeChecks }}</span></div>
+          <div class="flex justify-between"><span class="text-muted-foreground">Hits</span><span>{{ pipelineData.counters.mtimeHits }}</span></div>
+          <div class="flex justify-between"><span class="text-muted-foreground">Hit rate</span><span>{{ pipelineData.counters.mtimeChecks > 0 ? Math.round(pipelineData.counters.mtimeHits / pipelineData.counters.mtimeChecks * 100) : 0 }}%</span></div>
+        </div>
+      </div>
     </div>
   </div>
 </template>

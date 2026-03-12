@@ -3,6 +3,7 @@ import { bdList, bdCount, bdShow, bdCreate, bdUpdate, bdClose, bdDelete, bdAddCo
 import { useProjectStorage } from '~/composables/useProjectStorage'
 import {
   deduplicateIssues,
+  pruneClosedBlockers,
   naturalCompare,
   getParentIdFromIssue,
   compareChildIssues,
@@ -83,15 +84,13 @@ export function useEpicExpand() {
  */
 function notifyStatusTransitions(oldIssues: Issue[], newIssues: Issue[]) {
   const { success: notifySuccess } = useNotification()
-  const oldStatusMap = new Map(oldIssues.map(i => [i.id, { status: i.status, title: i.title }]))
+  const oldStatusMap = new Map(oldIssues.map(i => [i.id, { status: i.status }]))
 
   for (const issue of newIssues) {
     const old = oldStatusMap.get(issue.id)
     if (old && old.status !== issue.status) {
       if (issue.status === 'closed') {
         notifySuccess(`Issue ${issue.id} closed`, issue.title)
-      } else if (issue.status === 'tombstone') {
-        notifySuccess(`Issue ${issue.id} deleted`, old.title)
       } else if (old.status === 'closed') {
         notifySuccess(`Issue ${issue.id} reopened`, issue.title)
       }
@@ -185,6 +184,8 @@ export function useIssues() {
           epic.children = children
         }
       }
+
+      pruneClosedBlockers(newIssues)
 
       // Only update if data actually changed (compare by serialization)
       const currentSignature = JSON.stringify(issues.value.map(i => i.id + i.updatedAt))
@@ -301,22 +302,20 @@ export function useIssues() {
 
       // Preserve blockedBy/blocks from previous enrichments (fetchIssues or fetchIssue)
       // Poll data doesn't return these, but they were populated by earlier bdShow calls.
-      // Filter out blockers that are now closed so lock icons disappear (#7).
       const existingMap = new Map(issues.value.map(i => [i.id, i]))
-      const closedIds = new Set(newIssues.filter(i => i.status === 'closed').map(i => i.id))
       for (const issue of newIssues) {
         const existing = existingMap.get(issue.id)
         if (existing) {
           if (!issue.blockedBy && existing.blockedBy) {
-            const stillOpen = existing.blockedBy.filter(id => !closedIds.has(id))
-            if (stillOpen.length) issue.blockedBy = stillOpen
+            issue.blockedBy = [...existing.blockedBy]
           }
           if (!issue.blocks && existing.blocks) {
-            const stillOpen = existing.blocks.filter(id => !closedIds.has(id))
-            if (stillOpen.length) issue.blocks = stillOpen
+            issue.blocks = [...existing.blocks]
           }
         }
       }
+
+      pruneClosedBlockers(newIssues)
 
       // Only update if data actually changed
       // Signature includes status+priority+title so probe mode (no updatedAt) still detects changes
@@ -483,6 +482,8 @@ export function useIssues() {
         }
       }
 
+      pruneClosedBlockers([...issues.value, data])
+
       selectedIssue.value = data
 
       // Also update the issue in the issues array to keep in sync
@@ -532,6 +533,7 @@ export function useIssues() {
         if (selectedIssue.value?.id === id) {
           selectedIssue.value = data
         }
+        pruneClosedBlockers([...issues.value, data])
       }
 
       return data
@@ -577,6 +579,11 @@ export function useIssues() {
             selectedIssue.value.blocks = fresh.blocks
           }
         }
+      }
+
+      pruneClosedBlockers(issues.value)
+      if (selectedIssue.value) {
+        pruneClosedBlockers([selectedIssue.value, ...issues.value])
       }
 
       return result

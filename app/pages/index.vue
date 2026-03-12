@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import type { Issue, UpdateIssuePayload } from '~/types/issue'
+import type { Issue, IssueStatus, UpdateIssuePayload } from '~/types/issue'
+import { isIssueBlocked } from '~/utils/issue-helpers'
 
 // Layout components
 import AppHeader from '~/components/layout/AppHeader.vue'
@@ -44,7 +45,7 @@ import {
 } from '~/components/ui/tooltip'
 
 // Composables
-const { filters, toggleStatus, toggleType, togglePriority, toggleAssignee, clearFilters, setStatusFilter, setSearch, toggleLabelFilter } = useFilters()
+const { filters, toggleStatus, toggleType, togglePriority, toggleAssignee, clearFilters, setStatusFilter, setAllFilters, setSearch, toggleLabelFilter } = useFilters()
 const { columns, toggleColumn, setColumns, resetColumns } = useColumnConfig()
 const { beadsPath, hasStoredPath } = useBeadsPath()
 const { success: notifySuccess, error: notifyError } = useNotification()
@@ -186,31 +187,16 @@ const checkViewport = () => {
 const { showErrorDialog: showSyncErrorDialog, lastSyncError, closeErrorDialog: closeSyncErrorDialog } = useSyncStatus()
 
 // Change detection: native file watcher via Tauri events
-const { active: changeDetectionActive, startListening, stopListening, notifySelfWrite } = useChangeDetection({
-  onChanged: async () => {
-    await pollForChanges()
-  },
-})
-
-// Polling for external changes — optimized with 5 layers:
+// Polling for external changes — optimized with 6 layers:
 // 1. Native file watcher (0 CPU when idle, instant detection)
-// 2. Sync cooldown (Rust backend skips redundant syncs within 10s)
-// 3. Filesystem mtime check as fallback (zero bd processes if nothing changed)
-// 4. Batched poll command (1 IPC call instead of 3 when changes detected)
-// 5. Adaptive intervals (30s safety net when watcher active, 5s/1s fallback without watcher)
+// 2. Poll scheduler backpressure (min 2s between expensive cycles)
+// 3. Sync cooldown (Rust backend skips redundant syncs within 10s)
+// 4. Filesystem mtime check as fallback (zero bd processes if nothing changed)
+// 5. Batched poll command (1 IPC call instead of 3 when changes detected)
+// 6. Adaptive intervals (30s safety net when watcher active, 5s/1s fallback without watcher)
 const isSyncing = ref(false)
 let skipMtimeCheck = false // Set by watcher/fast check to avoid redundant bdCheckChanged in pollFn
-
-// Fast change detection (cheap mtime stat, ~0ms) — runs every 1s when active
-const checkMtimeChanged = async (): Promise<boolean> => {
-  if (isLoading.value || isUpdating.value || showOnboarding.value || !beadsPath.value || projects.value.length === 0) {
-    return false
-  }
-  const path = beadsPath.value && beadsPath.value !== '.' ? beadsPath.value : undefined
-  const changed = await bdCheckChanged(path)
-  if (changed) skipMtimeCheck = true // pollFn can skip the mtime check — we already consumed it
-  return changed
-}
+const { recordPollStart, recordPollFinish, recordMtimeCheck } = usePipelineDiagnostics()
 
 const pollForChanges = async () => {
   // Don't poll if no active project
@@ -218,14 +204,19 @@ const pollForChanges = async () => {
     return
   }
 
+  const pollT0 = performance.now()
+  let hadError = false
+  recordPollStart()
+
   try {
     isSyncing.value = true
 
     const path = beadsPath.value && beadsPath.value !== '.' ? beadsPath.value : undefined
 
-    // Layer 2: Check filesystem mtime first — skip if fast check already detected change
+    // Layer 4: Check filesystem mtime first — skip if fast check already detected change
     if (!skipMtimeCheck) {
       const changed = await bdCheckChanged(path)
+      recordMtimeCheck(changed)
       if (!changed) {
         // Nothing changed on disk — skip entire poll cycle
         return
@@ -233,7 +224,7 @@ const pollForChanges = async () => {
     }
     skipMtimeCheck = false
 
-    // Layer 3: Changes detected — use batched command (1 IPC instead of 3)
+    // Layer 5: Changes detected — use batched command (1 IPC instead of 3)
     const readyData = await fetchPollData()
 
     // Update dashboard from pre-fetched data (no extra API call)
@@ -248,17 +239,43 @@ const pollForChanges = async () => {
     // Tell change detection backend to ignore self-triggered events
     notifySelfWrite()
   } catch {
-    // Ignore polling errors
+    hadError = true
   } finally {
     isSyncing.value = false
+    recordPollFinish(Math.round(performance.now() - pollT0), hadError)
   }
 }
 
-// Adaptive polling with fast mtime detection (degrades gracefully if watcher unavailable)
-const { start: startPolling, stop: stopPolling } = useAdaptivePolling(pollForChanges, {
-  checkFn: checkMtimeChanged,
-  watcherActive: changeDetectionActive,
+// Layer 2: Backpressure gate — merges watcher + timer triggers, enforces min interval
+const { requestPoll, requestImmediatePoll, cancel: cancelScheduledPoll, stats: pollStats } = usePollScheduler(pollForChanges)
+
+const { active: changeDetectionActive, startListening, stopListening, notifySelfWrite } = useChangeDetection({
+  onChanged: async () => {
+    requestPoll()
+  },
 })
+
+// Fast change detection (cheap mtime stat, ~0ms) — runs every 1s when active
+const checkMtimeChanged = async (): Promise<boolean> => {
+  if (isLoading.value || isUpdating.value || showOnboarding.value || !beadsPath.value || projects.value.length === 0) {
+    return false
+  }
+  const path = beadsPath.value && beadsPath.value !== '.' ? beadsPath.value : undefined
+  const changed = await bdCheckChanged(path)
+  recordMtimeCheck(changed)
+  if (changed) skipMtimeCheck = true // pollFn can skip the mtime check — we already consumed it
+  return changed
+}
+
+// Adaptive polling with fast mtime detection (degrades gracefully if watcher unavailable)
+// Polls go through the scheduler's backpressure gate
+const { start: startPolling, stop: stopPolling } = useAdaptivePolling(
+  () => { requestPoll(); return Promise.resolve() },
+  {
+    checkFn: checkMtimeChanged,
+    watcherActive: changeDetectionActive,
+  },
+)
 
 onMounted(async () => {
   checkViewport()
@@ -322,6 +339,7 @@ onUnmounted(() => {
     window.removeEventListener('resize', checkViewport)
     stopListening()
     stopPolling()
+    cancelScheduledPoll()
     stopPeriodicCheck()
     // Auto-unregister from probe (fire-and-forget)
     probeUnregisterProject(beadsPath.value)
@@ -714,6 +732,11 @@ const inProgressIssues = computed(() => {
   return issues.value.filter(issue => issue.status === 'in_progress')
 })
 
+// Blocked issues for dashboard sidebar (explicit blocked status + dependency-blocked)
+const blockedIssues = computed(() => {
+  return issues.value.filter(issue => isIssueBlocked(issue))
+})
+
 // Pinned issues
 const { pinnedIssueIds, pinnedSortMode, isPinned, togglePin, reorderPinned, toggleSortMode: togglePinnedSort, getPinnedIssues } = usePinnedIssues()
 const pinnedIssuesList = computed(() => getPinnedIssues(issues.value))
@@ -738,10 +761,19 @@ const handleRemoveLabelFilter = (label: string) => {
 }
 
 // KPI filter handlers
-type KpiFilter = 'total' | 'open' | 'in_progress' | 'blocked'
+type KpiFilter = 'total' | 'open' | 'in_progress' | 'blocked' | 'workflow'
+const allStatusFilters: IssueStatus[] = ['open', 'in_progress', 'blocked', 'closed', 'deferred', 'pinned', 'hooked']
+const workflowStatusFilters = workflowStatuses
+
+const matchesStatusFilters = (selected: IssueStatus[], expected: IssueStatus[]) => {
+  if (selected.length !== expected.length) return false
+  return expected.every(status => selected.includes(status))
+}
+
 const activeKpiFilter = computed<KpiFilter | null>(() => {
   const statusFilters = filters.value.status
-  if (statusFilters.length === 0) return null
+  if (statusFilters.length === 0 || matchesStatusFilters(statusFilters, workflowStatusFilters)) return 'workflow'
+  if (matchesStatusFilters(statusFilters, allStatusFilters)) return 'total'
   if (statusFilters.length === 1 && statusFilters[0] === 'open') return 'open'
   if (statusFilters.length === 1 && statusFilters[0] === 'in_progress') return 'in_progress'
   if (statusFilters.length === 1 && statusFilters[0] === 'blocked') return 'blocked'
@@ -749,8 +781,10 @@ const activeKpiFilter = computed<KpiFilter | null>(() => {
 })
 
 const handleKpiClick = (kpi: KpiFilter) => {
-  if (kpi === 'total') {
-    clearFilters()
+  if (kpi === 'workflow') {
+    setStatusFilter([...workflowStatusFilters])
+  } else if (kpi === 'total') {
+    setAllFilters()
   } else if (kpi === 'open') {
     setStatusFilter(['open'])
   } else if (kpi === 'in_progress') {
@@ -836,12 +870,13 @@ watch(
             <PathSelector v-if="!showOnboarding" ref="pathSelectorRef" :is-loading="isLoading" @change="handlePathChange" @reset="handleReset" />
 
             <div v-if="stats" class="space-y-4 mt-6">
-              <div class="grid grid-cols-4 gap-1.5">
-                <KpiCard title="Total" :value="stats.total" :active="activeKpiFilter === null && filters.status.length === 0" @click="handleKpiClick('total')" />
+              <div class="flex flex-wrap gap-1.5 p-0.5 -m-0.5">
+                <KpiCard title="Workflow" :value="stats.workflow" color="var(--color-status-deferred)" :active="activeKpiFilter === 'workflow'" @click="handleKpiClick('workflow')" />
                 <KpiCard title="Open" :value="stats.open" color="var(--color-status-open)" :active="activeKpiFilter === 'open'" @click="handleKpiClick('open')" />
                 <KpiCard title="In Progress" :value="stats.inProgress" color="var(--color-status-in-progress)" :active="activeKpiFilter === 'in_progress'" @click="handleKpiClick('in_progress')" />
                 <KpiCard title="Blocked" :value="stats.blocked" color="var(--color-status-blocked)" :active="activeKpiFilter === 'blocked'" @click="handleKpiClick('blocked')" />
-              </div>
+                <KpiCard title="All" :value="stats.total" :active="activeKpiFilter === 'total'" @click="handleKpiClick('total')" />
+            </div>
             </div>
 
             <div v-if="!stats" class="flex items-center justify-center py-8">
@@ -857,10 +892,10 @@ watch(
               :stats="stats"
               :ready-issues="readyIssues"
               :in-progress-issues="inProgressIssues"
+              :blocked-issues="blockedIssues"
               :pinned-issues="pinnedIssuesList"
               :pinned-sort-mode="pinnedSortMode"
               :active-kpi-filter="activeKpiFilter"
-              :status-filters="filters.status"
               @select-issue="handleSelectIssue"
               @kpi-click="handleKpiClick"
               @reorder-pinned="reorderPinned"
@@ -1091,11 +1126,11 @@ watch(
             :stats="stats"
             :ready-issues="readyIssues"
             :in-progress-issues="inProgressIssues"
+            :blocked-issues="blockedIssues"
             :pinned-issues="pinnedIssuesList"
             :pinned-sort-mode="pinnedSortMode"
             :kpi-grid-cols="2"
             :active-kpi-filter="activeKpiFilter"
-            :status-filters="filters.status"
             :show-onboarding="showOnboarding"
             @select-issue="handleSelectIssue"
             @kpi-click="handleKpiClick"
@@ -1385,7 +1420,7 @@ watch(
             <ul class="list-disc list-inside text-sm space-y-1 ml-2">
               <li>A new Dolt database will be created (<code class="text-xs">bd init</code>)</li>
               <li>Your issues will be imported from the JSONL backup file (<code class="text-xs">bd import</code>)</li>
-              <li>None of your issues will be lost — only previously deleted issues (tombstones) are skipped</li>
+              <li>None of your active issues will be lost during migration</li>
             </ul>
             <p v-if="migrateError" class="text-destructive text-sm">
               Error: {{ migrateError }}
