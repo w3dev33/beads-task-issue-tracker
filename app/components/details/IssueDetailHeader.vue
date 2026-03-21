@@ -4,6 +4,7 @@ import TypeBadge from '~/components/issues/TypeBadge.vue'
 import StatusBadge from '~/components/issues/StatusBadge.vue'
 import PriorityBadge from '~/components/issues/PriorityBadge.vue'
 import { Button } from '~/components/ui/button'
+import { isIssueBlocked } from '~/utils/issue-helpers'
 
 defineProps<{
   selectedIssue: Issue
@@ -25,7 +26,7 @@ defineEmits<{
     <div class="flex items-center gap-1.5 flex-wrap">
       <CopyableId :value="selectedIssue.id" :display-value="selectedIssue.id.includes('-') ? selectedIssue.id.slice(selectedIssue.id.lastIndexOf('-') + 1) : selectedIssue.id" />
       <TypeBadge :type="selectedIssue.type" size="sm" />
-      <StatusBadge :status="selectedIssue.status" size="sm" />
+      <StatusBadge :status="isIssueBlocked(selectedIssue) ? 'blocked' : selectedIssue.status" :blocked-by="selectedIssue.blockedBy" size="sm" />
       <PriorityBadge :priority="selectedIssue.priority" size="sm" />
     </div>
 

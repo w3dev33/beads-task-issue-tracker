@@ -20,7 +20,7 @@
         "resizable": true,
         "fullscreen": false,
         "decorations": true,
-        "titleBarStyle": "Overlay"
+        "create": false
       }
     ],
     "security": {

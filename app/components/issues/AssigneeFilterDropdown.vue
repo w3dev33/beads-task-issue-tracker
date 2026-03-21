@@ -63,7 +63,7 @@ const isSelected = (assignee: string) => props.selectedAssignees.includes(assign
           <DropdownMenuCheckboxItem
             v-for="assignee in availableAssignees"
             :key="assignee"
-            :checked="isSelected(assignee)"
+            :model-value="isSelected(assignee)"
             class="text-xs cursor-pointer"
             @select.prevent="$emit('toggle', assignee)"
           >
