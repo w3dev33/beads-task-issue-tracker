@@ -35,7 +35,7 @@ export function usePinnedIssues() {
     const issueMap = new Map(allIssues.map(i => [i.id, i]))
     const filtered = pinnedIssueIds.value
       .map(id => issueMap.get(id))
-      .filter((i): i is Issue => !!i && i.status !== 'closed' && i.status !== 'tombstone')
+      .filter((i): i is Issue => !!i && i.status !== 'closed')
 
     if (pinnedSortMode.value === 'added') {
       // Reverse pinned order: most recently pinned first

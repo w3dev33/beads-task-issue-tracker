@@ -63,7 +63,7 @@ const isSelected = (label: string) => props.selectedLabels.includes(label)
         <DropdownMenuCheckboxItem
           v-for="label in availableLabels"
           :key="label"
-          :checked="isSelected(label)"
+          :model-value="isSelected(label)"
           class="text-xs cursor-pointer"
           @select.prevent="$emit('toggle', label)"
         >

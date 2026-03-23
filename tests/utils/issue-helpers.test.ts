@@ -8,6 +8,7 @@ import {
   sortIssues,
   filterIssues,
   groupIssues,
+  pruneClosedBlockers,
   computeReadyIssues,
   statusOrder,
   priorityOrder,
@@ -275,17 +276,65 @@ describe('filterIssues', () => {
     makeIssue({ id: '1', title: 'Login bug', status: 'open', type: 'bug', priority: 'p0', labels: ['frontend'], assignee: 'alice' }),
     makeIssue({ id: '2', title: 'Add tests', status: 'in_progress', type: 'task', priority: 'p2', labels: ['backend'], assignee: 'bob' }),
     makeIssue({ id: '3', title: 'Old feature', status: 'closed', type: 'feature', priority: 'p3' }),
-    makeIssue({ id: '4', title: 'Tombstone', status: 'tombstone' as any, type: 'task', priority: 'p2' }),
   ]
 
-  it('excludes closed and tombstone by default (no status filter)', () => {
+  it('uses workflow view by default (no status filter)', () => {
     const result = filterIssues(issues, noFilters, noExclusions)
+    expect(result.map(i => i.id)).toEqual(['1', '2'])
+  })
+
+  it('default workflow view excludes blocked statuses and dependency-blocked issues', () => {
+    const dependencyBlocked = makeIssue({ id: '5', status: 'open', blockedBy: ['1'] })
+    const explicitlyBlocked = makeIssue({ id: '6', status: 'blocked' })
+    const result = filterIssues([...issues, dependencyBlocked, explicitlyBlocked], noFilters, noExclusions)
     expect(result.map(i => i.id)).toEqual(['1', '2'])
   })
 
   it('shows only selected statuses when status filter active', () => {
     const result = filterIssues(issues, { ...noFilters, status: ['closed'] }, noExclusions)
     expect(result.map(i => i.id)).toEqual(['3'])
+  })
+
+  it('returns every supported status when all status filters are selected (TOTAL view)', () => {
+    const fullStatusSet = [
+      ...issues,
+      makeIssue({ id: '4', status: 'blocked' }),
+      makeIssue({ id: '5', status: 'deferred' }),
+      makeIssue({ id: '6', status: 'pinned' }),
+      makeIssue({ id: '7', status: 'hooked' }),
+    ]
+
+    const result = filterIssues(
+      fullStatusSet,
+      {
+        ...noFilters,
+        status: ['open', 'in_progress', 'blocked', 'closed', 'deferred', 'pinned', 'hooked'],
+      },
+      noExclusions,
+    )
+
+    expect(result.map(i => i.id)).toEqual(['1', '2', '3', '4', '5', '6', '7'])
+  })
+
+  it('includes dependency-blocked issues in blocked status filter', () => {
+    const dependencyBlocked = makeIssue({ id: '5', status: 'open', blockedBy: ['1'] })
+    const explicitlyBlocked = makeIssue({ id: '6', status: 'blocked' })
+    const result = filterIssues(
+      [...issues, dependencyBlocked, explicitlyBlocked],
+      { ...noFilters, status: ['blocked'] },
+      noExclusions,
+    )
+    expect(result.map(i => i.id)).toEqual(['5', '6'])
+  })
+
+  it('excludes dependency-blocked issues from open status filter', () => {
+    const dependencyBlocked = makeIssue({ id: '5', status: 'open', blockedBy: ['1'] })
+    const result = filterIssues(
+      [...issues, dependencyBlocked],
+      { ...noFilters, status: ['open'] },
+      noExclusions,
+    )
+    expect(result.map(i => i.id)).toEqual(['1'])
   })
 
   it('filters by type', () => {
@@ -313,9 +362,19 @@ describe('filterIssues', () => {
     expect(result.map(i => i.id)).toEqual(['1'])
   })
 
-  it('search bypasses all other filters (includes closed)', () => {
+  it('search respects active filters (excludes closed by default)', () => {
     const result = filterIssues(issues, { ...noFilters, search: 'old feature' }, noExclusions)
+    expect(result).toEqual([])
+  })
+
+  it('search combined with status filter returns matching results', () => {
+    const result = filterIssues(issues, { ...noFilters, status: ['closed'], search: 'old feature' }, noExclusions)
     expect(result.map(i => i.id)).toEqual(['3'])
+  })
+
+  it('search combined with type filter narrows results', () => {
+    const result = filterIssues(issues, { ...noFilters, search: 'Login', type: ['task'] }, noExclusions)
+    expect(result).toEqual([])
   })
 
   it('search matches title, id, and description', () => {
@@ -329,6 +388,16 @@ describe('filterIssues', () => {
     expect(result.map(i => i.id)).toEqual(['2'])
   })
 
+  it('status exclusion for blocked removes dependency-blocked issues', () => {
+    const dependencyBlocked = makeIssue({ id: '5', status: 'open', blockedBy: ['1'] })
+    const result = filterIssues(
+      [...issues, dependencyBlocked],
+      noFilters,
+      { ...noExclusions, status: ['blocked'] },
+    )
+    expect(result.map(i => i.id)).toEqual(['1', '2'])
+  })
+
   it('excludes by label', () => {
     const result = filterIssues(issues, noFilters, { ...noExclusions, labels: ['frontend'] })
     expect(result.map(i => i.id)).toEqual(['2'])
@@ -339,7 +408,7 @@ describe('filterIssues', () => {
     expect(result.map(i => i.id)).toEqual(['2'])
   })
 
-  it('returns all non-closed when no filters and no exclusions', () => {
+  it('returns all workflow issues when no filters and no exclusions', () => {
     const result = filterIssues(issues, noFilters, noExclusions)
     expect(result).toHaveLength(2)
   })
@@ -410,6 +479,48 @@ describe('groupIssues', () => {
 
     const result = groupIssues(all, all)
     expect(result[0]!.children.map(c => c.id)).toEqual(['e.1', 'e.2', 'e.3'])
+  })
+})
+
+// ---------------------------------------------------------------------------
+// pruneClosedBlockers
+// ---------------------------------------------------------------------------
+describe('pruneClosedBlockers', () => {
+  it('removes closed blockers from blockedBy and blocks', () => {
+    const issues = [
+      makeIssue({ id: 'open-1', status: 'open', blockedBy: ['closed-1', 'open-2'] }),
+      makeIssue({ id: 'open-2', status: 'open', blocks: ['open-1', 'closed-1'] }),
+      makeIssue({ id: 'closed-1', status: 'closed' }),
+    ]
+
+    pruneClosedBlockers(issues)
+
+    expect(issues[0]!.blockedBy).toEqual(['open-2'])
+    expect(issues[1]!.blocks).toEqual(['open-1'])
+  })
+
+  it('clears dependency arrays when all references are closed', () => {
+    const issues = [
+      makeIssue({ id: 'open-1', status: 'open', blockedBy: ['closed-1'] }),
+      makeIssue({ id: 'open-2', status: 'open', blocks: ['closed-1'] }),
+      makeIssue({ id: 'closed-1', status: 'closed' }),
+    ]
+
+    pruneClosedBlockers(issues)
+
+    expect(issues[0]!.blockedBy).toBeUndefined()
+    expect(issues[1]!.blocks).toBeUndefined()
+  })
+
+  it('keeps unknown blocker IDs untouched', () => {
+    const issues = [
+      makeIssue({ id: 'open-1', status: 'open', blockedBy: ['missing-1'] }),
+      makeIssue({ id: 'open-2', status: 'open' }),
+    ]
+
+    pruneClosedBlockers(issues)
+
+    expect(issues[0]!.blockedBy).toEqual(['missing-1'])
   })
 })
 

@@ -30,6 +30,57 @@ export function deduplicateIssues(issues: Issue[]): Issue[] {
 }
 
 /**
+ * Remove closed issue IDs from dependency references.
+ *
+ * `bd list/show` can return stale `blockedBy`/`blocks` links after a blocker is
+ * closed. Pruning them here keeps status-column blocker indicators accurate.
+ */
+export function pruneClosedBlockers(issues: Issue[]): void {
+  const closedIds = new Set(
+    issues
+      .filter(issue => issue.status === 'closed')
+      .map(issue => issue.id),
+  )
+
+  if (closedIds.size === 0) return
+
+  for (const issue of issues) {
+    if (issue.blockedBy?.length) {
+      const activeBlockers = issue.blockedBy.filter(id => !closedIds.has(id))
+      issue.blockedBy = activeBlockers.length ? activeBlockers : undefined
+    }
+
+    if (issue.blocks?.length) {
+      const activeBlockedIssues = issue.blocks.filter(id => !closedIds.has(id))
+      issue.blocks = activeBlockedIssues.length ? activeBlockedIssues : undefined
+    }
+  }
+}
+
+/**
+ * Determine whether an issue should appear in blocked views.
+ *
+ * Supports both explicit blocked status and dependency-based blockers
+ * (`blockedBy`) while ignoring closed issues.
+ */
+export function isIssueBlocked(issue: Pick<Issue, 'status' | 'blockedBy'>): boolean {
+  if (issue.status === 'blocked') return true
+  if (!issue.blockedBy?.length) return false
+  return issue.status !== 'closed'
+}
+
+/**
+ * Determine whether an issue belongs in the WORKFLOW view.
+ *
+ * WORKFLOW includes everything except closed/deleted/tombstone and blocked.
+ */
+export function isIssueWorkflow(issue: Pick<Issue, 'status' | 'blockedBy'>): boolean {
+  const status = issue.status as string
+  if (status === 'closed' || status === 'deleted' || status === 'tombstone') return false
+  return !isIssueBlocked(issue)
+}
+
+/**
  * Natural sort comparison for IDs (handles multi-digit numbers correctly).
  * e.g., "40b.2" < "40b.10" instead of "40b.10" < "40b.2"
  */
@@ -199,11 +250,11 @@ export function filterIssues(
 ): Issue[] {
   let result = issues
 
-  // Search bypasses all other filters
+  // Text search filter
   const searchTerm = filters.search?.trim()
   if (searchTerm) {
     const search = searchTerm.toLowerCase()
-    return result.filter(
+    result = result.filter(
       (issue) =>
         issue.title.toLowerCase().includes(search) ||
         issue.id.toLowerCase().includes(search) ||
@@ -211,11 +262,17 @@ export function filterIssues(
     )
   }
 
-  // Status filter (default: exclude closed + tombstone)
+  // Status filter (default: WORKFLOW view)
   if (filters.status.length > 0) {
-    result = result.filter((issue) => filters.status.includes(issue.status))
+    const includeBlocked = filters.status.includes('blocked')
+    result = result.filter((issue) => {
+      if (includeBlocked && isIssueBlocked(issue)) return true
+      // Exclude dependency-blocked issues when 'blocked' is not in the filter
+      if (!includeBlocked && isIssueBlocked(issue)) return false
+      return filters.status.includes(issue.status)
+    })
   } else {
-    result = result.filter((issue) => issue.status !== 'closed' && issue.status !== 'tombstone')
+    result = result.filter((issue) => isIssueWorkflow(issue))
   }
 
   if (filters.type.length > 0) {
@@ -241,7 +298,11 @@ export function filterIssues(
 
   // Exclusion filters
   if (exclusions.status.length > 0) {
-    result = result.filter(issue => !exclusions.status.includes(issue.status))
+    const excludeBlocked = exclusions.status.includes('blocked')
+    result = result.filter((issue) => {
+      if (excludeBlocked && isIssueBlocked(issue)) return false
+      return !exclusions.status.includes(issue.status)
+    })
   }
   if (exclusions.priority.length > 0) {
     result = result.filter(issue => !exclusions.priority.includes(issue.priority))
@@ -344,7 +405,7 @@ export function groupIssues(
 
 /**
  * Compute dashboard stats from an issues array.
- * Excludes tombstone issues. Groups open/deferred/pinned/hooked as "open".
+ * "open" counts only true open issues to match the Open KPI filter.
  */
 export function computeStatsFromIssues(issues: Issue[]): DashboardStats {
   const stats: DashboardStats = {
@@ -353,31 +414,31 @@ export function computeStatsFromIssues(issues: Issue[]): DashboardStats {
     inProgress: 0,
     blocked: 0,
     closed: 0,
+    workflow: 0,
     ready: 0,
     byType: { bug: 0, task: 0, feature: 0, epic: 0, chore: 0 },
     byPriority: { p0: 0, p1: 0, p2: 0, p3: 0, p4: 0 },
   }
 
-  const activeIssues = issues.filter((issue) => issue.status !== 'tombstone')
-  stats.total = activeIssues.length
+  for (const issue of issues) {
+    if (isIssueWorkflow(issue)) {
+      stats.workflow++
+    }
 
-  for (const issue of activeIssues) {
-    switch (issue.status) {
-      case 'open':
-      case 'deferred':
-      case 'pinned':
-      case 'hooked':
-        stats.open++
-        break
-      case 'in_progress':
-        stats.inProgress++
-        break
-      case 'blocked':
-        stats.blocked++
-        break
-      case 'closed':
-        stats.closed++
-        break
+    if (isIssueBlocked(issue)) {
+      stats.blocked++
+    } else {
+      switch (issue.status) {
+        case 'open':
+          stats.open++
+          break
+        case 'in_progress':
+          stats.inProgress++
+          break
+        case 'closed':
+          stats.closed++
+          break
+      }
     }
 
     if (issue.type in stats.byType) {
@@ -388,6 +449,8 @@ export function computeStatsFromIssues(issues: Issue[]): DashboardStats {
       stats.byPriority[issue.priority]++
     }
   }
+
+  stats.total = issues.length
 
   return stats
 }

@@ -15,21 +15,21 @@ import {
   TooltipTrigger,
 } from '~/components/ui/tooltip'
 
-type KpiFilter = 'total' | 'open' | 'in_progress' | 'blocked'
+type KpiFilter = 'total' | 'open' | 'in_progress' | 'blocked' | 'workflow'
 
 const props = withDefaults(defineProps<{
   stats: DashboardStats | null
   readyIssues: Issue[]
   inProgressIssues: Issue[]
+  blockedIssues: Issue[]
   pinnedIssues: Issue[]
   pinnedSortMode?: PinnedSortMode
-  kpiGridCols?: 2 | 4
+  kpiGridCols?: 2 | 5
   activeKpiFilter: KpiFilter | null
-  statusFilters: string[]
   showOnboarding?: boolean
   hideKpis?: boolean
 }>(), {
-  kpiGridCols: 4,
+  kpiGridCols: 5,
   showOnboarding: false,
   hideKpis: false,
 })
@@ -46,6 +46,7 @@ const emit = defineEmits<{
 // Collapsible state (per-project, singleton)
 const isChartsCollapsed = useProjectStorage('chartsCollapsed', true)
 const isInProgressCollapsed = useProjectStorage('inProgressCollapsed', true)
+const isBlockedCollapsed = useProjectStorage('blockedCollapsed', true)
 const isPinnedCollapsed = useProjectStorage('pinnedCollapsed', false)
 const isReadyCollapsed = useProjectStorage('readyCollapsed', true)
 </script>
@@ -53,11 +54,12 @@ const isReadyCollapsed = useProjectStorage('readyCollapsed', true)
 <template>
   <template v-if="stats">
     <!-- KPI cards (hidden in desktop scrollable section where KPIs are in the fixed section) -->
-    <div v-if="!hideKpis" :class="['grid', kpiGridCols === 4 ? 'grid-cols-4 gap-1.5' : 'grid-cols-2 gap-3']">
-      <KpiCard title="Total" :value="stats.total" :active="activeKpiFilter === null && statusFilters.length === 0" @click="emit('kpi-click', 'total')" />
+    <div v-if="!hideKpis" :class="['flex flex-wrap p-0.5 -m-0.5', kpiGridCols === 5 ? 'gap-1.5' : 'gap-3']">
+      <KpiCard title="Workflow" :value="stats.workflow" color="var(--color-status-deferred)" :active="activeKpiFilter === 'workflow'" @click="emit('kpi-click', 'workflow')" />
       <KpiCard title="Open" :value="stats.open" color="var(--color-status-open)" :active="activeKpiFilter === 'open'" @click="emit('kpi-click', 'open')" />
       <KpiCard title="In Progress" :value="stats.inProgress" color="var(--color-status-in-progress)" :active="activeKpiFilter === 'in_progress'" @click="emit('kpi-click', 'in_progress')" />
       <KpiCard title="Blocked" :value="stats.blocked" color="var(--color-status-blocked)" :active="activeKpiFilter === 'blocked'" @click="emit('kpi-click', 'blocked')" />
+      <KpiCard title="All" :value="stats.total" :active="activeKpiFilter === 'total'" @click="emit('kpi-click', 'total')" />
     </div>
 
     <!-- Collapsible Charts Section -->
@@ -105,6 +107,30 @@ const isReadyCollapsed = useProjectStorage('readyCollapsed', true)
       </button>
       <div v-show="!isInProgressCollapsed" class="pl-5">
         <QuickList :issues="inProgressIssues" @select="emit('select-issue', $event)" />
+      </div>
+    </div>
+
+    <!-- Collapsible Blocked Section -->
+    <div v-if="blockedIssues.length > 0" class="space-y-2">
+      <button
+        class="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors w-full"
+        @click="isBlockedCollapsed = !isBlockedCollapsed"
+      >
+        <svg
+          class="w-3 h-3 transition-transform"
+          :class="{ '-rotate-90': isBlockedCollapsed }"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+        >
+          <polyline points="6 9 12 15 18 9" />
+        </svg>
+        <span class="uppercase tracking-wide">Blocked</span>
+        <span class="text-[10px] ml-auto">({{ blockedIssues.length }})</span>
+      </button>
+      <div v-show="!isBlockedCollapsed" class="pl-5">
+        <QuickList :issues="blockedIssues" @select="emit('select-issue', $event)" />
       </div>
     </div>
 

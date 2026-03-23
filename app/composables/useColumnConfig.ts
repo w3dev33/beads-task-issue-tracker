@@ -61,6 +61,15 @@ export function useColumnConfig() {
     columns.value = newColumns
   }
 
+  const reorderColumns = (fromIndex: number, toIndex: number) => {
+    const reordered = [...columns.value]
+    const [moved] = reordered.splice(fromIndex, 1)
+    if (moved) {
+      reordered.splice(toIndex, 0, moved)
+      columns.value = reordered
+    }
+  }
+
   const resetColumns = () => {
     columns.value = [...defaultColumns]
   }
@@ -71,6 +80,7 @@ export function useColumnConfig() {
     toggleColumn,
     setColumnVisibility,
     setColumns,
+    reorderColumns,
     resetColumns,
   }
 }

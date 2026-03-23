@@ -54,9 +54,9 @@ const neonTitleStyle = computed(() => {
 
 <template>
   <button
-    class="p-1.5 rounded-md text-left w-full transition-colors"
+    class="px-2.5 py-1.5 rounded-md text-left transition-colors min-w-[90px]"
     :class="[
-      active ? 'ring-2 ring-primary' : '',
+      active ? 'outline-2 outline-primary' : '',
       isNeon
         ? 'border hover:brightness-125'
         : 'bg-secondary/30 border border-border/50 hover:bg-secondary/50'
@@ -65,7 +65,7 @@ const neonTitleStyle = computed(() => {
     @click="$emit('click')"
   >
     <div
-      class="text-[9px] uppercase tracking-wide mb-0.5 truncate"
+      class="text-[9px] uppercase tracking-wide mb-0.5 whitespace-nowrap"
       :class="isNeon && color ? '' : 'text-muted-foreground'"
       :style="neonTitleStyle"
     >

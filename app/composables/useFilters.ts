@@ -1,6 +1,8 @@
 import type { FilterState, IssueStatus, IssueType, IssuePriority } from '~/types/issue'
 import { useProjectStorage } from '~/composables/useProjectStorage'
 
+export const workflowStatuses: IssueStatus[] = ['open', 'in_progress', 'deferred', 'pinned', 'hooked']
+
 const defaultFilters: FilterState = {
   status: [],
   type: [],
@@ -13,11 +15,13 @@ const defaultFilters: FilterState = {
 export function useFilters() {
   const filters = useProjectStorage<FilterState>('filters', defaultFilters)
 
-  // Clear search, labels and assignee on init (should not persist across page loads)
+  // Clear transient filters on init and reset status to the default KPI view.
   if (import.meta.client) {
     filters.value.search = ''
     filters.value.labels = []
     filters.value.assignee = []
+    // Always reset to the default WORKFLOW view on load/refresh.
+    filters.value.status = [...workflowStatuses]
   }
 
   const toggleStatus = (status: IssueStatus) => {
@@ -82,6 +86,19 @@ export function useFilters() {
     filters.value.status = [...statuses]
   }
 
+  const allStatuses: IssueStatus[] = ['open', 'in_progress', 'blocked', 'closed', 'deferred', 'pinned', 'hooked']
+  const allTypes: IssueType[] = ['bug', 'task', 'feature', 'epic', 'chore']
+  const allPriorities: IssuePriority[] = ['p0', 'p1', 'p2', 'p3', 'p4']
+
+  const setAllFilters = () => {
+    filters.value.status = [...allStatuses]
+    filters.value.type = []
+    filters.value.priority = []
+    filters.value.assignee = []
+    filters.value.search = ''
+    filters.value.labels = []
+  }
+
   const hasActiveFilters = computed(() => {
     return (
       filters.value.status.length > 0 ||
@@ -103,6 +120,7 @@ export function useFilters() {
     toggleLabelFilter,
     clearFilters,
     setStatusFilter,
+    setAllFilters,
     hasActiveFilters,
   }
 }
