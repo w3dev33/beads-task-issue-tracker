@@ -9,6 +9,7 @@ import StatusBadge from '~/components/issues/StatusBadge.vue'
 import PriorityBadge from '~/components/issues/PriorityBadge.vue'
 import ImageThumbnail from '~/components/ui/image-preview/ImageThumbnail.vue'
 import { extractNonImageRefs, isUrl } from '~/utils/markdown'
+import { isIssueBlocked } from '~/utils/issue-helpers'
 import type { AttachmentFile } from '~/composables/useAttachments'
 
 const { currentTheme } = useTheme()
@@ -490,7 +491,7 @@ const formatEstimate = (minutes: number) => {
             <span class="text-xs truncate">{{ issue.parent.title }}</span>
           </div>
           <div class="flex items-center gap-1 shrink-0">
-            <StatusBadge :status="issue.parent.status" size="sm" />
+            <StatusBadge :status="isIssueBlocked(issue.parent) ? 'blocked' : issue.parent.status" :blocked-by="issue.parent.blockedBy" size="sm" />
             <PriorityBadge :priority="issue.parent.priority" size="sm" />
           </div>
         </div>
@@ -542,7 +543,7 @@ const formatEstimate = (minutes: number) => {
               <span class="text-xs truncate">{{ child.title }}</span>
             </div>
             <div class="flex items-center gap-1 shrink-0">
-              <StatusBadge :status="child.status" size="sm" />
+              <StatusBadge :status="isIssueBlocked(child) ? 'blocked' : child.status" :blocked-by="child.blockedBy" size="sm" />
               <PriorityBadge :priority="child.priority" size="sm" />
             </div>
           </div>

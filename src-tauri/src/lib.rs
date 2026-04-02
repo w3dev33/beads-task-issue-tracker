@@ -1,13 +1,13 @@
 use notify_debouncer_mini::{new_debouncer, DebouncedEventKind};
 use serde::{Deserialize, Serialize};
-use tauri::Emitter;
+use tauri::{Emitter, WebviewWindowBuilder};
 use std::collections::HashMap;
 use std::env;
 use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{LazyLock, Mutex};
+use std::sync::{Arc, LazyLock, Mutex};
 use std::time::{Duration, Instant};
 
 // Global flags for logging
@@ -136,6 +136,8 @@ pub struct BdCliUpdateInfo {
 struct WatcherState {
     debouncer: Option<notify_debouncer_mini::Debouncer<notify::RecommendedWatcher>>,
     watched_path: Option<String>,
+    watch_session_id: u64,
+    project_emit_state: HashMap<String, Arc<Mutex<ProjectWatcherEmitState>>>,
 }
 
 impl Default for WatcherState {
@@ -143,8 +145,139 @@ impl Default for WatcherState {
         Self {
             debouncer: None,
             watched_path: None,
+            watch_session_id: 0,
+            project_emit_state: HashMap::new(),
         }
     }
+}
+
+#[derive(Debug)]
+struct ProjectWatcherEmitState {
+    session_id: u64,
+    last_emit: Option<Instant>,
+    pending: bool,
+    flush_scheduled: bool,
+    emitted_batches: u64,
+    suppressed_batches: u64,
+}
+
+impl ProjectWatcherEmitState {
+    fn new(session_id: u64) -> Self {
+        Self {
+            session_id,
+            last_emit: None,
+            pending: false,
+            flush_scheduled: false,
+            emitted_batches: 0,
+            suppressed_batches: 0,
+        }
+    }
+}
+
+const WATCHER_DEBOUNCE_INTERVAL_MS: u64 = 1000;
+const WATCHER_MIN_EMIT_INTERVAL_MS_DEFAULT: u64 = 2000;
+
+static WATCHER_MIN_EMIT_INTERVAL_MS: LazyLock<u64> = LazyLock::new(|| {
+    env::var("WATCHER_MIN_EMIT_INTERVAL_MS")
+        .ok()
+        .and_then(|value| value.parse::<u64>().ok())
+        .unwrap_or(WATCHER_MIN_EMIT_INTERVAL_MS_DEFAULT)
+        .max(250)
+});
+
+fn watcher_min_emit_interval() -> Duration {
+    Duration::from_millis(*WATCHER_MIN_EMIT_INTERVAL_MS)
+}
+
+fn should_process_watcher_event(event: &notify_debouncer_mini::DebouncedEvent) -> bool {
+    if !matches!(event.kind, DebouncedEventKind::Any | DebouncedEventKind::AnyContinuous) {
+        return false;
+    }
+
+    let path = event.path.to_string_lossy().replace('\\', "/").to_lowercase();
+    if !path.contains("/.beads/") {
+        return false;
+    }
+
+    // Ignore high-churn internal files that do not carry issue data.
+    !(path.contains("/.beads/.dolt/stats/")
+        || path.contains("/.beads/.dolt/tmp/")
+        || path.contains("/.beads/.dolt/.tmp/")
+        || path.ends_with(".lock")
+        || path.ends_with(".tmp")
+        || path.ends_with(".swp")
+        || path.ends_with('~'))
+}
+
+fn emit_beads_changed(app_handle: &tauri::AppHandle, project_path: &str) {
+    if let Err(err) = app_handle.emit(
+        "beads-changed",
+        BeadsChangedPayload {
+            path: project_path.to_string(),
+        },
+    ) {
+        log::error!("[watcher] Failed to emit beads-changed for {}: {:?}", project_path, err);
+    }
+}
+
+fn schedule_pending_watcher_emit(
+    app_handle: tauri::AppHandle,
+    project_path: String,
+    emit_state: Arc<Mutex<ProjectWatcherEmitState>>,
+    session_id: u64,
+) {
+    std::thread::spawn(move || {
+        let min_interval = watcher_min_emit_interval();
+        loop {
+            let mut should_emit = false;
+            let mut counters = None;
+            let mut wait_time = Duration::from_millis(50);
+
+            match emit_state.lock() {
+                Ok(mut state) => {
+                    if state.session_id != session_id || !state.pending {
+                        state.flush_scheduled = false;
+                        return;
+                    }
+
+                    let can_emit_now = state
+                        .last_emit
+                        .map(|last| last.elapsed() >= min_interval)
+                        .unwrap_or(true);
+
+                    if can_emit_now {
+                        state.pending = false;
+                        state.flush_scheduled = false;
+                        state.last_emit = Some(Instant::now());
+                        state.emitted_batches += 1;
+                        counters = Some((state.emitted_batches, state.suppressed_batches));
+                        should_emit = true;
+                    } else if let Some(last_emit) = state.last_emit {
+                        wait_time = min_interval.saturating_sub(last_emit.elapsed());
+                    }
+                }
+                Err(err) => {
+                    log::error!("[watcher] Failed to lock emit state for delayed flush: {}", err);
+                    return;
+                }
+            }
+
+            if should_emit {
+                emit_beads_changed(&app_handle, &project_path);
+                if let Some((emitted, suppressed)) = counters {
+                    log::info!(
+                        "[watcher] Delayed coalesced emit for {} (emitted={}, suppressed={})",
+                        project_path,
+                        emitted,
+                        suppressed
+                    );
+                }
+                return;
+            }
+
+            std::thread::sleep(wait_time);
+        }
+    });
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -449,7 +582,7 @@ fn normalize_issue_type(issue_type: &str) -> String {
 }
 
 fn normalize_issue_status(status: &str) -> String {
-    let valid_statuses = ["open", "in_progress", "blocked", "closed", "deferred", "tombstone", "pinned", "hooked"];
+    let valid_statuses = ["open", "in_progress", "blocked", "closed", "deferred", "pinned", "hooked"];
     if valid_statuses.contains(&status) {
         status.to_string()
     } else {
@@ -4409,10 +4542,22 @@ fn start_watching(
     state: tauri::State<'_, Mutex<WatcherState>>,
 ) -> Result<(), String> {
     let mut watcher_state = state.lock().map_err(|e| format!("Lock error: {}", e))?;
+    watcher_state.watch_session_id = watcher_state.watch_session_id.wrapping_add(1);
+    let watch_session_id = watcher_state.watch_session_id;
 
     // Stop existing watcher if any
     if watcher_state.debouncer.is_some() {
         log::info!("[watcher] Stopping previous watcher for: {:?}", watcher_state.watched_path);
+        if let Some(previous_path) = watcher_state.watched_path.clone() {
+            if let Some(previous_emit_state) = watcher_state.project_emit_state.get(&previous_path) {
+                if let Ok(mut emit_state) = previous_emit_state.lock() {
+                    emit_state.session_id = watch_session_id;
+                    emit_state.pending = false;
+                    emit_state.flush_scheduled = false;
+                }
+            }
+            watcher_state.project_emit_state.remove(&previous_path);
+        }
         watcher_state.debouncer = None;
         watcher_state.watched_path = None;
     }
@@ -4424,21 +4569,98 @@ fn start_watching(
 
     let project_path = path.clone();
     let app_handle = app.clone();
+    let project_emit_state = watcher_state
+        .project_emit_state
+        .entry(path.clone())
+        .or_insert_with(|| Arc::new(Mutex::new(ProjectWatcherEmitState::new(watch_session_id))))
+        .clone();
+    {
+        let mut emit_state = project_emit_state
+            .lock()
+            .map_err(|e| format!("Watcher emit-state lock error: {}", e))?;
+        *emit_state = ProjectWatcherEmitState::new(watch_session_id);
+    }
 
     let mut debouncer = new_debouncer(
-        Duration::from_millis(1000),
+        Duration::from_millis(WATCHER_DEBOUNCE_INTERVAL_MS),
         move |res: Result<Vec<notify_debouncer_mini::DebouncedEvent>, notify::Error>| {
             match res {
                 Ok(events) => {
-                    // Filter: only emit if we have actual data-change events
-                    let has_data_events = events.iter().any(|e| {
-                        matches!(e.kind, DebouncedEventKind::Any | DebouncedEventKind::AnyContinuous)
-                    });
-                    if has_data_events {
-                        log::info!("[watcher] Change detected in .beads/ ({} events)", events.len());
-                        let _ = app_handle.emit(
-                            "beads-changed",
-                            BeadsChangedPayload { path: project_path.clone() },
+                    let relevant_count = events
+                        .iter()
+                        .filter(|event| should_process_watcher_event(event))
+                        .count();
+                    if relevant_count == 0 {
+                        return;
+                    }
+
+                    let mut emit_now = false;
+                    let mut schedule_delayed_emit = false;
+                    let mut counters = None;
+                    let min_interval = watcher_min_emit_interval();
+
+                    match project_emit_state.lock() {
+                        Ok(mut emit_state) => {
+                            if emit_state.session_id != watch_session_id {
+                                return;
+                            }
+
+                            let can_emit_now = emit_state
+                                .last_emit
+                                .map(|last| last.elapsed() >= min_interval)
+                                .unwrap_or(true);
+
+                            if can_emit_now {
+                                emit_state.pending = false;
+                                emit_state.last_emit = Some(Instant::now());
+                                emit_state.emitted_batches += 1;
+                                counters = Some((emit_state.emitted_batches, emit_state.suppressed_batches));
+                                emit_now = true;
+                            } else {
+                                emit_state.pending = true;
+                                emit_state.suppressed_batches += 1;
+                                counters = Some((emit_state.emitted_batches, emit_state.suppressed_batches));
+                                if !emit_state.flush_scheduled {
+                                    emit_state.flush_scheduled = true;
+                                    schedule_delayed_emit = true;
+                                }
+                            }
+                        }
+                        Err(err) => {
+                            log::error!("[watcher] Failed to lock emit state for {}: {}", project_path, err);
+                            return;
+                        }
+                    }
+
+                    if emit_now {
+                        emit_beads_changed(&app_handle, &project_path);
+                        if let Some((emitted, suppressed)) = counters {
+                            log::info!(
+                                "[watcher] Emitted coalesced update for {} (events={}, relevant={}, emitted={}, suppressed={})",
+                                project_path,
+                                events.len(),
+                                relevant_count,
+                                emitted,
+                                suppressed
+                            );
+                        }
+                    } else if let Some((emitted, suppressed)) = counters {
+                        log::info!(
+                            "[watcher] Suppressed watcher batch for {} (events={}, relevant={}, emitted={}, suppressed={})",
+                            project_path,
+                            events.len(),
+                            relevant_count,
+                            emitted,
+                            suppressed
+                        );
+                    }
+
+                    if schedule_delayed_emit {
+                        schedule_pending_watcher_emit(
+                            app_handle.clone(),
+                            project_path.clone(),
+                            project_emit_state.clone(),
+                            watch_session_id,
                         );
                     }
                 }
@@ -4474,9 +4696,21 @@ fn stop_watching(
     state: tauri::State<'_, Mutex<WatcherState>>,
 ) -> Result<(), String> {
     let mut watcher_state = state.lock().map_err(|e| format!("Lock error: {}", e))?;
+    watcher_state.watch_session_id = watcher_state.watch_session_id.wrapping_add(1);
+    let watch_session_id = watcher_state.watch_session_id;
 
     if watcher_state.debouncer.is_some() {
         log::info!("[watcher] Stopped watching: {:?}", watcher_state.watched_path);
+        if let Some(previous_path) = watcher_state.watched_path.clone() {
+            if let Some(previous_emit_state) = watcher_state.project_emit_state.get(&previous_path) {
+                if let Ok(mut emit_state) = previous_emit_state.lock() {
+                    emit_state.session_id = watch_session_id;
+                    emit_state.pending = false;
+                    emit_state.flush_scheduled = false;
+                }
+            }
+            watcher_state.project_emit_state.remove(&previous_path);
+        }
         watcher_state.debouncer = None;
         watcher_state.watched_path = None;
     }
@@ -4700,6 +4934,16 @@ pub fn run() {
                     ))
                     .build(),
             )?;
+
+            // Create the main window from config, applying titleBarStyle only on macOS
+            let window_config = &app.config().app.windows[0];
+            #[allow(unused_mut)]
+            let mut builder = WebviewWindowBuilder::from_config(app.handle(), window_config)?;
+            #[cfg(target_os = "macos")]
+            {
+                builder = builder.title_bar_style(tauri::TitleBarStyle::Overlay);
+            }
+            builder.build()?;
 
             // Log startup info
             log::info!("=== Beads Task-Issue Tracker starting ===");
