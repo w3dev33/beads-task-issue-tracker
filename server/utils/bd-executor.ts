@@ -15,6 +15,24 @@ export interface BdResult<T = unknown> {
 }
 
 /**
+ * Unwrap the paginated envelope returned by br >= 0.1.30 for `list` commands.
+ * br list --json returns {"issues": [...], "total": N, ...} instead of a flat array.
+ * Other commands (show, ready, search) still return flat arrays.
+ */
+export function unwrapBrEnvelope<T = unknown>(data: unknown): T[] {
+  if (Array.isArray(data)) {
+    return data as T[]
+  }
+  if (data && typeof data === 'object' && 'issues' in data) {
+    const envelope = data as { issues: unknown[] }
+    if (Array.isArray(envelope.issues)) {
+      return envelope.issues as T[]
+    }
+  }
+  return []
+}
+
+/**
  * Execute a bd CLI command and return JSON output
  * @param command - The bd command to execute
  * @param options - Options including args and working directory

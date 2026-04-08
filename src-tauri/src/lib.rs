@@ -654,10 +654,25 @@ fn parse_issues_tolerant(output: &str, context: &str) -> Result<Vec<BdRawIssue>,
             format!("Invalid JSON: {}", e)
         })?;
 
-    let arr = value.as_array().ok_or_else(|| {
-        log_error!("[{}] Expected array, got: {:?}", context, value);
-        "Expected JSON array".to_string()
-    })?;
+    // br >= 0.1.30 wraps `list` output in a paginated envelope:
+    // {"issues": [...], "total": N, "offset": N, "limit": N, "has_more": bool}
+    // Unwrap the envelope if present, otherwise expect a flat array.
+    let arr_value;
+    let arr = if let Some(obj) = value.as_object() {
+        if let Some(issues) = obj.get("issues").and_then(|v| v.as_array()) {
+            log_info!("[{}] Unwrapped paginated envelope ({} issues)", context, issues.len());
+            arr_value = issues.clone();
+            &arr_value
+        } else {
+            log_error!("[{}] Expected array or envelope with 'issues' key, got object: {:?}", context, obj.keys().collect::<Vec<_>>());
+            return Err("Expected JSON array or paginated envelope".to_string());
+        }
+    } else {
+        value.as_array().ok_or_else(|| {
+            log_error!("[{}] Expected array, got: {:?}", context, value);
+            "Expected JSON array".to_string()
+        })?
+    };
 
     let mut issues = Vec::new();
     let mut failed_count = 0;
@@ -4840,4 +4855,98 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn minimal_issue_json(id: &str, title: &str) -> String {
+        format!(
+            r#"{{"id":"{}","title":"{}","description":null,"status":"open","priority":3,"issue_type":"task","owner":null,"assignee":null,"labels":[],"created_at":"2025-01-01T00:00:00Z","created_by":null,"updated_at":"2025-01-01T00:00:00Z","closed_at":null,"close_reason":null,"blocked_by":null,"blocks":null,"comments":null,"external_ref":null,"estimate":null,"design":null,"acceptance_criteria":null,"notes":null,"parent":null,"dependents":null,"dependencies":null,"dependency_count":null,"dependent_count":null,"metadata":null,"spec_id":null,"comment_count":null}}"#,
+            id, title
+        )
+    }
+
+    #[test]
+    fn parse_flat_array() {
+        let json = format!("[{}]", minimal_issue_json("abc-123", "Bug fix"));
+        let result = parse_issues_tolerant(&json, "test_flat");
+        assert!(result.is_ok());
+        let issues = result.unwrap();
+        assert_eq!(issues.len(), 1);
+        assert_eq!(issues[0].id, "abc-123");
+        assert_eq!(issues[0].title, "Bug fix");
+    }
+
+    #[test]
+    fn parse_paginated_envelope() {
+        let json = format!(
+            r#"{{"issues":[{},{}],"total":2,"offset":0,"limit":50,"has_more":false}}"#,
+            minimal_issue_json("abc-123", "First"),
+            minimal_issue_json("def-456", "Second")
+        );
+        let result = parse_issues_tolerant(&json, "test_envelope");
+        assert!(result.is_ok());
+        let issues = result.unwrap();
+        assert_eq!(issues.len(), 2);
+        assert_eq!(issues[0].id, "abc-123");
+        assert_eq!(issues[1].id, "def-456");
+    }
+
+    #[test]
+    fn parse_empty_flat_array() {
+        let result = parse_issues_tolerant("[]", "test_empty_flat");
+        assert!(result.is_ok());
+        assert!(result.unwrap().is_empty());
+    }
+
+    #[test]
+    fn parse_empty_envelope() {
+        let json = r#"{"issues":[],"total":0,"offset":0,"limit":50,"has_more":false}"#;
+        let result = parse_issues_tolerant(json, "test_empty_envelope");
+        assert!(result.is_ok());
+        assert!(result.unwrap().is_empty());
+    }
+
+    #[test]
+    fn parse_object_without_issues_key_fails() {
+        let json = r#"{"error":"something went wrong"}"#;
+        let result = parse_issues_tolerant(json, "test_bad_object");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_invalid_json_fails() {
+        let result = parse_issues_tolerant("not json at all", "test_invalid");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_real_br_envelope() {
+        // Matches the shape from br 0.1.30+ (`br list --json --limit 1`):
+        // br omits many optional fields (owner, assignee, labels, etc.) and includes extra
+        // fields (source_repo, compaction_level). serde_json defaults missing Option<T> to None
+        // and ignores unknown fields, so this parses correctly.
+        let json = r#"{"issues":[{"id":"proj-abc","title":"Example bug report","description":"A test description","status":"open","priority":2,"issue_type":"bug","created_at":"2025-06-15T09:30:00.000000000Z","updated_at":"2025-06-15T10:45:00.000000000Z","source_repo":".","compaction_level":0,"dependency_count":0,"dependent_count":0}],"total":1,"limit":1,"offset":0,"has_more":true}"#;
+        let result = parse_issues_tolerant(json, "test_real_br");
+        assert!(result.is_ok());
+        let issues = result.unwrap();
+        assert_eq!(issues.len(), 1);
+        assert_eq!(issues[0].id, "proj-abc");
+        assert_eq!(issues[0].issue_type, "bug");
+        assert_eq!(issues[0].priority, 2);
+    }
+
+    #[test]
+    fn parse_envelope_skips_malformed_entries() {
+        let good = minimal_issue_json("abc-123", "Good");
+        let bad = r#"{"id":"bad-456","title":"Bad"}"#; // missing required fields
+        let json = format!(r#"{{"issues":[{},{}],"total":2,"offset":0,"limit":50,"has_more":false}}"#, good, bad);
+        let result = parse_issues_tolerant(&json, "test_tolerant_envelope");
+        assert!(result.is_ok());
+        let issues = result.unwrap();
+        assert_eq!(issues.len(), 1);
+        assert_eq!(issues[0].id, "abc-123");
+    }
 }

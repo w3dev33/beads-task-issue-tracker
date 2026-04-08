@@ -1,4 +1,4 @@
-import { bdList } from '../../utils/bd-executor'
+import { bdList, unwrapBrEnvelope } from '../../utils/bd-executor'
 
 interface Issue {
   id: string
@@ -21,7 +21,7 @@ export default defineEventHandler(async (event) => {
     })
   }
 
-  const issues = (result.data as Issue[]) || []
+  const issues = unwrapBrEnvelope<Issue>(result.data)
 
   // Calculate counts by type
   const byType: Record<string, number> = {

@@ -1,4 +1,4 @@
-import { bdReady } from '../../utils/bd-executor'
+import { bdReady, unwrapBrEnvelope } from '../../utils/bd-executor'
 import { transformIssue } from '../../utils/bd-transformers'
 
 export default defineEventHandler(async (event) => {
@@ -14,10 +14,7 @@ export default defineEventHandler(async (event) => {
     })
   }
 
-  // Transform bd CLI response to match Issue type interface
-  const issues = Array.isArray(result.data)
-    ? result.data.map(transformIssue)
-    : []
+  const issues = unwrapBrEnvelope(result.data).map(transformIssue)
 
   return issues
 })
