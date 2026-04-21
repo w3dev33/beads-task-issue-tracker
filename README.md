@@ -7,7 +7,7 @@ A lightweight, standalone desktop application for managing [Beads](https://githu
 > [!NOTE]
 > <a href="https://pair.w3dev.fr"><picture><source media="(prefers-color-scheme: dark)" srcset="https://pair.w3dev.fr/logo-dark.png"><source media="(prefers-color-scheme: light)" srcset="https://pair.w3dev.fr/logo-light.png"><img src="https://pair.w3dev.fr/logo-light.png" alt="PaiR" height="32"></picture></a>
 >
-> **This project's successor is [PaiR](https://pair.w3dev.fr)** — latest release: **[v0.22.0](https://github.com/w3dev33/pair-dist/releases/tag/v0.22.0)** for macOS (ARM64 + Intel), Linux (amd64 + arm64), and Windows.
+> **This project's successor is [PaiR](https://pair.w3dev.fr)** — latest release: **[v0.24.0](https://github.com/w3dev33/pair-dist/releases/tag/v0.24.0)** for macOS (ARM64 + Intel), Linux (amd64 + arm64), and Windows.
 >
 > As the Beads ecosystem evolves toward autonomous multi-agent orchestration, we believe the transition should be progressive. Most developers today work **with** AI, not behind it — they need to see what's happening, understand it, and stay in control. That's what PaiR is built for: a smooth, step-by-step transition from pair programming to broader AI delegation, without losing visibility along the way.
 >
