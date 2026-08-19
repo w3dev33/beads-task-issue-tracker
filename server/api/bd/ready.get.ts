@@ -1,5 +1,6 @@
 import { bdReady, unwrapBrEnvelope } from '../../utils/bd-executor'
 import { transformIssue } from '../../utils/bd-transformers'
+import type { BdRawIssue } from '../../utils/bd-transformers'
 
 export default defineEventHandler(async (event) => {
   const query = getQuery(event)
@@ -14,7 +15,7 @@ export default defineEventHandler(async (event) => {
     })
   }
 
-  const issues = unwrapBrEnvelope(result.data).map(transformIssue)
+  const issues = unwrapBrEnvelope<BdRawIssue>(result.data).map(transformIssue)
 
   return issues
 })

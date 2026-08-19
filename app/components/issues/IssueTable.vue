@@ -22,6 +22,7 @@ import {
 } from '~/components/ui/tooltip'
 import { Ban } from 'lucide-vue-next'
 import { useKeyboardNavigation } from '~/composables/useKeyboardNavigation'
+import { isIssueCurrentlyBlocked } from '~/utils/issue-helpers'
 
 const props = defineProps<{
   issues: Issue[]
@@ -549,12 +550,12 @@ const { focusedId, setFocused, handleKeydown, isFocused } = useKeyboardNavigatio
                   <template v-else-if="col.id === 'status'">
                     <div class="flex items-center gap-1">
                       <StatusBadge :status="group.epic.status" size="sm" />
-                      <Tooltip v-if="group.epic.blockedBy?.length">
+                      <Tooltip v-if="isIssueCurrentlyBlocked(group.epic)">
                         <TooltipTrigger as-child>
                           <Ban class="w-3 h-3 text-red-400" />
                         </TooltipTrigger>
                         <TooltipContent side="top">
-                          <p class="text-xs">Blocked by {{ group.epic.blockedBy.join(', ') }}</p>
+                          <p class="text-xs">Blocked by {{ group.epic.blockedBy?.join(', ') || 'active dependency' }}</p>
                         </TooltipContent>
                       </Tooltip>
                     </div>
@@ -696,12 +697,12 @@ const { focusedId, setFocused, handleKeydown, isFocused } = useKeyboardNavigatio
                     <template v-else-if="col.id === 'status'">
                       <div class="flex items-center gap-1">
                         <StatusBadge :status="child.status" size="sm" />
-                        <Tooltip v-if="child.blockedBy?.length">
+                        <Tooltip v-if="isIssueCurrentlyBlocked(child)">
                           <TooltipTrigger as-child>
                             <Ban class="w-3 h-3 text-red-400" />
                           </TooltipTrigger>
                           <TooltipContent side="top">
-                            <p class="text-xs">Blocked by {{ child.blockedBy.join(', ') }}</p>
+                            <p class="text-xs">Blocked by {{ child.blockedBy?.join(', ') || 'active dependency' }}</p>
                           </TooltipContent>
                         </Tooltip>
                       </div>
@@ -814,12 +815,12 @@ const { focusedId, setFocused, handleKeydown, isFocused } = useKeyboardNavigatio
                   <template v-else-if="col.id === 'status'">
                     <div class="flex items-center gap-1">
                       <StatusBadge :status="issue.status" size="sm" />
-                      <Tooltip v-if="issue.blockedBy?.length">
+                      <Tooltip v-if="isIssueCurrentlyBlocked(issue)">
                         <TooltipTrigger as-child>
                           <Ban class="w-3 h-3 text-red-400" />
                         </TooltipTrigger>
                         <TooltipContent side="top">
-                          <p class="text-xs">Blocked by {{ issue.blockedBy.join(', ') }}</p>
+                          <p class="text-xs">Blocked by {{ issue.blockedBy?.join(', ') || 'active dependency' }}</p>
                         </TooltipContent>
                       </Tooltip>
                     </div>
@@ -933,12 +934,12 @@ const { focusedId, setFocused, handleKeydown, isFocused } = useKeyboardNavigatio
               <template v-else-if="col.id === 'status'">
                 <div class="flex items-center gap-1">
                   <StatusBadge :status="issue.status" size="sm" />
-                  <Tooltip v-if="issue.blockedBy?.length">
+                  <Tooltip v-if="isIssueCurrentlyBlocked(issue)">
                     <TooltipTrigger as-child>
                       <Ban class="w-3 h-3 text-red-400" />
                     </TooltipTrigger>
                     <TooltipContent side="top">
-                      <p class="text-xs">Blocked by {{ issue.blockedBy.join(', ') }}</p>
+                      <p class="text-xs">Blocked by {{ issue.blockedBy?.join(', ') || 'active dependency' }}</p>
                     </TooltipContent>
                   </Tooltip>
                 </div>

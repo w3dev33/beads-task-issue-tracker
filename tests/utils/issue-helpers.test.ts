@@ -450,6 +450,15 @@ describe('computeReadyIssues', () => {
     expect(computeReadyIssues(issues)).toHaveLength(1)
   })
 
+  it('treats a historical blocker as ready when canonical blocked state is false', () => {
+    const issue = {
+      ...makeIssue({ id: '1', status: 'open', blockedBy: ['closed-blocker'] }),
+      isBlocked: false,
+    } as Issue & { isBlocked: boolean }
+
+    expect(computeReadyIssues([issue])).toHaveLength(1)
+  })
+
   it('returns empty array for empty input', () => {
     expect(computeReadyIssues([])).toEqual([])
   })
