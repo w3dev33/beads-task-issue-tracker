@@ -1,5 +1,6 @@
-import { bdList, unwrapBrEnvelope } from '../../utils/bd-executor'
-import { transformIssue, priorityToNumber } from '../../utils/bd-transformers'
+import { bdBlocked, bdList, unwrapBrEnvelope } from '../../utils/bd-executor'
+import { transformIssues, priorityToNumber } from '../../utils/bd-transformers'
+import type { BdRawIssue } from '../../utils/bd-transformers'
 
 export default defineEventHandler(async (event) => {
   const query = getQuery(event)
@@ -28,7 +29,18 @@ export default defineEventHandler(async (event) => {
     })
   }
 
-  const issues = unwrapBrEnvelope(result.data).map(transformIssue)
+  const blockedResult = await bdBlocked(cwd)
+  if (!blockedResult.success) {
+    throw createError({
+      statusCode: 500,
+      message: blockedResult.error || 'Failed to get blocked issues',
+    })
+  }
+
+  const issues = transformIssues(
+    unwrapBrEnvelope<BdRawIssue>(result.data),
+    unwrapBrEnvelope<BdRawIssue>(blockedResult.data),
+  )
 
   return issues
 })
