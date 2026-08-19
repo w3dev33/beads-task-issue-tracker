@@ -370,9 +370,9 @@ export async function bdResetMtime(path?: string): Promise<void> {
 }
 
 /**
- * Batched poll: fetches open + closed + ready issues in a single IPC call.
- * Syncs once, then runs 3 bd commands sequentially on the backend.
- * Replaces 3 separate IPC calls for lower overhead.
+ * Batched poll: fetches open + closed + blocked + ready issues in a single
+ * IPC call. The backend resolves blocked state through the canonical CLI
+ * command before returning Issue objects.
  */
 export interface PollData {
   openIssues: Issue[]
