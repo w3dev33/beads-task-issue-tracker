@@ -10,9 +10,9 @@ Consult these before starting any task.
 ## Workflows
 
 ### Issues
-- `/run-issue <id>` — Always run before starting work on any issue
-- `/close-issue` — Always ask confirmation before closing
-- `/review-to-commit` — Always use when user asks to commit
+- `/pair-run-issue <id>` — Always run before starting work on any issue
+- `/pair-close-issue` — Always ask confirmation before closing
+- `/pair-review-to-commit` — Always use when user asks to commit
 
 ### Session Completion
 All steps mandatory. Work is NOT complete until `git push` succeeds.
@@ -89,7 +89,7 @@ Keep `Co-Authored-By: Claude Code <noreply@anthropic.com>` for transparency.
 - `~/.claude/` (global config)
 
 ### Always Require Confirmation
-- `git commit`, `git push`, `/close-issue`
+- `git commit`, `git push`, `/pair-close-issue`
 
 ## Plan Mode
 
