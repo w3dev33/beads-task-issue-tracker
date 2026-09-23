@@ -7,11 +7,11 @@ A lightweight, standalone desktop application for managing [Beads](https://githu
 > [!NOTE]
 > <a href="https://pair.w3dev.fr"><picture><source media="(prefers-color-scheme: dark)" srcset="https://pair.w3dev.fr/logo-dark.png"><source media="(prefers-color-scheme: light)" srcset="https://pair.w3dev.fr/logo-light.png"><img src="https://pair.w3dev.fr/logo-light.png" alt="PaiR" height="32"></picture></a>
 >
-> **This project's successor is [PaiR](https://pair.w3dev.fr)** — latest release: **[v0.42.0](https://github.com/w3dev33/pair-dist/releases/tag/v0.42.0)** for macOS (ARM64 + Intel), Linux (amd64 + arm64), and Windows.
+> **This project's successor is [PaiR](https://pair.w3dev.fr)**: latest release **[v0.42.0](https://github.com/w3dev33/pair-dist/releases/tag/v0.42.0)** for macOS (ARM64 + Intel), Linux (amd64 + arm64) and Windows.
 >
-> As the Beads ecosystem evolves toward autonomous multi-agent orchestration, we believe the transition should be progressive. Most developers today work **with** AI, not behind it — they need to see what's happening, understand it, and stay in control. That's what PaiR is built for: a smooth, step-by-step transition from pair programming to broader AI delegation, without losing visibility along the way.
+> PaiR is your second brain as a developer: your issues, their links, the journal of your work and your git history in one place, right inside your project. Your AI agents drive it through its own CLI while you watch them work in integrated terminals, and you keep the final say. Your agents can also talk to each other through cables, and PaiR can hand an issue to a team of agents it orchestrates itself (experimental), with the merge waiting for your validation.
 >
-> PaiR is fully independent: built-in CLI, own storage format (`.pair/`), zero external dependencies. Your existing `.beads/` data is never modified or overwritten — PaiR stores everything in its own directory. **To migrate a Beads project**, use PaiR [v0.39](https://github.com/w3dev33/pair-dist/releases/tag/v0.39.0): it imports projects using `bd` 0.49.x (pre-Dolt) or `br` up to 0.1.33. From v0.40, PaiR no longer reads Beads files. Projects running `bd` 0.50+ (Dolt-based) are not supported for migration.
+> PaiR is fully independent: built-in CLI, its own storage (`.pair/`, on a dedicated git branch), zero external dependencies, and it never touches your `.beads/` data. **To migrate a Beads project**, use PaiR [v0.39](https://github.com/w3dev33/pair-dist/releases/tag/v0.39.0): it imports projects using `bd` 0.49.x (pre-Dolt) or `br` up to 0.1.33. From v0.40, PaiR no longer reads Beads files. Projects running `bd` 0.50+ (Dolt-based) are not supported for migration.
 >
 > The Beads Task-Issue Tracker remains available and functional with `bd` 0.49.x and `br` up to 0.1.33, but active development has moved to PaiR.
 
