@@ -5,7 +5,7 @@ A lightweight, standalone desktop application for managing [Beads](https://githu
 ![Beads Task-Issue Tracker](docs/screenshots/app-overview-1.23.0.png)
 
 > [!NOTE]
-> <a href="https://pair.w3dev.fr"><picture><source media="(prefers-color-scheme: dark)" srcset="https://pair.w3dev.fr/logo-dark.png"><source media="(prefers-color-scheme: light)" srcset="https://pair.w3dev.fr/logo-light.png"><img src="https://pair.w3dev.fr/logo-light.png" alt="PaiR" height="32"></picture></a>
+> <a href="https://pair.w3dev.fr"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/pair-logo-dark.png"><source media="(prefers-color-scheme: light)" srcset="docs/pair-logo-light.png"><img src="docs/pair-logo-light.png" alt="PaiR" height="32"></picture></a>
 >
 > **This project's successor is [PaiR](https://pair.w3dev.fr)**: latest release **[v0.46.0](https://github.com/w3dev33/pair-dist/releases/tag/v0.46.0)** for macOS (ARM64 + Intel), Linux (amd64 + arm64) and Windows.
 >
