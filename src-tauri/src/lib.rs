@@ -1,7 +1,7 @@
 use notify_debouncer_mini::{new_debouncer, DebouncedEventKind};
 use serde::{Deserialize, Serialize};
 use tauri::Emitter;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::env;
 use std::fs;
 use std::path::PathBuf;
@@ -201,6 +201,7 @@ pub struct BdRawIssue {
     pub blocks: Option<Vec<String>>,
     pub comments: Option<Vec<BdRawComment>>,
     pub external_ref: Option<String>,
+    #[serde(alias = "estimated_minutes")]
     pub estimate: Option<i32>,
     pub design: Option<String>,
     pub acceptance_criteria: Option<String>,
@@ -210,7 +211,8 @@ pub struct BdRawIssue {
     pub dependencies: Option<Vec<BdRawDependency>>,
     pub dependency_count: Option<i32>,
     pub dependent_count: Option<i32>,
-    pub metadata: Option<String>,
+    /// bd emits metadata as either a JSON object or a legacy string.
+    pub metadata: Option<serde_json::Value>,
     pub spec_id: Option<String>,
     pub comment_count: Option<i32>,
 }
@@ -246,6 +248,8 @@ pub struct Issue {
     #[serde(rename = "blockedBy")]
     pub blocked_by: Option<Vec<String>>,
     pub blocks: Option<Vec<String>>,
+    #[serde(rename = "isBlocked")]
+    pub is_blocked: bool,
     #[serde(rename = "externalRef")]
     pub external_ref: Option<String>,
     #[serde(rename = "estimateMinutes")]
@@ -563,7 +567,7 @@ fn transform_issue(raw: BdRawIssue) -> Issue {
         issue_type: normalize_issue_type(&raw.issue_type),
         status: normalize_issue_status(&raw.status),
         priority: priority_to_string(raw.priority),
-        assignee: raw.assignee,
+        assignee: raw.assignee.or(raw.owner),
         labels: raw.labels.unwrap_or_default(),
         created_at: raw.created_at,
         updated_at: raw.updated_at,
@@ -580,6 +584,7 @@ fn transform_issue(raw: BdRawIssue) -> Issue {
                 created_at: c.created_at,
             }
         }).collect(),
+        is_blocked: raw.status == "blocked",
         blocked_by: {
             // Try raw.blocked_by first (if bd ever populates it directly)
             let mut bb = raw.blocked_by.unwrap_or_default();
@@ -625,7 +630,10 @@ fn transform_issue(raw: BdRawIssue) -> Issue {
         parent,
         children,
         relations: if relations.is_empty() { None } else { Some(relations) },
-        metadata: raw.metadata,
+        metadata: raw.metadata.map(|metadata| match metadata {
+            serde_json::Value::String(value) => value,
+            value => value.to_string(),
+        }),
         spec_id: raw.spec_id,
         comment_count,
         dependency_count: raw.dependency_count.or_else(|| {
@@ -635,6 +643,53 @@ fn transform_issue(raw: BdRawIssue) -> Issue {
             raw.dependents.as_ref().map(|d| d.len() as i32)
         }),
     }
+}
+
+/// Apply the canonical blocked set returned by `bd blocked --json` to the
+/// issues returned by `bd list`. Relationship fields remain available for
+/// dependency display, while is_blocked represents current CLI semantics.
+fn transform_issue_batch(
+    raw_issues: Vec<BdRawIssue>,
+    blocked_issues: Vec<BdRawIssue>,
+) -> Vec<Issue> {
+    let mut blocked_ids = HashSet::new();
+    let mut blocked_by_by_id: HashMap<String, Vec<String>> = HashMap::new();
+    let mut blocks_by_id: HashMap<String, Vec<String>> = HashMap::new();
+
+    for blocked in blocked_issues {
+        let issue_id = blocked.id;
+        blocked_ids.insert(issue_id.clone());
+        let blockers = blocked.blocked_by.unwrap_or_default();
+
+        if !blockers.is_empty() {
+            blocked_by_by_id.insert(issue_id.clone(), blockers.clone());
+        }
+
+        for blocker_id in blockers {
+            let dependents = blocks_by_id.entry(blocker_id).or_default();
+            if !dependents.contains(&issue_id) {
+                dependents.push(issue_id.clone());
+            }
+        }
+    }
+
+    raw_issues
+        .into_iter()
+        .map(|raw| {
+            let issue_id = raw.id.clone();
+            let mut issue = transform_issue(raw);
+            issue.is_blocked = blocked_ids.contains(&issue_id);
+
+            if let Some(blocked_by) = blocked_by_by_id.get(&issue_id) {
+                issue.blocked_by = Some(blocked_by.clone());
+            }
+            if let Some(blocks) = blocks_by_id.get(&issue_id) {
+                issue.blocks = Some(blocks.clone());
+            }
+
+            issue
+        })
+        .collect()
 }
 
 /// Parse issues with tolerance for malformed entries
@@ -1035,7 +1090,9 @@ fn execute_bd(command: &str, args: &[String], cwd: Option<&str>) -> Result<Strin
     for arg in args {
         full_args.push(arg);
     }
-    if supports_daemon_flag() {
+    // Older bd versions accept --no-daemon on most commands but may reject it
+    // on blocked; newer bd versions do not add the flag at all.
+    if supports_daemon_flag() && command != "blocked" {
         full_args.push("--no-daemon");
     }
     full_args.push("--json");
@@ -1089,6 +1146,19 @@ fn execute_bd(command: &str, args: &[String], cwd: Option<&str>) -> Result<Strin
     }
 
     Ok(stdout)
+}
+
+/// Fetch the CLI's canonical current blocked set. Unlike `bd list`, this
+/// command resolves dependency state against the current database.
+fn fetch_blocked_issues(cwd: Option<&str>) -> Result<Vec<BdRawIssue>, String> {
+    // bd's blocked command has no --limit flag; br defaults to a paginated
+    // result and requires --limit=0 for the complete set.
+    let args = match get_cli_client_info().map(|(client, _, _, _)| client) {
+        Some(CliClient::Br) => vec!["--limit=0".to_string()],
+        _ => Vec::new(),
+    };
+    let output = execute_bd("blocked", &args, cwd)?;
+    parse_issues_tolerant(&output, "bd_blocked")
 }
 
 /// Auto-run refs migration v3 (filesystem-only attachments) if needed.
@@ -2217,8 +2287,9 @@ pub struct PollData {
     pub ready_issues: Vec<Issue>,
 }
 
-/// Batched poll: sync once, then fetch all issues + ready in 2 commands (was 3).
-/// Replaces 3 separate IPC calls (bd_list + bd_list(closed) + bd_ready) with one.
+/// Batched poll: sync once, then fetch all issues, blocked, and ready in one
+/// IPC call. The canonical blocked command is required because list output
+/// contains relationships but not the CLI's resolved blocked state.
 #[tauri::command]
 async fn bd_poll_data(cwd: Option<String>) -> Result<PollData, String> {
     log_info!("[bd_poll_data] Batched poll starting");
@@ -2247,9 +2318,10 @@ async fn bd_poll_data(cwd: Option<String>) -> Result<PollData, String> {
     // Fetch ready issues
     let ready_output = execute_bd("ready", &[], cwd_ref)?;
     let raw_ready = parse_issues_tolerant(&ready_output, "bd_poll_data_ready")?;
+    let raw_blocked = fetch_blocked_issues(cwd_ref)?;
 
-    log_info!("[bd_poll_data] Batched poll done: {} open, {} closed, {} ready",
-        raw_open.len(), raw_closed.len(), raw_ready.len());
+    log_info!("[bd_poll_data] Batched poll done: {} open, {} closed, {} blocked, {} ready",
+        raw_open.len(), raw_closed.len(), raw_blocked.len(), raw_ready.len());
 
     // Update mtime AFTER our commands ran, so the next bd_check_changed
     // only detects EXTERNAL changes (not our own poll's side effects)
@@ -2271,8 +2343,8 @@ async fn bd_poll_data(cwd: Option<String>) -> Result<PollData, String> {
     }
 
     Ok(PollData {
-        open_issues: raw_open.into_iter().map(transform_issue).collect(),
-        closed_issues: raw_closed.into_iter().map(transform_issue).collect(),
+        open_issues: transform_issue_batch(raw_open, raw_blocked.clone()),
+        closed_issues: transform_issue_batch(raw_closed, raw_blocked),
         ready_issues: raw_ready.into_iter().map(transform_issue).collect(),
     })
 }
@@ -2433,7 +2505,8 @@ async fn bd_list(options: ListOptions) -> Result<Vec<Issue>, String> {
         let mut all_issues = open_issues;
         all_issues.extend(closed_issues);
         log_info!("[bd_list] Found {} issues (fallback)", all_issues.len());
-        return Ok(all_issues.into_iter().map(transform_issue).collect());
+        let blocked_issues = fetch_blocked_issues(options.cwd.as_deref())?;
+        return Ok(transform_issue_batch(all_issues, blocked_issues));
     }
 
     if use_all {
@@ -2465,9 +2538,10 @@ async fn bd_list(options: ListOptions) -> Result<Vec<Issue>, String> {
     let output = execute_bd("list", &args, options.cwd.as_deref())?;
 
     let raw_issues = parse_issues_tolerant(&output, "bd_list")?;
+    let blocked_issues = fetch_blocked_issues(options.cwd.as_deref())?;
 
-    log_info!("[bd_list] Found {} issues", raw_issues.len());
-    Ok(raw_issues.into_iter().map(transform_issue).collect())
+    log_info!("[bd_list] Found {} issues ({} currently blocked)", raw_issues.len(), blocked_issues.len());
+    Ok(transform_issue_batch(raw_issues, blocked_issues))
 }
 
 #[tauri::command]
@@ -2593,7 +2667,13 @@ async fn bd_show(id: String, options: CwdOptions) -> Result<Option<Issue>, Strin
     };
 
     log_info!("[bd_show] Issue {} found: {}", id, raw_issue.is_some());
-    Ok(raw_issue.map(transform_issue))
+    match raw_issue {
+        Some(raw) => {
+            let blocked_issues = fetch_blocked_issues(options.cwd.as_deref())?;
+            Ok(transform_issue_batch(vec![raw], blocked_issues).into_iter().next())
+        }
+        None => Ok(None),
+    }
 }
 
 #[tauri::command]
@@ -4936,6 +5016,101 @@ mod tests {
         assert_eq!(issues[0].id, "proj-abc");
         assert_eq!(issues[0].issue_type, "bug");
         assert_eq!(issues[0].priority, 2);
+    }
+
+    #[test]
+    fn parse_bd_issue_with_object_metadata() {
+        let json = minimal_issue_json("bd-123", "Metadata issue")
+            .replace(r#""metadata":null"#, r#""metadata":{"source":"legacy"}"#);
+
+        let result = parse_issues_tolerant(&format!("[{}]", json), "test_bd_metadata");
+        assert!(result.is_ok());
+        let issues = result.unwrap();
+        assert_eq!(issues.len(), 1);
+        assert_eq!(issues[0].id, "bd-123");
+    }
+
+    #[test]
+    fn transform_bd_estimated_minutes() {
+        let json = minimal_issue_json("bd-456", "Estimated issue")
+            .replace(r#""estimate":null"#, r#""estimated_minutes":45"#);
+        let raw: BdRawIssue = serde_json::from_str(&json).unwrap();
+
+        let issue = transform_issue(raw);
+
+        assert_eq!(issue.estimate_minutes, Some(45));
+    }
+
+    #[test]
+    fn transform_bd_owner_as_assignee() {
+        let json = minimal_issue_json("bd-789", "Owned issue")
+            .replace(r#""owner":null"#, r#""owner":"Craig""#);
+        let raw: BdRawIssue = serde_json::from_str(&json).unwrap();
+
+        let issue = transform_issue(raw);
+
+        assert_eq!(issue.assignee.as_deref(), Some("Craig"));
+    }
+
+    #[test]
+    fn transform_bd_list_dependency_as_blocked_by() {
+        let json = minimal_issue_json("bd-child", "Blocked issue").replace(
+            r#""dependencies":null"#,
+            r#""dependencies":[{"issue_id":"bd-child","depends_on_id":"bd-blocker","type":"blocks"}]"#,
+        );
+        let raw: BdRawIssue = serde_json::from_str(&json).unwrap();
+
+        let issue = transform_issue(raw);
+
+        assert_eq!(issue.blocked_by, Some(vec!["bd-blocker".to_string()]));
+    }
+
+    #[test]
+    fn transform_bd_blocked_output_sets_canonical_state() {
+        let raw_issue: BdRawIssue = serde_json::from_str(
+            &minimal_issue_json("bd-child", "Blocked issue"),
+        ).unwrap();
+        let blocked_issue: BdRawIssue = serde_json::from_str(
+            &minimal_issue_json("bd-child", "Blocked issue")
+                .replace(r#""blocked_by":null"#, r#""blocked_by":["bd-blocker"]"#),
+        ).unwrap();
+
+        let issues = transform_issue_batch(vec![raw_issue], vec![blocked_issue]);
+
+        assert_eq!(issues.len(), 1);
+        assert!(issues[0].is_blocked);
+        assert_eq!(issues[0].blocked_by, Some(vec!["bd-blocker".to_string()]));
+    }
+
+    #[test]
+    fn transform_bd_blocked_output_clears_historical_state_and_derives_blocks() {
+        let raw_child: BdRawIssue = serde_json::from_str(
+            &minimal_issue_json("bd-child", "Child issue")
+                .replace(r#""blocked_by":null"#, r#""blocked_by":["bd-closed-blocker"]"#),
+        ).unwrap();
+        let raw_blocker: BdRawIssue = serde_json::from_str(
+            &minimal_issue_json("bd-blocker", "Blocker issue"),
+        ).unwrap();
+        let raw_historical: BdRawIssue = serde_json::from_str(
+            &minimal_issue_json("bd-historical", "Historical dependency")
+                .replace(r#""blocked_by":null"#, r#""blocked_by":["bd-closed-blocker"]"#),
+        ).unwrap();
+        let canonical_blocked: BdRawIssue = serde_json::from_str(
+            &minimal_issue_json("bd-child", "Child issue")
+                .replace(r#""blocked_by":null"#, r#""blocked_by":["bd-blocker"]"#),
+        ).unwrap();
+
+        let issues = transform_issue_batch(
+            vec![raw_child, raw_blocker, raw_historical],
+            vec![canonical_blocked],
+        );
+
+        let child = issues.iter().find(|issue| issue.id == "bd-child").unwrap();
+        let blocker = issues.iter().find(|issue| issue.id == "bd-blocker").unwrap();
+        assert!(child.is_blocked);
+        assert_eq!(child.blocked_by, Some(vec!["bd-blocker".to_string()]));
+        assert_eq!(blocker.blocks, Some(vec!["bd-child".to_string()]));
+        assert!(!issues.iter().find(|issue| issue.id == "bd-historical").unwrap().is_blocked);
     }
 
     #[test]

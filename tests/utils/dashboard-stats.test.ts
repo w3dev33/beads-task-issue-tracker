@@ -68,6 +68,23 @@ describe('computeStatsFromIssues', () => {
     expect(stats.blocked).toBe(1)
   })
 
+  it('counts open issues with dependency blockers as blocked', () => {
+    const issues = [makeIssue({ status: 'open', blockedBy: ['blocker-1'] })]
+    const stats = computeStatsFromIssues(issues)
+    expect(stats.blocked).toBe(1)
+  })
+
+  it('does not count a historical blocker when canonical blocked state is false', () => {
+    const issue = {
+      ...makeIssue({ status: 'open', blockedBy: ['closed-blocker'] }),
+      isBlocked: false,
+    } as Issue & { isBlocked: boolean }
+
+    const stats = computeStatsFromIssues([issue])
+
+    expect(stats.blocked).toBe(0)
+  })
+
   it('counts closed separately', () => {
     const issues = [makeIssue({ status: 'closed' })]
     const stats = computeStatsFromIssues(issues)

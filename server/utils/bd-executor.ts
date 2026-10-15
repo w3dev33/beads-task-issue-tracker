@@ -120,6 +120,14 @@ export async function bdList(
   return executeBd('list', { args, cwd })
 }
 
+/** Execute the canonical blocked-issues command. */
+export async function bdBlocked(cwd?: string) {
+  // br supports --limit=0; bd does not. Try the paginated-client form first,
+  // then fall back to bd's unbounded command.
+  const paginated = await executeBd('blocked', { args: ['--limit=0'], cwd })
+  return paginated.success ? paginated : executeBd('blocked', { cwd })
+}
+
 /**
  * Execute bd show command
  */

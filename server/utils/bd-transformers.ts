@@ -1,7 +1,7 @@
 import type { Issue, IssueType, IssueStatus, IssuePriority } from '~/types/issue'
 
 // Raw issue format from bd CLI
-interface BdRawIssue {
+export interface BdRawIssue {
   id: string
   title: string
   description?: string
@@ -16,6 +16,13 @@ interface BdRawIssue {
   closed_at?: string
   blocked_by?: string[]
   blocks?: string[]
+  dependencies?: Array<{
+    id?: string
+    issue_id?: string
+    depends_on_id?: string
+    type?: string
+    dependency_type?: string
+  }>
   comments?: Array<{
     id: string | number
     author: string
@@ -27,6 +34,7 @@ interface BdRawIssue {
   dependent_count?: number
   external_ref?: string
   estimate?: number
+  estimated_minutes?: number
   design?: string
   acceptance_criteria?: string
   notes?: string
@@ -69,6 +77,14 @@ export function normalizeIssueStatus(status: string): IssueStatus {
  * Transform raw bd CLI issue to Issue type interface
  */
 export function transformIssue(raw: BdRawIssue): Issue {
+  const blockedBy = new Set(raw.blocked_by || [])
+  for (const dependency of raw.dependencies || []) {
+    const dependencyType = dependency.type || dependency.dependency_type
+    if (dependencyType !== 'blocks') continue
+    const blockerId = dependency.id || dependency.depends_on_id
+    if (blockerId) blockedBy.add(blockerId)
+  }
+
   return {
     id: raw.id,
     title: raw.title,
@@ -87,14 +103,50 @@ export function transformIssue(raw: BdRawIssue): Issue {
       content: c.text || c.content || '',
       createdAt: c.created_at,
     })),
-    blockedBy: raw.blocked_by,
+    blockedBy: blockedBy.size ? [...blockedBy] : undefined,
     blocks: raw.blocks,
+    isBlocked: raw.status === 'blocked',
     externalRef: raw.external_ref,
-    estimateMinutes: raw.estimate,
+    estimateMinutes: raw.estimate ?? raw.estimated_minutes,
     designNotes: raw.design,
     acceptanceCriteria: raw.acceptance_criteria,
     workingNotes: raw.notes,
   }
+}
+
+/** Apply the canonical current blocked set returned by `bd blocked --json`. */
+export function transformIssues(
+  rawIssues: BdRawIssue[],
+  blockedIssues: BdRawIssue[],
+): Issue[] {
+  const blockedByById = new Map<string, string[]>()
+  const blocksById = new Map<string, string[]>()
+
+  for (const blocked of blockedIssues) {
+    const blockers = [...new Set(blocked.blocked_by || [])]
+    if (blockers.length) blockedByById.set(blocked.id, blockers)
+
+    for (const blockerId of blockers) {
+      const dependents = blocksById.get(blockerId) || []
+      if (!dependents.includes(blocked.id)) dependents.push(blocked.id)
+      blocksById.set(blockerId, dependents)
+    }
+  }
+
+  const blockedIds = new Set(blockedIssues.map((issue) => issue.id))
+
+  return rawIssues.map((raw) => {
+    const issue = transformIssue(raw)
+    issue.isBlocked = blockedIds.has(raw.id)
+
+    const blockedBy = blockedByById.get(raw.id)
+    if (blockedBy) issue.blockedBy = blockedBy
+
+    const blocks = blocksById.get(raw.id)
+    if (blocks) issue.blocks = blocks
+
+    return issue
+  })
 }
 
 /**
