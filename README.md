@@ -7,7 +7,7 @@ A lightweight, standalone desktop application for managing [Beads](https://githu
 > [!NOTE]
 > <a href="https://pair.w3dev.fr"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/pair-logo-dark.png"><source media="(prefers-color-scheme: light)" srcset="docs/pair-logo-light.png"><img src="docs/pair-logo-light.png" alt="PaiR" height="32"></picture></a>
 >
-> **This project's successor is [PaiR](https://pair.w3dev.fr)**: latest release **[v0.47.0](https://github.com/w3dev33/pair-dist/releases/tag/v0.47.0)** for macOS (ARM64 + Intel), Linux (amd64 + arm64) and Windows.
+> **This project's successor is [PaiR](https://pair.w3dev.fr)**: latest release **[v0.48.0](https://github.com/w3dev33/pair-dist/releases/tag/v0.48.0)** for macOS (ARM64 + Intel), Linux (amd64 + arm64) and Windows.
 >
 > PaiR is your second brain as a developer: your issues, their links, the journal of your work and your git history in one place, right inside your project. Your AI agents drive it through its own CLI while you watch them work in integrated terminals, and you keep the final say. Your agents can also talk to each other through cables, and PaiR can hand an issue to a team of agents it orchestrates itself (experimental), with the merge waiting for your validation.
 >
