@@ -1,5 +1,5 @@
-import { bdShow } from '../../../utils/bd-executor'
-import { transformIssue } from '../../../utils/bd-transformers'
+import { bdBlocked, bdShow, unwrapBrEnvelope } from '../../../utils/bd-executor'
+import { transformIssues } from '../../../utils/bd-transformers'
 
 export default defineEventHandler(async (event) => {
   const id = getRouterParam(event, 'id')
@@ -22,8 +22,21 @@ export default defineEventHandler(async (event) => {
     })
   }
 
+  const blockedResult = await bdBlocked(cwd)
+  if (!blockedResult.success) {
+    throw createError({
+      statusCode: 500,
+      message: blockedResult.error || 'Failed to get blocked issues',
+    })
+  }
+
   // Transform bd CLI response to match Issue type interface
   // bd show --json returns an array with one element
   const rawIssue = Array.isArray(result.data) ? result.data[0] : result.data
-  return rawIssue ? transformIssue(rawIssue as Parameters<typeof transformIssue>[0]) : null
+  if (!rawIssue) return null
+
+  return transformIssues(
+    [rawIssue as Parameters<typeof transformIssues>[0][number]],
+    unwrapBrEnvelope(blockedResult.data),
+  )[0] || null
 })

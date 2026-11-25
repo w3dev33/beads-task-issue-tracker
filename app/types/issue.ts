@@ -47,6 +47,8 @@ export interface Issue {
   comments: Comment[]
   blockedBy?: string[]
   blocks?: string[]
+  /** Canonical current blocked state from the beads adapter. */
+  isBlocked?: boolean
   externalRef?: string
   estimateMinutes?: number
   designNotes?: string

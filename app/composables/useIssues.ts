@@ -299,24 +299,9 @@ export function useIssues() {
         }
       }
 
-      // Preserve blockedBy/blocks from previous enrichments (fetchIssues or fetchIssue)
-      // Poll data doesn't return these, but they were populated by earlier bdShow calls.
-      // Filter out blockers that are now closed so lock icons disappear (#7).
-      const existingMap = new Map(issues.value.map(i => [i.id, i]))
-      const closedIds = new Set(newIssues.filter(i => i.status === 'closed').map(i => i.id))
-      for (const issue of newIssues) {
-        const existing = existingMap.get(issue.id)
-        if (existing) {
-          if (!issue.blockedBy && existing.blockedBy) {
-            const stillOpen = existing.blockedBy.filter(id => !closedIds.has(id))
-            if (stillOpen.length) issue.blockedBy = stillOpen
-          }
-          if (!issue.blocks && existing.blocks) {
-            const stillOpen = existing.blocks.filter(id => !closedIds.has(id))
-            if (stillOpen.length) issue.blocks = stillOpen
-          }
-        }
-      }
+      // Native and server adapters now return canonical blocked state and
+      // relationship fields on every poll. Do not preserve stale dependency
+      // state from the previous snapshot.
 
       // Only update if data actually changed
       // Signature includes status+priority+title so probe mode (no updatedAt) still detects changes

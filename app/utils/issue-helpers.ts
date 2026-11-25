@@ -373,11 +373,15 @@ export function computeStatsFromIssues(issues: Issue[]): DashboardStats {
         stats.inProgress++
         break
       case 'blocked':
-        stats.blocked++
         break
       case 'closed':
         stats.closed++
         break
+    }
+
+    // Beads can represent a blocked issue as an open issue with dependency blockers.
+    if (isIssueCurrentlyBlocked(issue)) {
+      stats.blocked++
     }
 
     if (issue.type in stats.byType) {
@@ -393,11 +397,24 @@ export function computeStatsFromIssues(issues: Issue[]): DashboardStats {
 }
 
 /**
+ * Return the canonical current blocked state for an issue.
+ *
+ * New adapter responses provide isBlocked from the CLI's blocked set. The
+ * fallback preserves compatibility with older/probe responses that only have
+ * status and dependency fields.
+ */
+export function isIssueCurrentlyBlocked(issue: Issue): boolean {
+  return issue.isBlocked ?? (
+    issue.status === 'blocked' || (issue.blockedBy?.length ?? 0) > 0
+  )
+}
+
+/**
  * Compute ready-to-work issues: open (not blocked) with no blockers.
  * Used client-side in probe mode where `bd ready` is not available.
  */
 export function computeReadyIssues(issues: Issue[]): Issue[] {
   return issues.filter(i =>
-    i.status === 'open' && (!i.blockedBy || i.blockedBy.length === 0),
+    i.status === 'open' && !isIssueCurrentlyBlocked(i),
   )
 }
