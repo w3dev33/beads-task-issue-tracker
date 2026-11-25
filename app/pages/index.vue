@@ -1217,6 +1217,9 @@ watch(
       </div>
     </div>
 
+    <!-- Floating overlays stay outside the zoomed coordinate space. -->
+    <div id="floating-overlay-root" class="pointer-events-none fixed inset-0 z-[100]" />
+
     <!-- Debug Panel (above footer) -->
     <DebugPanel v-model:is-open="showDebugPanel" />
 

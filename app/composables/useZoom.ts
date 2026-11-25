@@ -27,6 +27,7 @@ export function useZoom() {
     if (import.meta.client) {
       // Clear any zoom on document element (cleanup from previous approach)
       document.documentElement.style.zoom = ''
+      document.documentElement.style.setProperty('--app-zoom', `${zoomLevel.value / 100}`)
 
       const zoomableContent = document.getElementById('zoomable-content')
       if (zoomableContent) {
